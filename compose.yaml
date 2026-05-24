@@ -1,0 +1,104 @@
+name: vox-conjurata
+
+services:
+  # --- System Brain: Orchestrates routing between models ---
+  conjurata-orchestrator:
+    build:
+      context: ./services/conjurata-orchestrator
+    container_name: conjurata-orchestrator
+    ports:
+      - "3000:3000"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - NODE_ENV=production
+    networks:
+      - vox-net
+    restart: unless-stopped
+
+  # --- Visual Canvas: Stable Diffusion (SDXL Turbo) ---
+  vox-vision:
+    build:
+      context: ./services/vox-vision
+    container_name: vox-vision
+    ports:
+      - "7860:7860"
+    devices:
+      - "/dev/kfd:/dev/kfd"
+      - "/dev/dri:/dev/dri"
+    security_opt:
+      - seccomp=unconfined
+    group_add:
+      - video
+      - render
+    environment:
+      - HSA_OVERRIDE_GFX_VERSION=10.3.0
+    networks:
+      - vox-net
+    restart: unless-stopped
+
+  # --- Local LLM Core: Qwen-2.5 (7B) via Ollama ---
+  vox-llm-core:
+    image: ollama/ollama:rocm
+    container_name: vox-llm-core
+    ports:
+      - "11434:11434"
+    devices:
+      - "/dev/kfd:/dev/kfd"
+      - "/dev/dri:/dev/dri"
+    security_opt:
+      - seccomp=unconfined
+    group_add:
+      - video
+      - render
+    environment:
+      - HSA_OVERRIDE_GFX_VERSION=10.3.0
+    networks:
+      - vox-net
+    restart: unless-stopped
+
+  # --- Vocal Tracking & Synthesis: Whisper & StyleTTS2 ---
+  vox-voice:
+    build:
+      context: ./services/vox-voice
+    container_name: vox-voice
+    ports:
+      - "5000:5000"
+    devices:
+      - "/dev/kfd:/dev/kfd"
+      - "/dev/dri:/dev/dri"
+    security_opt:
+      - seccomp=unconfined
+    group_add:
+      - video
+      - render
+    environment:
+      - HSA_OVERRIDE_GFX_VERSION=10.3.0
+    networks:
+      - vox-net
+    restart: unless-stopped
+
+  # --- Sound & Music Engine: Stable Audio 3.0 ---
+  vox-audio-generation:
+    build:
+      context: ./services/vox-audio-generation
+    container_name: vox-audio-generation
+    ports:
+      - "8000:8000"
+    devices:
+      - "/dev/kfd:/dev/kfd"
+      - "/dev/dri:/dev/dri"
+    security_opt:
+      - seccomp=unconfined
+    group_add:
+      - video
+      - render
+    environment:
+      - HSA_OVERRIDE_GFX_VERSION=10.3.0
+    networks:
+      - vox-net
+    restart: unless-stopped
+
+networks:
+  vox-net:
+    name: vox-net
+    driver: bridge
