@@ -34,4 +34,4 @@ ENV FOUNDRY_API_KEY=""
 EXPOSE 8080
 
 # Run the application
-CMD ["uvicorn", "main.py:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]

@@ -18,7 +18,7 @@ async function processNPCDialogueLog(npcName, rawTranscript) {
 
     try {
         // Send the dialogue out to our local Python orchestrator container
-        const response = await fetch("http://localhost:8080/api/v1/dialogue/summary", {
+        const response = await fetch("http://localhost:8080/api/v1/dialogue/end", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ npcName: npcName, transcript: rawTranscript })

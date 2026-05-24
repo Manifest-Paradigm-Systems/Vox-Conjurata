@@ -1,50 +1,116 @@
 from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import httpx
 import os
+import logging
+import asyncio
 
-app = FastAPI(title="vox-conjurata-orchestrator")
+# --- vox-conjurata Orchestrator Service ---
+# Asynchronous FastAPI application for handling dialogue finalization
 
-# Enable CORS so Foundry running in your browser can talk directly to this local backend
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"], 
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - vox-conjurata - %(levelname)s - %(message)s"
 )
+logger = logging.getLogger("vox-conjurata")
 
-class DialogueRequest(BaseModel):
+app = FastAPI(title="vox-conjurata-orchestrator", version="1.0.0")
+
+# Configuration from environment variables
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://vox-llm-core:11434")
+FOUNDRY_API_URL = os.getenv("FOUNDRY_API_URL", "http://foundry-vtt:30000/api")
+FOUNDRY_API_KEY = os.getenv("FOUNDRY_API_KEY", "")
+
+class DialogueEndRequest(BaseModel):
     npcName: str
     transcript: str
 
-# Points directly to your neighboring Ollama container service inside the Docker network
-OLLAMA_URL = os.getenv("OLLAMA_URL", "http://vox-llm-core:11434")
+async def generate_summary(transcript: str) -> str:
+    """Asynchronously calls Ollama to generate a condensed markdown summary."""
+    prompt = f"Summarize the following conversation transcript in a condensed markdown format:\n\n{transcript}"
+    
+    payload = {
+        "model": "qwen:latest",
+        "prompt": prompt,
+        "stream": False
+    }
+    
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        try:
+            response = await client.post(f"{OLLAMA_URL}/api/generate", json=payload)
+            response.raise_for_status()
+            data = response.json()
+            return data.get("response", "Summary generation failed.")
+        except Exception as e:
+            logger.error(f"Error calling Ollama: {e}")
+            return f"Error generating summary: {str(e)}"
 
-@app.post("/api/v1/dialogue/summary")
-async def generate_summary(payload: DialogueRequest):
-    # Craft the clean context instruction for Qwen
-    prompt = (
-        f"Summarize the following conversation with the NPC {payload.npcName} "
-        f"in a brief, narrative style suitable for an RPG campaign memory log:\n\n"
-        f"{payload.transcript}"
-    )
+async def log_to_foundry(npc_name: str, summary: str):
+    """Fires a secure POST request to Foundry VTT REST API to trigger a macro."""
+    payload = {
+        "macroName": "LogNPCSession",
+        "args": [{"npcName": npc_name, "summary": summary}]
+    }
+    
+    headers = {
+        "Authorization": f"Bearer {FOUNDRY_API_KEY}",
+        "Content-Type": "application/json"
+    }
     
     async with httpx.AsyncClient() as client:
         try:
-            # Fire the request over to your local Qwen container core
             response = await client.post(
-                f"{OLLAMA_URL}/api/generate",
-                json={"model": "qwen", "prompt": prompt, "stream": False},
-                timeout=60.0
+                f"{FOUNDRY_API_URL}/macros/execute", 
+                json=payload, 
+                headers=headers
             )
             response.raise_for_status()
-            result = response.json()
-            
-            # Extract and return the clean text payload back to the Foundry browser client
-            summary_text = result.get("response", "No summary generated.")
-            return {"summary": summary_text}
-            
+            logger.info(f"Successfully logged session for {npc_name} to Foundry.")
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Ollama container connection error: {str(e)}")
+            logger.error(f"Error calling Foundry API: {e}")
+
+@app.post("/api/v1/dialogue/end")
+async def end_dialogue(request: DialogueEndRequest):
+    """
+    Endpoint triggered when a dialogue session ends.
+    Orchestrates summary generation and Foundry logging.
+    """
+    logger.info(f"Received dialogue end request for NPC: {request.npcName}")
+    
+    # 1. Generate summary from Ollama
+    summary = await generate_summary(request.transcript)
+    
+    # 2. Log to Foundry
+    await log_to_foundry(request.npcName, summary)
+    
+    return {
+        "status": "success",
+        "npcName": request.npcName,
+        "summary": summary
+    }
+
+# ==========================================
+# DIAGNOSTICS BUFFER INTEGRATION
+# ==========================================
+from pydantic import BaseModel
+from typing import List, Optional
+
+error_buffer: List[dict] = []
+
+class DiagnosticLog(BaseModel):
+    type: str
+    message: str
+    source: Optional[str] = None
+    lineno: Optional[int] = None
+    error: Optional[str] = None
+
+@app.post("/api/v1/diagnostics/logs")
+async def receive_logs(log: DiagnosticLog):
+    error_buffer.append(log.dict())
+    if len(error_buffer) > 10:
+        error_buffer.pop(0)
+    return {"status": "cached"}
+
+@app.get("/api/v1/diagnostics/latest")
+async def get_latest_error():
+    return error_buffer[-1] if error_buffer else {"status": "nominal"}

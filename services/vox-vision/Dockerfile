@@ -1,17 +1,16 @@
-# Vox Vision - ROCm PyTorch Environment (SDXL Turbo)
-FROM rocm/pytorch:latest
+# vox-conjurata Vision Service Dockerfile
+FROM docker.io/rocm/pytorch:latest
 
-# Set ROCm environment variables
 ENV HSA_OVERRIDE_GFX_VERSION=10.3.0
 ENV DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /app
 
-# Install system dependencies if needed
-# RUN apt-get update && apt-get install -y ...
+# Install dependencies
+RUN pip install --no-cache-dir fastapi uvicorn
 
-# COPY requirements.txt .
-# RUN pip install --no-cache-dir -r requirements.txt
+# Copy application code
+COPY main.py .
 
 EXPOSE 7860
 

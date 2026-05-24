@@ -1,13 +1,15 @@
-# Vox Audio Generation - ROCm PyTorch Environment
-FROM rocm/pytorch:latest
+# vox-conjurata Audio Generation Service Dockerfile
+FROM docker.io/rocm/pytorch:latest
 
-# Set ROCm environment variables
 ENV HSA_OVERRIDE_GFX_VERSION=10.3.0
 
 WORKDIR /app
 
-# COPY requirements.txt .
-# RUN pip install --no-cache-dir -r requirements.txt
+# Install dependencies
+RUN pip install --no-cache-dir fastapi uvicorn
+
+# Copy application code
+COPY app.py .
 
 EXPOSE 8000
 
