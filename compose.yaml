@@ -1,87 +1,75 @@
 name: vox-conjurata
-
 services:
-  # --- Orchestration Engine: FastAPI & Business Logic ---
   orchestrator:
     build:
       context: ./services/orchestrator
     container_name: vox-conjurata-orchestrator
     ports:
-      - "8080:8080"
+    - 8080:8080
     environment:
-      - OLLAMA_URL=http://vox-llm-core:
+    - OLLAMA_URL=http://vox-llm-core:11434
     volumes:
-      - "ollama_storage:/root/.ollama"
-
-  # --- Visual Canvas: Stable Diffusion (SDXL Turbo) ---
+    - ollama_storage:/root/.ollama
   vox-vision:
     build:
       context: ./services/vox-vision
     container_name: vox-vision
     ports:
-      - "7860:7860"
+    - 7860:7860
     devices:
-      - "/dev/kfd:/dev/kfd"
-      - "/dev/dri:/dev/dri"
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
     security_opt:
-      - seccomp=unconfined
+    - seccomp=unconfined
     group_add:
-      - keep-groups
+    - keep-groups
     environment:
-      - HSA_OVERRIDE_GFX_VERSION=10.3.0
+    - HSA_OVERRIDE_GFX_VERSION=10.3.0
     networks:
-      - vox-net
+    - vox-net
     restart: unless-stopped
-
-  # --- Local LLM Core: Qwen-2.5 (7B) via Ollama ---
   vox-llm-core:
     volumes:
-      - "ollama_storage:/root/.ollama"
-
-  # --- Vocal Tracking & Synthesis: Whisper & StyleTTS2 ---
+    - ollama_storage:/root/.ollama
   vox-voice:
     build:
       context: ./services/vox-voice
     container_name: vox-voice
     ports:
-      - "5000:5000"
+    - 5000:5000
     devices:
-      - "/dev/kfd:/dev/kfd"
-      - "/dev/dri:/dev/dri"
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
     security_opt:
-      - seccomp=unconfined
+    - seccomp=unconfined
     group_add:
-      - keep-groups
+    - keep-groups
     environment:
-      - HSA_OVERRIDE_GFX_VERSION=10.3.0
+    - HSA_OVERRIDE_GFX_VERSION=10.3.0
     networks:
-      - vox-net
+    - vox-net
     restart: unless-stopped
-
-  # --- Sound & Music Engine: Stable Audio 3.0 ---
   vox-audio-generation:
     build:
       context: ./services/vox-audio-generation
     container_name: vox-audio-generation
     ports:
-      - "8000:8000"
+    - 8000:8000
     devices:
-      - "/dev/kfd:/dev/kfd"
-      - "/dev/dri:/dev/dri"
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
     security_opt:
-      - seccomp=unconfined
+    - seccomp=unconfined
     group_add:
-      - keep-groups
+    - keep-groups
     environment:
-      - HSA_OVERRIDE_GFX_VERSION=10.3.0
+    - HSA_OVERRIDE_GFX_VERSION=10.3.0
     networks:
-      - vox-net
+    - vox-net
     restart: unless-stopped
-
 networks:
   vox-net:
     name: vox-net
     driver: bridge
-
 volumes:
-  ollama_storage:
+  ollama_storage: null
