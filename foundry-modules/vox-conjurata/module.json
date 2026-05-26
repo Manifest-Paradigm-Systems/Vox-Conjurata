@@ -19,6 +19,9 @@
   "scripts": [
     "vox-conjurata.js"
   ],
+  "styles": [
+    "vox-conjurata.css"
+  ],
   "relationships": {
     "requires": []
   }

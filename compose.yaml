@@ -29,8 +29,17 @@ services:
     - vox-net
     restart: unless-stopped
   vox-llm-core:
+    container_name: vox-llm-core
+    image: ollama/ollama:rocm
+    ports:
+    - 11434:11434
     volumes:
     - ollama_storage:/root/.ollama
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    security_opt:
+    - seccomp=unconfined
   vox-voice:
     build:
       context: ./services/vox-voice
