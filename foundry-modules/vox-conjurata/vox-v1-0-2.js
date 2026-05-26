@@ -12,7 +12,6 @@
 
         const shipLog = async (data) => {
             try {
-                // Ensure data is an object
                 const payload = typeof data === 'string' ? { type: "info", message: data } : data;
                 await fetch(ORCHESTRATOR_URL, {
                     method: "POST",
@@ -56,12 +55,41 @@ globalThis.voxState = globalThis.voxState || {
     puppetActive: false,
     playerActive: false,
     activeSpeakerName: "",
-    activeMicType: "", // Locked context for the current recording session
+    activeMicType: "", 
+    activeActorId: "", 
     mediaRecorder: null,
     audioChunks: [],
-    // Points to the Orchestrator for the full pipeline
-    voiceConversionEndpoint: "http://127.0.0.1:8080/api/voice-conversion" 
+    sttEndpoint: "http://127.0.0.1:5000/v1/audio/transcriptions",
+    voiceConversionEndpoint: "http://127.0.0.1:8080/api/voice-conversion",
+    ingestEndpoint: "http://127.0.0.1:8080/api/ingest-actor"
 };
+
+// ==========================================
+// 2b. EARLY AUDIO INITIALIZATION (FIX)
+// ==========================================
+(async function initAudio() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        console.error("❌ Vox Audio Fail: Secure context required.");
+        return;
+    }
+    try {
+        console.log("🎙️ Vox-Conjurata: Requesting microphone access...");
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        try { 
+            globalThis.voxState.mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm; codecs=opus" }); 
+        } catch (e) { 
+            globalThis.voxState.mediaRecorder = new MediaRecorder(stream); 
+        }
+        
+        globalThis.voxState.mediaRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0) globalThis.voxState.audioChunks.push(event.data);
+        };
+        globalThis.voxState.mediaRecorder.onstop = async () => { await processAndSendAudio(); };
+        console.log("🎙️ Vox-Conjurata: Hardware microphone pipeline ready.");
+    } catch (err) {
+        console.error("❌ Vox Audio Fail:", err);
+    }
+})();
 
 // ==========================================
 // 3. KEYBINDING REGISTRATION (INIT)
@@ -75,22 +103,11 @@ Hooks.once("init", () => {
         editable: [{ key: "KeyY" }],
         onDown: () => {
             console.log("🎙️ Vox-Conjurata: Narrator Key Down");
-            
-            // PRE-UNLOCK AUDIO CONTEXT
-            try {
-                if (game.audio) game.audio.play({src: "sounds/lock.wav", volume: 0}, false);
-            } catch (err) {
-                console.warn("🎙️ Vox-Conjurata: Early audio unlock failed.", err);
-            }
-
-            if (!game.user.isGM) {
-                console.warn("🎙️ Vox-Conjurata: Attempted Narrator Mic usage by non-GM.");
-                return;
-            }
-            if (globalThis.voxState.narratorActive) return;
-
+            try { if (game.audio) game.audio.play({src: "sounds/lock.wav", volume: 0}, false); } catch (err) {}
+            if (!game.user.isGM || globalThis.voxState.narratorActive) return;
             globalThis.voxState.narratorActive = true;
             globalThis.voxState.activeSpeakerName = "Narrator";
+            globalThis.voxState.activeActorId = "narrator";
             startRecording("vox-conjurata-gm-narrate-mic");
             statusMessage("Narrator Mic [Y]: OPEN", true);
         },
@@ -109,17 +126,8 @@ Hooks.once("init", () => {
         editable: [{ key: "KeyH" }],
         onDown: () => {
             console.log("🎭 Vox-Conjurata: Puppeteer Key Down");
-            
-            // PRE-UNLOCK AUDIO CONTEXT
-            try {
-                if (game.audio) game.audio.play({src: "sounds/lock.wav", volume: 0}, false);
-            } catch (err) {
-                console.warn("🎙️ Vox-Conjurata: Early audio unlock failed.", err);
-            }
-
-            if (!game.user.isGM) return;
-            if (globalThis.voxState.puppetActive) return;
-
+            try { if (game.audio) game.audio.play({src: "sounds/lock.wav", volume: 0}, false); } catch (err) {}
+            if (!game.user.isGM || globalThis.voxState.puppetActive) return;
             const selectedToken = canvas.tokens.controlled[0];
             if (!selectedToken) {
                 ui.notifications.warn("❌ Puppeteer: Select an NPC token first!");
@@ -127,6 +135,7 @@ Hooks.once("init", () => {
             }
             globalThis.voxState.puppetActive = true;
             globalThis.voxState.activeSpeakerName = selectedToken.actor?.name || "Unknown NPC";
+            globalThis.voxState.activeActorId = selectedToken.actor?.id || "unknown";
             startRecording("vox-conjurata-gm-puppet-mic");
             statusMessage(`Puppeteer [H] (${globalThis.voxState.activeSpeakerName}): OPEN`, true);
         },
@@ -145,18 +154,12 @@ Hooks.once("init", () => {
         editable: [{ key: "KeyI" }],
         onDown: () => {
             console.log("👤 Vox-Conjurata: Character Key Down");
-            
-            // PRE-UNLOCK AUDIO CONTEXT
-            try {
-                if (game.audio) game.audio.play({src: "sounds/lock.wav", volume: 0}, false);
-            } catch (err) {
-                console.warn("🎙️ Vox-Conjurata: Early audio unlock failed.", err);
-            }
-
+            try { if (game.audio) game.audio.play({src: "sounds/lock.wav", volume: 0}, false); } catch (err) {}
             if (globalThis.voxState.playerActive) return;
             const speakerActor = canvas.tokens.controlled[0]?.actor || game.user.character;
             globalThis.voxState.playerActive = true;
             globalThis.voxState.activeSpeakerName = speakerActor?.name || game.user.name;
+            globalThis.voxState.activeActorId = speakerActor?.id || game.user.id;
             startRecording("vox-conjurata-player-mic");
             statusMessage(`Character Mic [I] (${globalThis.voxState.activeSpeakerName}): OPEN`, true);
         },
@@ -171,37 +174,11 @@ Hooks.once("init", () => {
 });
 
 // ==========================================
-// 4. AUDIO ENGINE & LIFECYCLE (READY)
+// 4. MODULE LIFECYCLE (READY)
 // ==========================================
 Hooks.once("ready", async () => {
     console.log("vox-conjurata | System initialized.");
     
-    // Initialize Audio
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        console.error("❌ Vox Audio Fail: Secure context (HTTPS/Localhost) required for microphone access.");
-    } else {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            try {
-                globalThis.voxState.mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm; codecs=opus" });
-            } catch (e) {
-                globalThis.voxState.mediaRecorder = new MediaRecorder(stream);
-            }
-            
-            globalThis.voxState.mediaRecorder.ondataavailable = (event) => {
-                if (event.data.size > 0) globalThis.voxState.audioChunks.push(event.data);
-            };
-
-            globalThis.voxState.mediaRecorder.onstop = async () => {
-                await processAndSendAudio();
-            };
-            console.log("🎙️ Vox-Conjurata: Hardware microphone pipeline active.");
-        } catch (err) {
-            console.error("❌ Vox Audio Fail:", err);
-        }
-    }
-
-    // Database Cleanup (GM Only)
     if (game.user.isGM) {
         const legacy = ["Vox: Toggle Narrator", "Vox: Toggle Puppeteer", "Vox: Toggle Character"];
         for (const name of legacy) {
@@ -212,81 +189,64 @@ Hooks.once("ready", async () => {
 });
 
 // ==========================================
+// 4b. TOKEN SPAWNING & DATA SCRAPE
+// ==========================================
+Hooks.on("createToken", async (tokenDoc, options, userId) => {
+    if (!game.user.isGM || !tokenDoc.actor) return;
+    const actor = tokenDoc.actor;
+    const isMonster = !actor.hasPlayerOwner && (actor.system.details?.level?.value > 5 || ["Undead", "Fiend", "Aberration", "Dragon"].includes(actor.system.details?.race));
+    const actorData = {
+        actorId: actor.id, name: actor.name,
+        lore: actor.system.details?.biography?.value || actor.system.description?.value || "No bio available.",
+        stats: { race: actor.system.details?.race || "Unknown", alignment: actor.system.details?.alignment || "Neutral", level: actor.system.details?.level?.value || 0 },
+        artPath: actor.img, isMonster: isMonster
+    };
+    console.log(`📦 Vox-Conjurata: Scraping metadata for ${actorData.name} (Monster: ${isMonster})...`);
+    try {
+        await fetch(globalThis.voxState.ingestEndpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(actorData) });
+    } catch (err) { console.error("❌ Vox-Conjurata: Failed to ingest actor metadata:", err); }
+});
+
+// ==========================================
 // 5. CHAT SKINNING ENGINE (V13/V14 COMPATIBLE)
 // ==========================================
 Hooks.on("renderChatMessageHTML", (message, html, data) => {
     const voxType = message.getFlag("vox-conjurata", "type");
     if (!voxType) return;
-
-    // Convert HTMLElement to jQuery for backwards compatibility with our existing skinning logic
     const jHtml = $(html);
     const content = jHtml.find(".message-content");
     const originalContent = content.html();
 
     if (voxType === "narration") {
         jHtml.addClass("vox-conjurata-card vox-conjurata-narration");
-        jHtml.empty().append(`
-            <div class="narration-header"><i class="fas fa-book-open gold-icon"></i><span class="narration-title">SCENE DESCRIPTION</span><i class="fas fa-book-open gold-icon"></i></div>
-            <div class="message-content narration-text">${originalContent}</div>
-        `);
+        jHtml.empty().append(`<div class="narration-header"><i class="fas fa-book-open gold-icon"></i><span class="narration-title">SCENE DESCRIPTION</span><i class="fas fa-book-open gold-icon"></i></div><div class="message-content narration-text">${originalContent}</div>`);
     } 
     else if (voxType === "puppet" || voxType === "ai" || voxType === "player") {
         const actor = message.speaker.actor ? game.actors.get(message.speaker.actor) : null;
         const actorName = actor?.name || message.speaker.alias || "Entity";
         const actorImg = actor?.img || "icons/svg/mystery-man.svg";
         const audioUrl = message.getFlag("vox-conjurata", "audioUrl");
+        const engineName = message.getFlag("vox-conjurata", "engine") || "AI Engine";
         
         let skinClass = `vox-conjurata-${voxType}`;
         let tag = voxType === "puppet" ? "GM PUPPET" : (voxType === "ai" ? "AI CORE" : "TRANSCRIPT");
         let icon = voxType === "ai" ? "fa-brain" : (voxType === "player" ? "fa-waveform-lines" : "fa-mask");
         
         jHtml.addClass(`vox-conjurata-card ${skinClass}`);
-
         let contextLine = "";
-        if (voxType === "ai") {
-            const responseTo = message.getFlag("vox-conjurata", "responseTo") || "Player";
-            contextLine = `<div class="ai-context-line"><i class="fas fa-reply"></i> In response to <strong>${responseTo}</strong></div>`;
-        } else if (voxType === "player") {
-            const targetName = game.actors.get(message.getFlag("vox-conjurata", "targetActorId"))?.name || "NPC";
-            contextLine = `<div class="player-target-line"><i class="fas fa-comment-lines"></i> Speaking to <strong>${targetName}</strong></div>`;
-        }
+        if (voxType === "ai") contextLine = `<div class="ai-context-line"><i class="fas fa-reply"></i> In response to <strong>${message.getFlag("vox-conjurata", "responseTo") || "Player"}</strong> <span style="margin-left: auto; opacity: 0.5; font-size: 0.8em;">${engineName}</span></div>`;
+        else if (voxType === "player") contextLine = `<div class="player-target-line"><i class="fas fa-comment-lines"></i> Speaking to <strong>${game.actors.get(message.getFlag("vox-conjurata", "targetActorId"))?.name || "NPC"}</strong> <span style="margin-left: auto; opacity: 0.5; font-size: 0.8em;">${engineName}</span></div>`;
+        else if (voxType === "puppet") contextLine = `<div class="ai-context-line" style="background: none; border: none;"><span style="margin-left: auto; opacity: 0.5; font-size: 0.8em;">${engineName}</span></div>`;
 
         const audioHtml = audioUrl ? `<div class="vox-conjurata-audio-container"><button class="vox-conjurata-audio-play-btn" data-audio-src="${audioUrl}"><i class="fas fa-volume-high"></i> Play Generated Voice</button></div>` : "";
+        jHtml.empty().append(`${contextLine}<div class="puppet-layout"><img class="puppet-avatar ${voxType === 'ai' ? 'ai-border' : ''}" src="${actorImg}"/><div class="puppet-body"><header class="message-header ${voxType}-header"><span class="sender ${voxType}-name">${actorName}</span><span class="${voxType}-tag"><i class="fas ${icon}"></i> ${tag}</span></header><div class="message-content ${voxType}-text">${originalContent}</div>${audioHtml}</div></div>`);
 
-        jHtml.empty().append(`
-            ${contextLine}
-            <div class="puppet-layout">
-                <img class="puppet-avatar ${voxType === 'ai' ? 'ai-border' : ''}" src="${actorImg}"/>
-                <div class="puppet-body">
-                    <header class="message-header ${voxType}-header">
-                        <span class="sender ${voxType}-name">${actorName}</span>
-                        <span class="${voxType}-tag"><i class="fas ${icon}"></i> ${tag}</span>
-                    </header>
-                    <div class="message-content ${voxType}-text">${originalContent}</div>
-                    ${audioHtml}
-                </div>
-            </div>
-        `);
-
-        // Handle Audio
         if (audioUrl) {
-            const playBtn = jHtml.find(".vox-conjurata-audio-play-btn");
-            
-            // Manual Playback
-            playBtn.on("click", (e) => {
-                new Audio(audioUrl).play();
-            });
-
-            // Auto-Playback (Immersive)
-            // We check if the message is "new" (rendered during this session) to prevent 
-            // audio blast when opening a world with old messages.
+            jHtml.find(".vox-conjurata-audio-play-btn").on("click", (e) => { try { if (game.audio) game.audio.play({src: audioUrl, volume: 1.0}, false); else new Audio(audioUrl).play(); } catch (err) {} });
             const timeSinceCreated = Date.now() - message.timestamp;
-            if (timeSinceCreated < 5000) { // Only auto-play if message is less than 5s old
+            if (timeSinceCreated < 5000) {
                 console.log("🎙️ Vox-Conjurata: Auto-playing generated voice...");
-                const audio = new Audio(audioUrl);
-                audio.play().catch(e => {
-                    console.warn("🎙️ Vox-Conjurata: Auto-play blocked by browser. User interaction required.", e);
-                });
+                try { if (game.audio) game.audio.play({src: audioUrl, volume: 1.0}, false); else new Audio(audioUrl).play(); } catch (err) {}
             }
         }
     }
@@ -299,7 +259,7 @@ function startRecording(micType) {
     try {
         if (globalThis.voxState.mediaRecorder && globalThis.voxState.mediaRecorder.state === "inactive") {
             globalThis.voxState.audioChunks = [];
-            globalThis.voxState.activeMicType = micType; // Lock the mic type context
+            globalThis.voxState.activeMicType = micType;
             globalThis.voxState.mediaRecorder.start();
             console.log(`🎙️ Vox-Conjurata: Recording started (${micType}).`);
         } else {
@@ -308,20 +268,12 @@ function startRecording(micType) {
                 state: globalThis.voxState.mediaRecorder?.state
             });
         }
-    } catch (e) {
-        console.error("🎙️ Vox-Conjurata: Failed to start recording:", e);
-    }
+    } catch (e) { console.error("🎙️ Vox-Conjurata: Failed to start recording:", e); }
 }
 
 function stopRecording() {
-    try {
-        if (globalThis.voxState.mediaRecorder && globalThis.voxState.mediaRecorder.state === "recording") {
-            globalThis.voxState.mediaRecorder.stop();
-            console.log("🎙️ Vox-Conjurata: Recording stopped.");
-        }
-    } catch (e) {
-        console.error("🎙️ Vox-Conjurata: Failed to stop recording:", e);
-    }
+    try { if (globalThis.voxState.mediaRecorder && globalThis.voxState.mediaRecorder.state === "recording") globalThis.voxState.mediaRecorder.stop(); }
+    catch (e) { console.error("🎙️ Vox-Conjurata: Failed to stop recording:", e); }
 }
 
 function statusMessage(text, isOpen) {
@@ -329,86 +281,45 @@ function statusMessage(text, isOpen) {
         const recipients = game.user.isGM ? ChatMessage.getWhisperRecipients("GM") : [];
         ChatMessage.create({
             speaker: { alias: "Vox Core" },
-            content: `<div style="display: flex; align-items: center; gap: 8px;">
-                        <span style="font-size: 1.2rem;">${isOpen ? '🎙️' : '🤫'}</span>
-                        <div><strong>${text}</strong></div>
-                      </div>`,
+            content: `<div style="display: flex; align-items: center; gap: 8px;"><span style="font-size: 1.2rem;">${isOpen ? '🎙️' : '🤫'}</span><div><strong>${text}</strong></div></div>`,
             whisper: recipients.length > 0 ? recipients.map(u => u.id) : []
         });
-    } catch (e) {
-        console.error("🎙️ Vox-Conjurata: Failed to create status message:", e);
-    }
+    } catch (e) { console.error("🎙️ Vox-Conjurata: Failed to create status message:", e); }
 }
 
 async function processAndSendAudio() {
     const chunks = globalThis.voxState.audioChunks;
-    if (chunks.length === 0) {
-        console.warn("🎙️ Vox-Conjurata: No audio chunks captured.");
-        return;
-    }
-
+    if (chunks.length === 0) return;
     const audioBlob = new Blob(chunks, { type: globalThis.voxState.mediaRecorder.mimeType || "audio/webm" });
-    const micType = globalThis.voxState.activeMicType; // Use the locked context
-    
+    const micType = globalThis.voxState.activeMicType;
+    const actor = canvas.tokens.controlled[0]?.actor || game.user.character;
+    const isMonster = actor && !actor.hasPlayerOwner && (actor.system.details?.level?.value > 5 || ["Undead", "Fiend", "Aberration", "Dragon"].includes(actor.system.details?.race));
+
     const formData = new FormData();
     formData.append("audio_blob", audioBlob, "voice_capture.webm");
-    formData.append("metadata", JSON.stringify({
-        activeSpeakerName: globalThis.voxState.activeSpeakerName,
-        micType: micType,
-        userId: game.user.id
-    }));
+    formData.append("metadata", JSON.stringify({ activeSpeakerName: globalThis.voxState.activeSpeakerName, actorId: globalThis.voxState.activeActorId, micType: micType, isMonster: !!isMonster, userId: game.user.id }));
 
-    console.log(`📦 Vox-Conjurata: Sending audio blob (${audioBlob.size} bytes) to Orchestrator context: [${micType}]`);
+    console.log(`📦 Vox-Conjurata: Sending audio blob (${audioBlob.size} bytes) to Orchestrator context: [${micType}] for Actor: [${globalThis.voxState.activeActorId}]`);
 
     try {
-        const response = await fetch(globalThis.voxState.voiceConversionEndpoint, { 
-            method: "POST", 
-            body: formData 
-        });
-
+        const response = await fetch(globalThis.voxState.voiceConversionEndpoint, { method: "POST", body: formData });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        
         const data = await response.json();
         
+        // BUG FIX: Correctly extract audio_data from the response
         if (data.status === "success") {
-            const { transcription, enrichment, voxType, audioUrl } = data;
-            
-            // IMMEDIATE AUTO-PLAYBACK (Immersive)
-            if (audioUrl) {
-                console.log("🎙️ Vox-Conjurata: Auto-playing generated voice via game.audio...");
-                try {
-                    if (game.audio) game.audio.play({src: audioUrl, volume: 1.0}, false);
-                    else new Audio(audioUrl).play(); // Direct fallback
-                } catch (err) {
-                    console.error("🎙️ Vox-Conjurata: Auto-play failed.", err);
-                }
+            const transcription = data.transcription;
+            const enrichment = data.enrichment;
+            const voxType = data.voxType;
+            const engine = data.engine;
+            // Support both audioUrl and audio_data field names for robustness
+            const audioUrl = data.audio_data || data.audioUrl; 
+
+            if (audioUrl) { 
+                console.log(`🎙️ Vox-Conjurata: Auto-playing generated voice via ${engine}...`); 
+                try { if (game.audio) game.audio.play({src: audioUrl, volume: 1.0}, false); else new Audio(audioUrl).play(); } catch (err) {} 
             }
-
-            // Create the chat message with appropriate flags for the skinning engine
-            const messageData = {
-                content: transcription,
-                speaker: ChatMessage.getSpeaker({
-                    actor: canvas.tokens.controlled[0]?.actor || game.user.character,
-                    alias: globalThis.voxState.activeSpeakerName
-                }),
-                flags: {
-                    "vox-conjurata": {
-                        type: voxType,
-                        emotionalResonance: enrichment.emotional_resonance,
-                        vocalDelivery: enrichment.vocal_delivery_prompt,
-                        audioUrl: audioUrl
-                    }
-                }
-            };
-
-            await ChatMessage.create(messageData);
-
-        } else {
-            console.warn("🎙️ Vox-Conjurata: Backend returned non-success status:", data);
+            await ChatMessage.create({ content: transcription, speaker: ChatMessage.getSpeaker({ actor: canvas.tokens.controlled[0]?.actor || game.user.character, alias: globalThis.voxState.activeSpeakerName }), flags: { "vox-conjurata": { type: voxType, emotionalResonance: enrichment.emotional_resonance, vocalDelivery: enrichment.vocal_delivery_prompt, audioUrl: audioUrl, engine: engine } } });
         }
-
-    } catch (err) {
-        console.error("❌ Vox-Conjurata: Pipeline failure:", err);
-        ui.notifications.error("Vox-Conjurata: Backend pipeline failure.");
-    }
+    } catch (err) { console.error("❌ Vox-Conjurata: Pipeline failure:", err); }
 }

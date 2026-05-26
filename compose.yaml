@@ -18,6 +18,7 @@ services:
     - OLLAMA_URL=http://vox-llm-core:11434
     volumes:
     - ollama_storage:/root/.ollama
+    - ./services/orchestrator/voice_seeds:/app/voice_seeds
   vox-vision:
     build:
       context: ./services/vox-vision
@@ -72,6 +73,66 @@ services:
     container_name: vox-audio-generation
     ports:
     - 8000:8000
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    security_opt:
+    - seccomp=unconfined
+    group_add:
+    - keep-groups
+    environment:
+    - HSA_OVERRIDE_GFX_VERSION=10.3.0
+    networks:
+    - vox-net
+    restart: unless-stopped
+
+  vox-designer:
+    build:
+      context: ./services/vox-designer
+    container_name: vox-designer
+    ports:
+    - 5010:5010
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    security_opt:
+    - seccomp=unconfined
+    group_add:
+    - keep-groups
+    environment:
+    - HSA_OVERRIDE_GFX_VERSION=10.3.0
+    networks:
+    - vox-net
+    restart: unless-stopped
+
+  vox-actor:
+    build:
+      context: ./services/vox-actor
+    container_name: vox-actor
+    ports:
+    - 5020:5020
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    security_opt:
+    - seccomp=unconfined
+    group_add:
+    - keep-groups
+    environment:
+    - HSA_OVERRIDE_GFX_VERSION=10.3.0
+    networks:
+    - vox-net
+    restart: unless-stopped
+
+  vox-monster-fish:
+    image: fishaudio/fish-speech:latest
+    container_name: vox-monster-fish
+    entrypoint: ["/app/.venv/bin/python", "-m", "tools.api_server"]
+    command: ["--listen", "0.0.0.0:7860", "--half"]
+    ports:
+    - 5030:7860
+    volumes:
+    - ./vox-monster-voice/models:/root/.cache/huggingface
     devices:
     - /dev/kfd:/dev/kfd
     - /dev/dri:/dev/dri
