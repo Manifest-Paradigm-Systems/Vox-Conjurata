@@ -7,62 +7,7 @@ Hooks.once("ready", () => {
     console.log("vox-conjurata | System initialized and listening for session events.");
 });
 
-Hooks.on("renderChatLog", (app, html, data) => {
-    const chatForm = html.find("#chat-form");
-    if (!chatForm.length) return;
-
-    const controls = $(`<div id="vox-conjurata-controls"></div>`);
-
-    if (game.user.isGM) {
-        // GM Tone Selector
-        const toneSelector = $(`
-            <select id="vox-conjurata-tone-selector" title="Emotional Intent Stance">
-                <option value="auto">Auto (Acoustic Analysis)</option>
-                <option value="hostile">Hostile</option>
-                <option value="friendly">Friendly</option>
-                <option value="afraid">Afraid</option>
-                <option value="deceptive">Deceptive</option>
-            </select>
-        `);
-        controls.append(toneSelector);
-
-        // GM Puppet Mic
-        const puppetMic = $(`
-            <div id="vox-conjurata-gm-puppet-mic" class="vox-conjurata-mic-btn" title="Puppet Mic (Speak as Target)">
-                <i class="fas fa-microphone-lines"></i><i class="fas fa-mask" style="font-size: 0.6em; position: absolute; bottom: 2px; right: 2px;"></i>
-            </div>
-        `);
-        controls.append(puppetMic);
-
-        // GM Narrator Mic
-        const narrateMic = $(`
-            <div id="vox-conjurata-gm-narrate-mic" class="vox-conjurata-mic-btn" title="Narrator Mic (Global Scene)">
-                <i class="fas fa-microphone"></i><i class="fas fa-book-open" style="font-size: 0.6em; position: absolute; bottom: 2px; right: 2px;"></i>
-            </div>
-        `);
-        controls.append(narrateMic);
-    } else {
-        // Player Mic
-        const playerMic = $(`
-            <div id="vox-conjurata-player-mic" class="vox-conjurata-mic-btn" title="Push-to-Talk NPC Interaction">
-                <i class="fas fa-microphone"></i>
-            </div>
-        `);
-        controls.append(playerMic);
-        
-        // Update disabled state based on targets
-        const updatePlayerMic = () => {
-            const targets = Array.from(game.user.targets);
-            const hasNPCTarget = targets.some(t => t.actor && !t.actor.hasPlayerOwner);
-            playerMic.toggleClass("disabled", !hasNPCTarget);
-        };
-        Hooks.on("targetToken", updatePlayerMic);
-        updatePlayerMic();
-    }
-
-    chatForm.before(controls);
-    setupAudioCapture(controls);
-});
+/* 🧹 Deprecated renderChatLog UI injection removed to prevent jQuery/html.find errors */
 
 let mediaRecorder;
 let audioChunks = [];
