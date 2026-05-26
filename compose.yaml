@@ -1,5 +1,13 @@
 name: vox-conjurata
 services:
+  cloudflared:
+    image: docker.io/cloudflare/cloudflared:latest
+    container_name: cloudflared
+    restart: unless-stopped
+    environment:
+      - TUNNEL_TOKEN=eyJhIjoiYTVkNDVhNjYyMzIzNTE0ZGJlNDU0MTQyMzk0ZjRkMDYiLCJ0IjoiNzhlMmFmODctODU3ZS00NjM2LWE5ODgtODIxNDQ0NDk2MDExIiwicyI6Ik56QXpOVEF6TURVdFlUUmlNaTAwTW1ObUxUZ3dNMkV0TmpSaU1USmlPRE0yTkRZNCJ9
+    command: tunnel --no-autoupdate run
+
   orchestrator:
     build:
       context: ./services/orchestrator

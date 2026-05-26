@@ -1,31 +1,120 @@
 /**
- * Vox-Conjurata: Pure Hardware Push-to-Talk Engine
- * Upgraded with state-memory caching to retain targeted NPC identity
- * context across both keydown and keyup execution frames.
+ * Vox-Conjurata: Native WebM Audio Stream Pipeline
+ * Captures live hardware microphone streams during active PTT frames
+ * and dispatches compressed WebM blobs to the local faster-whisper container.
  */
 
 globalThis.voxState = globalThis.voxState || { 
     narratorActive: false, 
     puppetActive: false,
     playerActive: false,
-    activePuppetName: "", // Short-term memory cache for the active speaker context
-    activePlayerName: ""
+    activePuppetName: "",
+    activePlayerName: "",
+    mediaRecorder: null,
+    audioChunks: [],
+    // Points to your local faster-whisper host port allocation
+    sttEndpoint: "http://localhost:5000/v1/audio/transcriptions" 
 };
 
+// Initialize Browser Hardware Microphone Stream on Client Boot
+Hooks.once("ready", async () => {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        console.error("❌ Vox Audio Fail: Browser environment does not support secure audio capturing.");
+        return;
+    }
+
+    try {
+        // Request secure microphone access from the browser layout upfront
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        
+        // Use standard compressed webm container format running native Opus audio codec
+        globalThis.voxState.mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+        
+        // Buffer listener to capture incoming raw voice waves sequentially
+        globalThis.voxState.mediaRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+                globalThis.voxState.audioChunks.push(event.data);
+            }
+        };
+
+        // Fire transmission routine the split-second the microphone line cuts out
+        globalThis.voxState.mediaRecorder.onstop = async () => {
+            await processAndSendAudio();
+        };
+
+        console.log("🎙️ Vox-Conjurata: WebM hardware microphone pipeline bound and active.");
+    } catch (err) {
+        console.error("❌ Vox Audio Fail: Hardware microphone access rejected by user:", err);
+    }
+});
+
+// Structural Multi-Part Form Packager & Transmiter
+async function processAndSendAudio() {
+    const chunks = globalThis.voxState.audioChunks;
+    const endpoint = globalThis.voxState.sttEndpoint;
+    
+    if (chunks.length === 0) return;
+
+    // Bundle compressed chunks into a singular lightweight file payload (~20-40KB)
+    const audioBlob = new Blob(chunks, { type: "audio/webm" });
+    globalThis.voxState.audioChunks = []; // Purge cache array instantly for the next run
+
+    // Resolve context metadata string identifiers
+    let contextName = "Narrator";
+    if (globalThis.voxState.activePuppetName) contextName = globalThis.voxState.activePuppetName;
+    else if (globalThis.voxState.activePlayerName) contextName = globalThis.voxState.activePlayerName;
+
+    console.log(`📦 Vox Pipeline: Forwarding WebM payload (${audioBlob.size} bytes) for context: [${contextName}]`);
+
+    // Construct standard multipart/form-data schema required by faster-whisper endpoints
+    const formData = new FormData();
+    formData.append("file", audioBlob, "whisper_input.webm");
+    formData.append("model", "base");
+    formData.append("language", "en");
+
+    try {
+        const response = await fetch(endpoint, {
+            method: "POST",
+            body: formData
+        });
+
+        if (!response.ok) throw new Error(`HTTP network error string received: ${response.status}`);
+        
+        const data = await response.json();
+        const transcriptionText = data.text || "";
+
+        if (transcriptionText.trim().length > 0) {
+            // Echo verified transcription directly into secure GM telemetry chat cards
+            ChatMessage.create({
+                speaker: { alias: `${contextName} (AI Transcribed)` },
+                content: `💬 "${transcriptionText}"`,
+                whisper: ChatMessage.getWhisperRecipients("GM")
+            });
+        }
+    } catch (err) {
+        console.error("❌ Vox Transmission Failure: Network path to STT container blocked:", err);
+        ui.notifications.error("Vox Pipeline: Local transcription container unreachable.");
+    }
+}
+
+// Keybinding State Machine Activators
 Hooks.once("init", () => {
     
-    // 1. Narrator Push-to-Talk (GM Only - Mapped to Y)
+    // Narrator PTT (Key Y)
     game.keybindings.register("vox-conjurata", "narratorPTT", {
         name: "Vox: Narrator Push-to-Talk",
-        hint: "Hold down 'Y' to capture ambient DM narration.",
         editable: [{ key: "KeyY" }],
         onDown: () => {
             if (!game.user.isGM || globalThis.voxState.narratorActive) return;
             globalThis.voxState.narratorActive = true;
             
+            if (globalThis.voxState.mediaRecorder && globalThis.voxState.mediaRecorder.state === "inactive") {
+                globalThis.voxState.mediaRecorder.start();
+            }
+
             ChatMessage.create({
                 speaker: { alias: "Vox Core" },
-                content: `🎙️ <strong>Narrator Mic [Y]:</strong> <span style='color: #26b347; font-weight: bold;'>OPEN</span> (Recording ambient description...)`,
+                content: `🎙️ <strong>Narrator Mic [Y]:</strong> <span style='color: #26b347; font-weight: bold;'>OPEN</span>`,
                 whisper: ChatMessage.getWhisperRecipients("GM")
             });
         },
@@ -33,18 +122,15 @@ Hooks.once("init", () => {
             if (!game.user.isGM || !globalThis.voxState.narratorActive) return;
             globalThis.voxState.narratorActive = false;
             
-            ChatMessage.create({
-                speaker: { alias: "Vox Core" },
-                content: `🤫 <strong>Narrator Mic [Y]:</strong> <span style='color: #cc3333; font-weight: bold;'>CLOSED</span> (Processing...)`,
-                whisper: ChatMessage.getWhisperRecipients("GM")
-            });
+            if (globalThis.voxState.mediaRecorder && globalThis.voxState.mediaRecorder.state === "recording") {
+                globalThis.voxState.mediaRecorder.stop();
+            }
         }
     });
 
-    // 2. Puppeteer Push-to-Talk (GM Only - Mapped to H with Context Caching)
+    // Puppeteer PTT (Key H)
     game.keybindings.register("vox-conjurata", "puppeteerPTT", {
         name: "Vox: Puppeteer Push-to-Talk",
-        hint: "Select an NPC token. Hold down 'H' to roleplay as them.",
         editable: [{ key: "KeyH" }],
         onDown: () => {
             if (!game.user.isGM || globalThis.voxState.puppetActive) return;
@@ -57,10 +143,12 @@ Hooks.once("init", () => {
             
             globalThis.voxState.puppetActive = true;
             const actorName = selectedToken.actor?.name || "Unknown Entity";
-            
-            // Lock the targeted identity into memory cache
             globalThis.voxState.activePuppetName = actorName;
             
+            if (globalThis.voxState.mediaRecorder && globalThis.voxState.mediaRecorder.state === "inactive") {
+                globalThis.voxState.mediaRecorder.start();
+            }
+
             ChatMessage.create({
                 speaker: { alias: "Vox Core" },
                 content: `🎭 <strong>Puppeteer [H] (${actorName}):</strong> <span style='color: #26b347; font-weight: bold;'>OPEN</span>`,
@@ -70,33 +158,30 @@ Hooks.once("init", () => {
         onUp: () => {
             if (!game.user.isGM || !globalThis.voxState.puppetActive) return;
             globalThis.voxState.puppetActive = false;
-            
-            // Retrieve the identity straight from memory cache
-            const actorName = globalThis.voxState.activePuppetName || "Unknown Entity";
-            
-            ChatMessage.create({
-                speaker: { alias: "Vox Core" },
-                content: `🎭 <strong>Puppeteer Mic [H] (${actorName}):</strong> <span style='color: #cc3333; font-weight: bold;'>CLOSED</span>`,
-                whisper: ChatMessage.getWhisperRecipients("GM")
-            });
-            
-            // Clear the memory track slot until the next activation loop
             globalThis.voxState.activePuppetName = "";
+            
+            if (globalThis.voxState.mediaRecorder && globalThis.voxState.mediaRecorder.state === "recording") {
+                globalThis.voxState.mediaRecorder.stop();
+            }
         }
     });
 
-    // 3. Player Character Push-to-Talk (Players Only - Mapped to I)
+    // Player PTT (Key I)
     game.keybindings.register("vox-conjurata", "playerPTT", {
         name: "Vox: Character Push-to-Talk",
-        hint: "Hold down 'I' to speak as your assigned character.",
         editable: [{ key: "KeyI" }],
         onDown: () => {
             if (game.user.isGM || globalThis.voxState.playerActive) return;
             
             const speakerActor = canvas.tokens.controlled[0]?.actor || game.user.character;
             const speakerName = speakerActor?.name || game.user.name;
+            
             globalThis.voxState.playerActive = true;
-            globalThis.voxState.activePlayerName = speakerName; // Cache for symmetry
+            globalThis.voxState.activePlayerName = speakerName;
+
+            if (globalThis.voxState.mediaRecorder && globalThis.voxState.mediaRecorder.state === "inactive") {
+                globalThis.voxState.mediaRecorder.start();
+            }
 
             ChatMessage.create({
                 speaker: { alias: "Vox Proxy" },
@@ -107,29 +192,11 @@ Hooks.once("init", () => {
         onUp: () => {
             if (game.user.isGM || !globalThis.voxState.playerActive) return;
             globalThis.voxState.playerActive = false;
-            
-            const speakerName = globalThis.voxState.activePlayerName || game.user.name;
-            
-            ChatMessage.create({
-                speaker: { alias: "Vox Proxy" },
-                content: `🤫 <strong>Character Mic [I] (${speakerName}):</strong> <span style='color: #cc3333; font-weight: bold;'>CLOSED</span>`,
-                whisper: ChatMessage.getWhisperRecipients("GM")
-            });
-            
             globalThis.voxState.activePlayerName = "";
+            
+            if (globalThis.voxState.mediaRecorder && globalThis.voxState.mediaRecorder.state === "recording") {
+                globalThis.voxState.mediaRecorder.stop();
+            }
         }
     });
-});
-
-// 4. Clean Sweep Garbage Collection Layer
-Hooks.once("ready", async () => {
-    if (!game.user.isGM) return;
-    const targetGarbageCollection = ["Vox: Toggle Narrator", "Vox: Toggle Puppeteer"];
-    for (const name of targetGarbageCollection) {
-        const existing = game.macros.filter(m => m.name === name);
-        for (const oldMacro of existing) {
-            console.log(`🧹 Clearing deprecated macro asset: ${oldMacro.name}`);
-            await oldMacro.delete();
-        }
-    }
 });
