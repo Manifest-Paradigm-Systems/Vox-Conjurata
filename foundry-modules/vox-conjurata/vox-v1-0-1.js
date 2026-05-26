@@ -75,6 +75,14 @@ Hooks.once("init", () => {
         editable: [{ key: "KeyY" }],
         onDown: () => {
             console.log("🎙️ Vox-Conjurata: Narrator Key Down");
+            
+            // PRE-UNLOCK AUDIO CONTEXT
+            try {
+                if (game.audio) game.audio.play({src: "sounds/lock.wav", volume: 0}, false);
+            } catch (err) {
+                console.warn("🎙️ Vox-Conjurata: Early audio unlock failed.", err);
+            }
+
             if (!game.user.isGM) {
                 console.warn("🎙️ Vox-Conjurata: Attempted Narrator Mic usage by non-GM.");
                 return;
@@ -101,6 +109,14 @@ Hooks.once("init", () => {
         editable: [{ key: "KeyH" }],
         onDown: () => {
             console.log("🎭 Vox-Conjurata: Puppeteer Key Down");
+            
+            // PRE-UNLOCK AUDIO CONTEXT
+            try {
+                if (game.audio) game.audio.play({src: "sounds/lock.wav", volume: 0}, false);
+            } catch (err) {
+                console.warn("🎙️ Vox-Conjurata: Early audio unlock failed.", err);
+            }
+
             if (!game.user.isGM) return;
             if (globalThis.voxState.puppetActive) return;
 
@@ -129,6 +145,14 @@ Hooks.once("init", () => {
         editable: [{ key: "KeyI" }],
         onDown: () => {
             console.log("👤 Vox-Conjurata: Character Key Down");
+            
+            // PRE-UNLOCK AUDIO CONTEXT
+            try {
+                if (game.audio) game.audio.play({src: "sounds/lock.wav", volume: 0}, false);
+            } catch (err) {
+                console.warn("🎙️ Vox-Conjurata: Early audio unlock failed.", err);
+            }
+
             if (globalThis.voxState.playerActive) return;
             const speakerActor = canvas.tokens.controlled[0]?.actor || game.user.character;
             globalThis.voxState.playerActive = true;
@@ -244,9 +268,27 @@ Hooks.on("renderChatMessageHTML", (message, html, data) => {
             </div>
         `);
 
-        jHtml.find(".vox-conjurata-audio-play-btn").on("click", (e) => {
-            new Audio($(e.currentTarget).data("audio-src")).play();
-        });
+        // Handle Audio
+        if (audioUrl) {
+            const playBtn = jHtml.find(".vox-conjurata-audio-play-btn");
+            
+            // Manual Playback
+            playBtn.on("click", (e) => {
+                new Audio(audioUrl).play();
+            });
+
+            // Auto-Playback (Immersive)
+            // We check if the message is "new" (rendered during this session) to prevent 
+            // audio blast when opening a world with old messages.
+            const timeSinceCreated = Date.now() - message.timestamp;
+            if (timeSinceCreated < 5000) { // Only auto-play if message is less than 5s old
+                console.log("🎙️ Vox-Conjurata: Auto-playing generated voice...");
+                const audio = new Audio(audioUrl);
+                audio.play().catch(e => {
+                    console.warn("🎙️ Vox-Conjurata: Auto-play blocked by browser. User interaction required.", e);
+                });
+            }
+        }
     }
 });
 
@@ -331,6 +373,17 @@ async function processAndSendAudio() {
         if (data.status === "success") {
             const { transcription, enrichment, voxType, audioUrl } = data;
             
+            // IMMEDIATE AUTO-PLAYBACK (Immersive)
+            if (audioUrl) {
+                console.log("🎙️ Vox-Conjurata: Auto-playing generated voice via game.audio...");
+                try {
+                    if (game.audio) game.audio.play({src: audioUrl, volume: 1.0}, false);
+                    else new Audio(audioUrl).play(); // Direct fallback
+                } catch (err) {
+                    console.error("🎙️ Vox-Conjurata: Auto-play failed.", err);
+                }
+            }
+
             // Create the chat message with appropriate flags for the skinning engine
             const messageData = {
                 content: transcription,

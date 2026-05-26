@@ -43,14 +43,17 @@ async def text_to_speech(payload: dict):
 
     logger.info(f"Generating speech for: '{text[:50]}...' using {voice}")
 
-    # Create a temporary file for the output
-    fd, output_path = tempfile.mkstemp(suffix=".mp3")
+    # Create a temporary file for the output - using .webm as requested
+    fd, output_path = tempfile.mkstemp(suffix=".webm")
     os.close(fd)
 
     try:
+        # Communicate defaults to mp3, we can try to let edge-tts handle output format if supported, 
+        # or just use webm as a container for whatever it sends.
+        # Note: edge-tts primarily supports mp3/wav/opus. webm is often opus.
         communicate = edge_tts.Communicate(text, voice)
         await communicate.save(output_path)
-        return FileResponse(output_path, media_type="audio/mpeg")
+        return FileResponse(output_path, media_type="audio/webm")
 
     except Exception as e:
         logger.error(f"TTS error: {e}")

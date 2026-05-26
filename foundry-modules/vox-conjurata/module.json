@@ -26,6 +26,6 @@
     "minimumCoreVersion": "11",
     "compatibleCoreVersion": "13",
     "scripts": [
-        "vox-conjurata.js"
+        "vox-v1-0-1.js"
     ]
 }

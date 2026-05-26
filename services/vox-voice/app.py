@@ -21,10 +21,8 @@ app.add_middleware(
 
 # Load model once on startup
 # Using "base" model as requested in the JS client
-MODEL_SIZE = os.getenv("WHISPER_MODEL", "base")
-DEVICE = os.getenv("DEVICE", "cpu") # Default to CPU, can be override to "cuda" for nvidia or "hip" for rocm? 
-# For ROCm/HIP, faster-whisper often uses "cuda" if compiled with CTranslate2 ROCm support, 
-# or just "cpu". Let's stick to "cpu" for first run for maximum stability unless specified.
+MODEL_SIZE = os.getenv("WHISPER_MODEL", "tiny.en")
+DEVICE = os.getenv("DEVICE", "cpu") 
 
 logger.info(f"Loading Whisper model '{MODEL_SIZE}' on {DEVICE}...")
 model = WhisperModel(MODEL_SIZE, device=DEVICE, compute_type="int8")

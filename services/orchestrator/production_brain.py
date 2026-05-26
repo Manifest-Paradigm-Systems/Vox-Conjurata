@@ -8,6 +8,7 @@ import logging
 import asyncio
 import json
 import urllib.parse
+import base64
 
 # --- vox-conjurata Orchestrata Service ---
 # Master Controller for STT -> LLM Enrichment -> TTS Pipeline
@@ -63,21 +64,23 @@ error_buffer: List[dict] = []
 # --- Helper Functions ---
 
 async def enrich_dialogue(speaker: str, role: str, text: str) -> DialogueEnrichment:
-    """Uses Qwen 2.5 to extract subtextual emotion and vocal cues."""
+    """Fast enrichment using simplified prompt and lower temperature."""
     system_instruction = (
-        "You are the master narrative parser for a cinematic virtual tabletop engine. "
-        "Analyze the dialogue and output a high-fidelity compound emotion (e.g., 'Brittle Bravado') "
-        "and a detailed vocal generation prompt with kinetic cues."
+        "You are a cinematic VTT parser. Output a single compound emotion and a short vocal cue in JSON format."
     )
     
     payload = {
         "model": "qwen2.5:latest",
         "messages": [
             {"role": "system", "content": system_instruction},
-            {"role": "user", "content": f"Speaker: {speaker}, Role: {role}, Text: {text}"}
+            {"role": "user", "content": f"Speaker: {speaker}, Text: {text}"}
         ],
         "stream": False,
-        "format": "json"
+        "format": "json",
+        "options": {
+            "temperature": 0.1,
+            "num_predict": 50
+        }
     }
 
     async with httpx.AsyncClient(timeout=30.0) as client:
@@ -108,7 +111,7 @@ async def voice_conversion(request: Request):
     MASTER PIPELINE:
     1. STT: Convert WebM to Text
     2. LLM: Analyze Emotion & Content
-    3. TTS: Generate Audio (Base64)
+    3. TTS: Generate Audio (Base64 WebM)
     """
     try:
         # Manually parse the multipart form to avoid automatic validation failure
@@ -151,9 +154,9 @@ async def voice_conversion(request: Request):
                     json={"text": transcription}
                 )
                 if tts_resp.status_code == 200:
-                    import base64
                     audio_base64 = base64.b64encode(tts_resp.content).decode('utf-8')
-                    audio_url = f"data:audio/mpeg;base64,{audio_base64}"
+                    # Set type to webm as requested
+                    audio_url = f"data:audio/webm;base64,{audio_base64}"
                 else:
                     logger.error(f"TTS service returned error: {tts_resp.status_code}")
         except Exception as e:
