@@ -97,6 +97,16 @@ globalThis.voxState = globalThis.voxState || {
 Hooks.once("init", () => {
     console.log("🎙️ Vox-Conjurata: init hook fired.");
     
+    game.settings.register("vox-conjurata", "narratorVoice", {
+        name: "Vox: Narrator Voice Profile",
+        hint: "Choose the Microsoft Neural voice profile for narration failovers.",
+        scope: "world",
+        config: true,
+        type: String,
+        default: "en-US-ChristopherNeural",
+        choices: { "en-US-ChristopherNeural": "en-US-ChristopherNeural" }
+    });
+
     // Y: Narrator PTT (GM)
     game.keybindings.register("vox-conjurata", "narratorPTT", {
         name: "Vox: Narrator Push-to-Talk",
@@ -180,6 +190,20 @@ Hooks.once("ready", async () => {
     console.log("vox-conjurata | System initialized.");
     
     if (game.user.isGM) {
+        try {
+            const response = await fetch("http://127.0.0.1:8080/api/v1/narrators/voices");
+            if (response.ok) {
+                const voices = await response.json();
+                const choices = {};
+                voices.forEach(v => { choices[v] = v; });
+                game.settings.settings.get("vox-conjurata.narratorVoice").choices = choices;
+                if (ui.activeWindow?.id === "client-settings") ui.activeWindow.render();
+                console.log("📡 Vox-Conjurata: Loaded dynamic Edge-TTS voices roster.");
+            }
+        } catch (e) {
+            console.error("❌ Vox-Conjurata: Failed to load dynamic narrator voices.", e);
+        }
+
         const legacy = ["Vox: Toggle Narrator", "Vox: Toggle Puppeteer", "Vox: Toggle Character"];
         for (const name of legacy) {
             const existing = game.macros.filter(m => m.name === name);

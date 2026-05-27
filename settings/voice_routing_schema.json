@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "VoiceRoutingConfig",
+  "type": "object",
+  "properties": {
+    "system_settings": {
+      "type": "object",
+      "properties": {
+        "vram_threshold_gb": { "type": "number", "minimum": 0.0 }
+      },
+      "required": ["vram_threshold_gb"]
+    },
+    "narrator_preferences": {
+      "type": "object",
+      "properties": {
+        "default_voice": { "type": "string" },
+        "rate_adjustment": { "type": "string", "pattern": "^[+-]\\d+%$" }
+      },
+      "required": ["default_voice", "rate_adjustment"]
+    },
+    "tier_routing": {
+      "type": "object",
+      "properties": {
+        "humanoid_engine": { "type": "string", "enum": ["cosyvoice", "edge-tts"] },
+        "monster_engine": { "type": "string", "enum": ["fish-speech", "edge-tts"] }
+      },
+      "required": ["humanoid_engine", "monster_engine"]
+    },
+    "engine_endpoints": {
+      "type": "object",
+      "properties": {
+        "cosyvoice_uri": { "type": "string", "format": "uri" },
+        "fishspeech_uri": { "type": "string", "format": "uri" },
+        "parler_uri": { "type": "string", "format": "uri" }
+      },
+      "required": ["cosyvoice_uri", "fishspeech_uri", "parler_uri"]
+    }
+  },
+  "required": ["system_settings", "narrator_preferences", "tier_routing", "engine_endpoints"]
+}

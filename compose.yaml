@@ -7,6 +7,8 @@ services:
     environment:
       - TUNNEL_TOKEN=eyJhIjoiYTVkNDVhNjYyMzIzNTE0ZGJlNDU0MTQyMzk0ZjRkMDYiLCJ0IjoiNzhlMmFmODctODU3ZS00NjM2LWE5ODgtODIxNDQ0NDk2MDExIiwicyI6Ik56QXpOVEF6TURVdFlUUmlNaTAwTW1ObUxUZ3dNMkV0TmpSaU1USmlPRE0yTkRZNCJ9
     command: tunnel --no-autoupdate run
+    networks:
+      - vox-net
 
   orchestrator:
     build:
@@ -16,9 +18,19 @@ services:
     - 8080:8080
     environment:
     - OLLAMA_URL=http://vox-llm-core:11434
+    - STT_URL=http://vox-voice:5000
+    - TTS_DESIGNER_URL=http://vox-designer:5010
+    - TTS_ACTOR_URL=http://vox-actor:5020
+    - TTS_MONSTER_URL=http://vox-monster-fish:7860
+    - TTS_MUSIC_URL=http://vox-audio-generation-music:8000
+    - TTS_SFX_URL=http://vox-audio-generation-sfx:8001
     volumes:
-    - ollama_storage:/root/.ollama
-    - ./services/orchestrator/voice_seeds:/app/voice_seeds
+    - ollama_storage:/root/.ollama:Z
+    - ./services/orchestrator/voice_seeds:/app/voice_seeds:Z
+    - /sys:/sys:ro
+    networks:
+    - vox-net
+
   vox-vision:
     build:
       context: ./services/vox-vision
@@ -33,22 +45,30 @@ services:
     group_add:
     - keep-groups
     environment:
-    - HSA_OVERRIDE_GFX_VERSION=10.3.0
+    - HSA_OVERRIDE_GFX_VERSION=11.0.0
     networks:
     - vox-net
     restart: unless-stopped
+
   vox-llm-core:
     container_name: vox-llm-core
     image: ollama/ollama:rocm
     ports:
     - 11434:11434
     volumes:
-    - ollama_storage:/root/.ollama
+    - ollama_storage:/root/.ollama:Z
     devices:
     - /dev/kfd:/dev/kfd
     - /dev/dri:/dev/dri
     security_opt:
     - seccomp=unconfined
+    group_add:
+    - keep-groups
+    environment:
+    - HSA_OVERRIDE_GFX_VERSION=11.0.0
+    networks:
+    - vox-net
+
   vox-voice:
     build:
       context: ./services/vox-voice
@@ -63,14 +83,15 @@ services:
     group_add:
     - keep-groups
     environment:
-    - HSA_OVERRIDE_GFX_VERSION=10.3.0
+    - HSA_OVERRIDE_GFX_VERSION=11.0.0
     networks:
     - vox-net
     restart: unless-stopped
-  vox-audio-generation:
+
+  vox-audio-generation-music:
     build:
       context: ./services/vox-audio-generation
-    container_name: vox-audio-generation
+    container_name: vox-audio-generation-music
     ports:
     - 8000:8000
     devices:
@@ -81,7 +102,18 @@ services:
     group_add:
     - keep-groups
     environment:
-    - HSA_OVERRIDE_GFX_VERSION=10.3.0
+    - HSA_OVERRIDE_GFX_VERSION=11.0.0
+    networks:
+    - vox-net
+    restart: unless-stopped
+
+  vox-audio-generation-sfx:
+    build:
+      context: ./services/vox-audio-generation
+    container_name: vox-audio-generation-sfx
+    ports:
+    - 8001:8000
+    mem_limit: 4g
     networks:
     - vox-net
     restart: unless-stopped
@@ -100,7 +132,7 @@ services:
     group_add:
     - keep-groups
     environment:
-    - HSA_OVERRIDE_GFX_VERSION=10.3.0
+    - HSA_OVERRIDE_GFX_VERSION=11.0.0
     networks:
     - vox-net
     restart: unless-stopped
@@ -119,7 +151,7 @@ services:
     group_add:
     - keep-groups
     environment:
-    - HSA_OVERRIDE_GFX_VERSION=10.3.0
+    - HSA_OVERRIDE_GFX_VERSION=11.0.0
     networks:
     - vox-net
     restart: unless-stopped
@@ -132,7 +164,7 @@ services:
     ports:
     - 5030:7860
     volumes:
-    - ./vox-monster-voice/models:/root/.cache/huggingface
+    - ./vox-monster-voice/models:/root/.cache/huggingface:Z
     devices:
     - /dev/kfd:/dev/kfd
     - /dev/dri:/dev/dri
@@ -141,10 +173,11 @@ services:
     group_add:
     - keep-groups
     environment:
-    - HSA_OVERRIDE_GFX_VERSION=10.3.0
+    - HSA_OVERRIDE_GFX_VERSION=11.0.0
     networks:
     - vox-net
     restart: unless-stopped
+
 networks:
   vox-net:
     name: vox-net
