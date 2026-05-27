@@ -184,8 +184,39 @@ Hooks.once("init", () => {
 });
 
 // ==========================================
-// 4. MODULE LIFECYCLE (READY)
+// 4. MODULE LIFECYCLE (READY & SCENE SCAN)
 // ==========================================
+async function scanActiveSceneTokens() {
+    if (!game.user.isGM || !canvas.ready) return;
+    console.log("📡 Vox-Conjurata: Scanning active scene tokens for pre-session ingestion...");
+    const tokens = canvas.tokens?.placeables || [];
+    for (const token of tokens) {
+        if (!token.actor) continue;
+        const actor = token.actor;
+        
+        // Evaluate if the actor is a monster based on type or keywords
+        const monsterTypes = ["undead", "fiend", "dragon", "monstrosity", "aberration"];
+        const keywords = ["Guard", "Monster", "Warrior"];
+        const actorType = actor.system.details?.type?.value?.toLowerCase() || "";
+        const nameMatch = keywords.some(k => actor.name.includes(k));
+        const folderMatch = actor.folder?.name ? keywords.some(k => actor.folder.name.includes(k)) : false;
+        const typeMatch = monsterTypes.some(t => actorType.includes(t));
+        
+        const is_monster = !actor.hasPlayerOwner && (typeMatch || nameMatch || folderMatch);
+        
+        const actorData = {
+            actorId: actor.id, name: actor.name,
+            lore: actor.system.details?.biography?.value || actor.system.description?.value || "No bio available.",
+            stats: { race: actor.system.details?.race || "Unknown", alignment: actor.system.details?.alignment || "Neutral", level: actor.system.details?.level?.value || 0 },
+            artPath: actor.img, isMonster: is_monster
+        };
+        console.log(`📦 Vox-Conjurata: Pre-session scraping for ${actorData.name} (Monster: ${is_monster})...`);
+        try {
+            await fetch(globalThis.voxState.ingestEndpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(actorData) });
+        } catch (err) { console.error(`❌ Vox-Conjurata: Failed to ingest token metadata for ${actorData.name}:`, err); }
+    }
+}
+
 Hooks.once("ready", async () => {
     console.log("vox-conjurata | System initialized.");
     
@@ -209,6 +240,16 @@ Hooks.once("ready", async () => {
             const existing = game.macros.filter(m => m.name === name);
             for (const m of existing) await m.delete();
         }
+        
+        // Scan current active scene tokens on startup
+        await scanActiveSceneTokens();
+    }
+});
+
+// Scan tokens whenever a scene completes loading/rendering on canvas
+Hooks.on("canvasReady", async () => {
+    if (game.user.isGM) {
+        await scanActiveSceneTokens();
     }
 });
 
@@ -218,14 +259,24 @@ Hooks.once("ready", async () => {
 Hooks.on("createToken", async (tokenDoc, options, userId) => {
     if (!game.user.isGM || !tokenDoc.actor) return;
     const actor = tokenDoc.actor;
-    const isMonster = !actor.hasPlayerOwner && (actor.system.details?.level?.value > 5 || ["Undead", "Fiend", "Aberration", "Dragon"].includes(actor.system.details?.race));
+    
+    // Evaluate if the actor is a monster based on type or keywords
+    const monsterTypes = ["undead", "fiend", "dragon", "monstrosity", "aberration"];
+    const keywords = ["Guard", "Monster", "Warrior"];
+    const actorType = actor.system.details?.type?.value?.toLowerCase() || "";
+    const nameMatch = keywords.some(k => actor.name.includes(k));
+    const folderMatch = actor.folder?.name ? keywords.some(k => actor.folder.name.includes(k)) : false;
+    const typeMatch = monsterTypes.some(t => actorType.includes(t));
+    
+    const is_monster = !actor.hasPlayerOwner && (typeMatch || nameMatch || folderMatch);
+    
     const actorData = {
         actorId: actor.id, name: actor.name,
         lore: actor.system.details?.biography?.value || actor.system.description?.value || "No bio available.",
         stats: { race: actor.system.details?.race || "Unknown", alignment: actor.system.details?.alignment || "Neutral", level: actor.system.details?.level?.value || 0 },
-        artPath: actor.img, isMonster: isMonster
+        artPath: actor.img, isMonster: is_monster
     };
-    console.log(`📦 Vox-Conjurata: Scraping metadata for ${actorData.name} (Monster: ${isMonster})...`);
+    console.log(`📦 Vox-Conjurata: Scraping metadata for ${actorData.name} (Monster: ${is_monster})...`);
     try {
         await fetch(globalThis.voxState.ingestEndpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(actorData) });
     } catch (err) { console.error("❌ Vox-Conjurata: Failed to ingest actor metadata:", err); }
@@ -317,13 +368,22 @@ async function processAndSendAudio() {
     const audioBlob = new Blob(chunks, { type: globalThis.voxState.mediaRecorder.mimeType || "audio/webm" });
     const micType = globalThis.voxState.activeMicType;
     const actor = canvas.tokens.controlled[0]?.actor || game.user.character;
-    const isMonster = actor && !actor.hasPlayerOwner && (actor.system.details?.level?.value > 5 || ["Undead", "Fiend", "Aberration", "Dragon"].includes(actor.system.details?.race));
+
+    // Evaluate if the actor is a monster based on type or keywords
+    const monsterTypes = ["undead", "fiend", "dragon", "monstrosity", "aberration"];
+    const keywords = ["Guard", "Monster", "Warrior"];
+    const actorType = actor?.system.details?.type?.value?.toLowerCase() || "";
+    const nameMatch = actor ? keywords.some(k => actor.name.includes(k)) : false;
+    const folderMatch = actor?.folder?.name ? keywords.some(k => actor.folder.name.includes(k)) : false;
+    const typeMatch = monsterTypes.some(t => actorType.includes(t));
+    
+    const is_monster = actor && !actor.hasPlayerOwner && (typeMatch || nameMatch || folderMatch);
 
     const formData = new FormData();
     formData.append("audio_blob", audioBlob, "voice_capture.webm");
-    formData.append("metadata", JSON.stringify({ activeSpeakerName: globalThis.voxState.activeSpeakerName, actorId: globalThis.voxState.activeActorId, micType: micType, isMonster: !!isMonster, userId: game.user.id }));
+    formData.append("metadata", JSON.stringify({ activeSpeakerName: globalThis.voxState.activeSpeakerName, actorId: globalThis.voxState.activeActorId, micType: micType, isMonster: !!is_monster, userId: game.user.id }));
 
-    console.log(`📦 Vox-Conjurata: Sending audio blob (${audioBlob.size} bytes) to Orchestrator context: [${micType}] for Actor: [${globalThis.voxState.activeActorId}]`);
+    console.log(`📦 Vox-Conjurata: Sending audio blob (${audioBlob.size} bytes) to Orchestrator context: [${micType}] for Actor: [${globalThis.voxState.activeActorId}] (Monster: ${is_monster})`);
 
     try {
         const response = await fetch(globalThis.voxState.voiceConversionEndpoint, { method: "POST", body: formData });

@@ -57,13 +57,18 @@ CONFIG_PATH = Path("./settings/voice_routing_config.json")
 # --- Helper Functions ---
 
 def get_vram_used_gb() -> float:
-    """Reads current GPU VRAM utilization from Host Linux sysfs (ROCm device card0)."""
+    """Reads current GPU VRAM utilization from Host Linux sysfs dynamically."""
     try:
-        with open("/sys/class/drm/card0/device/mem_info_vram_used", "r") as f:
-            used_bytes = int(f.read().strip())
-            return used_bytes / (1024 ** 3)
+        for path in Path("/sys/class/drm").glob("card*/device/mem_info_vram_used"):
+            try:
+                with open(path, "r") as f:
+                    used_bytes = int(f.read().strip())
+                    return used_bytes / (1024 ** 3)
+            except Exception:
+                continue
     except Exception:
-        return 0.0
+        pass
+    return 0.0
 
 def load_routing_config() -> dict:
     if CONFIG_PATH.exists():
@@ -237,12 +242,11 @@ async def forge_voice_seed(actor_id: str, acoustic_description: str) -> str:
             logger.error(f"Seed forge error: {e}"); return ""
 
 async def enrich_and_instruct(speaker: str, role: str, text: str) -> DialogueEnrichment:
-    """Enriches dialogue with Qwen via vLLM endpoint and formats tags."""
+    """Enriches dialogue with Qwen via vLLM endpoint and formats tags for specific TTS engines."""
     system_instruction = (
         "You are a cinematic dialogue director. Analyze the text for emotional subtext. "
         "Output JSON with 'emotional_resonance', 'vocal_delivery_prompt', "
-        "'instruct_tag' (e.g. [Terrified, breathy whisper]), "
-        "and 'monster_tag' (e.g. [screaming], [low voice], [echo])."
+        "and 'emotion_tag' (a single descriptive tag like 'Enraged Growl', 'Terrified Whisper', or 'Neutral')."
     )
     payload = {
         "model": "Qwen/Qwen2.5-14B-Instruct",
@@ -258,20 +262,31 @@ async def enrich_and_instruct(speaker: str, role: str, text: str) -> DialogueEnr
         try:
             response = await client.post(f"{OLLAMA_URL}/v1/chat/completions", json=payload)
             res = json.loads(response.json()["choices"][0]["message"]["content"])
+            
+            emotion = res.get("emotion_tag", "Neutral").strip()
+            
+            # Formatting for Fish Speech (Monster): lowercase inline square brackets
+            # Example: [enraged growl] Dialogue text
+            monster_text = f"[{emotion.lower()}] {text}"
+            
+            # Formatting for CosyVoice (Humanoid): Title Case <|endofprompt|> Dialogue text
+            # Example: Enraged Growl <|endofprompt|> Dialogue text
+            instruct_text = f"{emotion.capitalize()} <|endofprompt|> {text}"
+            
             return DialogueEnrichment(
                 speaker=speaker, role=role, raw_text=text,
-                emotional_resonance=res.get("emotional_resonance", "Measured"),
-                vocal_delivery_prompt=res.get("vocal_delivery_prompt", "Standard."),
-                instruct_text=f"{res.get('instruct_tag', '[Neutral]')}<|endofprompt|>{text}",
-                monster_text=f"{res.get('monster_tag', '[low voice]')} <|endofprompt|> {text}"
+                emotional_resonance=res.get("emotional_resonance", emotion),
+                vocal_delivery_prompt=res.get("vocal_delivery_prompt", f"Deliver as {emotion}."),
+                instruct_text=instruct_text,
+                monster_text=monster_text
             )
         except Exception as e:
             logger.error(f"Instruction error: {e}")
             return DialogueEnrichment(
                 speaker=speaker, role=role, raw_text=text, 
                 emotional_resonance="Neutral", vocal_delivery_prompt="Standard.",
-                instruct_text=f"[Neutral]<|endofprompt|>{text}",
-                monster_text=f"[low voice] <|endofprompt|> {text}"
+                instruct_text=f"Neutral <|endofprompt|> {text}",
+                monster_text=f"[neutral] {text}"
             )
 
 async def log_to_foundry(npc_name: str, summary: str) -> bool:

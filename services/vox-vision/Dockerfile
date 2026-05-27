@@ -14,4 +14,4 @@ COPY main.py .
 
 EXPOSE 7860
 
-CMD ["python", "main.py"]
+CMD ["python3", "main.py"]

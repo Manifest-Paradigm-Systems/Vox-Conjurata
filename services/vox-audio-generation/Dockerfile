@@ -14,4 +14,4 @@ COPY tts_engine.py .
 
 EXPOSE 8000
 
-CMD ["python", "tts_engine.py"]
+CMD ["python3", "tts_engine.py"]

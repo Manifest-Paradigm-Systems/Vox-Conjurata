@@ -4,6 +4,7 @@ from pydantic import BaseModel
 import logging
 import os
 import torch
+import gc
 from diffusers import StableDiffusionXLPipeline, AutoencoderKL
 
 logging.basicConfig(level=logging.INFO)
@@ -23,24 +24,24 @@ class ImageRequest(BaseModel):
 async def root():
     return {"service": "vox-vision", "status": "running"}
 
-# Pre-load SDXL on startup to keep it resident in VRAM for instant delivery
-logger.info(f"Loading SDXL model {MODEL_ID} to GPU VRAM...")
-device = "cuda" if torch.cuda.is_available() else "cpu"
-vae = AutoencoderKL.from_pretrained("madebyollin/sdxl-vae-fp16-fix", torch_dtype=torch.float16)
-pipe = StableDiffusionXLPipeline.from_pretrained(
-    MODEL_ID,
-    vae=vae,
-    torch_dtype=torch.float16,
-    variant="fp16",
-    use_safetensors=True
-).to(device)
-pipe.enable_vae_tiling()
-logger.info("SDXL model successfully loaded and resident in VRAM.")
-
 @app.post("/generate")
 async def generate_image(request: ImageRequest):
-    logger.info(f"Generating image for prompt: '{request.prompt[:50]}...'")
+    logger.info(f"JIT Loading SDXL model {MODEL_ID} to GPU VRAM...")
+    pipe = None
+    vae = None
     try:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        vae = AutoencoderKL.from_pretrained("madebyollin/sdxl-vae-fp16-fix", torch_dtype=torch.float16)
+        pipe = StableDiffusionXLPipeline.from_pretrained(
+            MODEL_ID,
+            vae=vae,
+            torch_dtype=torch.float16,
+            variant="fp16",
+            use_safetensors=True
+        ).to(device)
+        pipe.enable_vae_tiling()
+        
+        logger.info(f"Generating image for prompt: '{request.prompt[:50]}...'")
         image = pipe(
             prompt=request.prompt,
             height=request.height,
@@ -54,7 +55,19 @@ async def generate_image(request: ImageRequest):
     except Exception as e:
         logger.error(f"SDXL Visual Gen error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        # Evict SDXL from VRAM immediately to free up GPU memory
+        if pipe is not None:
+            logger.info("Evicting SDXL from GPU VRAM...")
+            del pipe
+            if vae is not None:
+                del vae
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            logger.info("SDXL JIT eviction complete.")
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=7860)
+

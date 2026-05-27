@@ -1,3 +1,5 @@
 .env
 node_modules/
 services/conjurata-orchestrator/archive/audio/*.mp3
+vox-monster-voice/models/
+vox-monster-voice/models/

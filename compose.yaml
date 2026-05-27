@@ -18,6 +18,7 @@ services:
     - 8080:8080
     environment:
     - OLLAMA_URL=http://vox-llm-core:11434
+    - VISION_READER_URL=http://vox-vision-reader:8000
     - STT_URL=http://vox-voice:5000
     - TTS_DESIGNER_URL=http://vox-designer:5010
     - TTS_ACTOR_URL=http://vox-actor:5020
@@ -25,11 +26,33 @@ services:
     - TTS_MUSIC_URL=http://vox-audio-generation-music:8000
     - TTS_SFX_URL=http://vox-audio-generation-sfx:8001
     volumes:
-    - ollama_storage:/root/.ollama:Z
+    - model_storage:/models:z
     - ./services/orchestrator/voice_seeds:/app/voice_seeds:Z
     - /sys:/sys:ro
     networks:
     - vox-net
+
+  vox-vision-reader:
+    image: ghcr.io/abetlen/llama-cpp-python:latest
+    container_name: vox-vision-reader
+    ports:
+    - 8002:8000
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    security_opt:
+    - seccomp=unconfined
+    environment:
+    - HSA_OVERRIDE_GFX_VERSION=12.0.1
+    - MODEL=/models/MiniCPM-V-2_6-GGUF/MiniCPM-V-2_6-Q4_K_M.gguf
+    - N_GPU_LAYERS=-1
+    - CHAT_FORMAT=minicpm-v-2.6
+    - VRAM_ALLOCATION=4.80GB
+    volumes:
+    - model_storage:/models:z
+    networks:
+    - vox-net
+    restart: unless-stopped
 
   vox-vision:
     build:
@@ -42,10 +65,11 @@ services:
     - /dev/dri:/dev/dri
     security_opt:
     - seccomp=unconfined
-    group_add:
-    - keep-groups
     environment:
-    - HSA_OVERRIDE_GFX_VERSION=11.0.0
+    - HSA_OVERRIDE_GFX_VERSION=12.0.1
+    - VRAM_LIMIT=5.50GB
+    - QUANTIZATION=nf4
+    command: ["python", "main.py", "--pin-shared-memory"]
     networks:
     - vox-net
     restart: unless-stopped
@@ -56,17 +80,19 @@ services:
     ports:
     - 11434:8000
     volumes:
-    - ollama_storage:/root/.ollama:Z
+    - model_storage:/models:z
     devices:
     - /dev/kfd:/dev/kfd
     - /dev/dri:/dev/dri
     security_opt:
     - seccomp=unconfined
-    group_add:
-    - keep-groups
     environment:
-    - HSA_OVERRIDE_GFX_VERSION=11.0.0
-    command: ["--model", "Qwen/Qwen2.5-14B-Instruct", "--kv-cache-dtype", "fp8", "--max-model-len", "4096", "--device", "cuda"]
+    - HSA_OVERRIDE_GFX_VERSION=12.0.1
+    - PYTORCH_ROCM_ARCH=gfx1201
+    - VLLM_ROCM_USE_AITER=0
+    - GPU_ARCHS=gfx1100
+    - VRAM_ALLOCATION=11.20GB
+    command: ["python3", "-m", "vllm.entrypoints.openai.api_server", "--model", "/models/EVA-Qwen2.5-14B-v0.2-GGUF/EVA-Qwen2.5-14B-v0.2-Q4_K_M.gguf", "--tokenizer", "Qwen/Qwen2.5-14B-Instruct", "--quantization", "gguf", "--kv-cache-dtype", "fp8", "--max-model-len", "4096", "--gpu-memory-utilization", "0.35"]
     networks:
     - vox-net
 
@@ -81,10 +107,8 @@ services:
     - /dev/dri:/dev/dri
     security_opt:
     - seccomp=unconfined
-    group_add:
-    - keep-groups
     environment:
-    - HSA_OVERRIDE_GFX_VERSION=11.0.0
+    - HSA_OVERRIDE_GFX_VERSION=12.0.1
     networks:
     - vox-net
     restart: unless-stopped
@@ -100,10 +124,14 @@ services:
     - /dev/dri:/dev/dri
     security_opt:
     - seccomp=unconfined
-    group_add:
-    - keep-groups
     environment:
-    - HSA_OVERRIDE_GFX_VERSION=11.0.0
+    - HSA_OVERRIDE_GFX_VERSION=12.0.1
+    - VRAM_LIMIT=0.80GB
+    - HF_TOKEN=${HF_TOKEN}
+    - STABLE_AUDIO_MODEL=stabilityai/stable-audio-3-small-music
+    volumes:
+    - ./cache/huggingface:/root/.cache/huggingface:z
+    command: ["python", "tts_engine.py", "--precision", "fp8"]
     networks:
     - vox-net
     restart: unless-stopped
@@ -119,11 +147,16 @@ services:
     - /dev/dri:/dev/dri
     security_opt:
     - seccomp=unconfined
-    group_add:
-    - keep-groups
     environment:
-    - HSA_OVERRIDE_GFX_VERSION=11.0.0
+    - HSA_OVERRIDE_GFX_VERSION=12.0.1
     - AUDIO_ENGINE_TYPE=sfx
+    - EXECUTION_DEVICE=gpu
+    - VRAM_LIMIT=0.80GB
+    - HF_TOKEN=${HF_TOKEN}
+    - STABLE_AUDIO_MODEL=stabilityai/stable-audio-3-small-sfx
+    volumes:
+    - ./cache/huggingface:/root/.cache/huggingface:z
+    command: ["python", "tts_engine.py", "--precision", "fp8"]
     networks:
     - vox-net
     restart: unless-stopped
@@ -139,10 +172,11 @@ services:
     - /dev/dri:/dev/dri
     security_opt:
     - seccomp=unconfined
-    group_add:
-    - keep-groups
     environment:
-    - HSA_OVERRIDE_GFX_VERSION=11.0.0
+    - HSA_OVERRIDE_GFX_VERSION=12.0.1
+    - QUANTIZATION=int8
+    - VRAM_LIMIT=1.20GB
+    command: ["python3", "app.py", "--keep_alive", "0"]
     networks:
     - vox-net
     restart: unless-stopped
@@ -158,10 +192,11 @@ services:
     - /dev/dri:/dev/dri
     security_opt:
     - seccomp=unconfined
-    group_add:
-    - keep-groups
     environment:
-    - HSA_OVERRIDE_GFX_VERSION=11.0.0
+    - HSA_OVERRIDE_GFX_VERSION=12.0.1
+    - MODEL_REPO=Tinysoft/Cosyvoice3-0.5B-GGUF
+    - QUANTIZATION=int8
+    - VRAM_LIMIT=1.80GB
     networks:
     - vox-net
     restart: unless-stopped
@@ -174,16 +209,16 @@ services:
     ports:
     - 5030:7860
     volumes:
-    - ./vox-monster-voice/models:/root/.cache/huggingface:Z
+    - ./vox-monster-voice/models:/app/checkpoints/s2-pro:Z
     devices:
     - /dev/kfd:/dev/kfd
     - /dev/dri:/dev/dri
     security_opt:
     - seccomp=unconfined
-    group_add:
-    - keep-groups
     environment:
-    - HSA_OVERRIDE_GFX_VERSION=11.0.0
+    - HSA_OVERRIDE_GFX_VERSION=12.0.1
+    - TEXT_PRECISION=int8
+    - VRAM_LIMIT=2.20GB
     networks:
     - vox-net
     restart: unless-stopped
@@ -193,4 +228,4 @@ networks:
     name: vox-net
     driver: bridge
 volumes:
-  ollama_storage: null
+  model_storage: null

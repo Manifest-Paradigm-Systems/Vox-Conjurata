@@ -2,29 +2,112 @@ import httpx
 import time
 import json
 import os
+import subprocess
+import glob
+from pathlib import Path
 
+# Telemetry and safety configurations
 ORCHESTRATOR_URL = "http://localhost:8080/api/v1/diagnostics/latest"
+VRAM_CRITICAL_GB = 30.0
+POLL_INTERVAL_SECONDS = 5
+INCIDENT_LOG_PATH = "/var/home/EvokeStudio/vox-conjurata/cache/gpu_incident.json"
 
-def check_for_errors():
+def get_vram_used_gb() -> float:
+    """Finds and reads active GPU VRAM utilization from Host Linux sysfs dynamically."""
+    paths = glob.glob("/sys/class/drm/card*/device/mem_info_vram_used")
+    for path in paths:
+        try:
+            with open(path, "r") as f:
+                used_bytes = int(f.read().strip())
+                return used_bytes / (1024 ** 3)
+        except Exception:
+            pass
+    return 0.0
+
+def check_orchestrator_errors():
     try:
-        response = httpx.get(ORCHESTRATOR_URL, timeout=5.0)
+        response = httpx.get(ORCHESTRATOR_URL, timeout=2.0)
         if response.status_code == 200:
             data = response.json()
             if data.get("status") != "nominal":
-                print(f"🚨 [HEALING WATCHER] Error detected: {json.dumps(data, indent=2)}")
                 return data
-    except Exception as e:
+    except Exception:
         pass
     return None
 
-if __name__ == "__main__":
-    print("🧠 [HEALING WATCHER] Active. Monitoring orchestrator for client-side telemetry...")
-    last_error = None
+def check_container_logs() -> tuple[bool, str]:
+    """Scans all active containers in the compose stack for crash keywords."""
+    try:
+        # Get active container names in the user's podman environment
+        cmd = "podman ps --format '{{.Names}}'"
+        res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        if res.returncode != 0:
+            return False, ""
+        
+        containers = [c.strip() for c in res.stdout.split("\n") if c.strip()]
+        crash_keywords = ["GPU Hang", "HW Exception", "Aborted (core dumped)", "Segmentation fault"]
+        
+        for container in containers:
+            # We check logs from the last 10 seconds to avoid repeating older alerts
+            log_cmd = f"podman logs --since 10s {container}"
+            log_res = subprocess.run(log_cmd, shell=True, capture_output=True, text=True)
+            
+            # Combine stdout and stderr
+            logs = log_res.stdout + log_res.stderr
+            for kw in crash_keywords:
+                if kw in logs:
+                    return True, f"Found critical crash pattern '{kw}' in container '{container}' logs: {logs[-300:]}"
+    except Exception as e:
+        print(f"Error checking container logs: {e}")
+    return False, ""
+
+def trigger_emergency_shutdown(reason: str, vram_gb: float):
+    print(f"\n🚨 [SELF-HEALING DEAMON] EMERGENCY DETECTED: {reason}")
+    print(f"Current VRAM Usage: {vram_gb:.2f} GB / 32.00 GB")
+    
+    # Save the incident details to cache
+    incident_data = {
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "reason": reason,
+        "vram_used_gb": vram_gb,
+    }
+    
+    try:
+        os.makedirs(os.path.dirname(INCIDENT_LOG_PATH), exist_ok=True)
+        with open(INCIDENT_LOG_PATH, "w") as f:
+            json.dump(incident_data, f, indent=2)
+        print(f"📝 Incident logged successfully to {INCIDENT_LOG_PATH}")
+    except Exception as e:
+        print(f"Could not save incident log: {e}")
+    
+    # Force stop the container stack to release all memory and prevent a hard lockup
+    print("🧹 Shutting down container stack to protect system integrity...")
+    subprocess.run("podman compose down", shell=True, cwd="/var/home/EvokeStudio/vox-conjurata")
+    print("✅ Emergency shutdown complete. Stack is stopped and VRAM has been purged.")
+
+def main():
+    print("🧠 [SELF-HEALING WATCHER] Active. Monitoring VRAM, GPU state, and container logs...")
+    
     while True:
-        current_error = check_for_errors()
-        if current_error and current_error != last_error:
-            # We found a new error. In a real self-healing loop, 
-            # I would trigger code modifications here.
-            # For now, I just print it so it appears in my background logs.
-            last_error = current_error
-        time.sleep(5)
+        vram_gb = get_vram_used_gb()
+        
+        # 1. Protect against VRAM oversubscription exceeding physical card capabilities
+        if vram_gb > VRAM_CRITICAL_GB:
+            trigger_emergency_shutdown(f"VRAM usage exceeded safety threshold: {vram_gb:.2f} GB", vram_gb)
+            break
+            
+        # 2. Monitor for active GPU Hangs/Exceptions in container stderr/stdout
+        has_crash, crash_detail = check_container_logs()
+        if has_crash:
+            trigger_emergency_shutdown(f"GPU/Container crash detected: {crash_detail}", vram_gb)
+            break
+            
+        # 3. Log warnings if client-side telemetry returns non-nominal status
+        orch_err = check_orchestrator_errors()
+        if orch_err:
+            print(f"⚠️ [SELF-HEALING WATCHER] Orchestrator warning: {json.dumps(orch_err)}")
+            
+        time.sleep(POLL_INTERVAL_SECONDS)
+
+if __name__ == "__main__":
+    main()
