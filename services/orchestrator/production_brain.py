@@ -13,7 +13,7 @@ import edge_tts
 from pathlib import Path
 
 # --- vox-conjurata Orchestrator Service ---
-# Master Controller with VRAM Guardrails and Hybrid Voice Factory Routing
+# Master Controller with VRAM Guardrails and Qwen-vLLM Memory Optimizations
 
 logging.basicConfig(
     level=logging.INFO,
@@ -63,7 +63,6 @@ def get_vram_used_gb() -> float:
             used_bytes = int(f.read().strip())
             return used_bytes / (1024 ** 3)
     except Exception:
-        # Return 0.0 if not on Linux or sysfs not mounted
         return 0.0
 
 def load_routing_config() -> dict:
@@ -137,7 +136,6 @@ class CosyVoiceEngine(SpeechEngine):
 class FishSpeechEngine(SpeechEngine):
     async def generate(self, text: str, actor_id: str, client: httpx.AsyncClient) -> Optional[bytes]:
         try:
-            # Fish Speech Dual-AR sequence payload
             payload = {
                 "text": text,
                 "model_variant": "baicai1145/s2-pro-w4a16",
@@ -157,7 +155,6 @@ class EdgeTTSEngine(SpeechEngine):
 
     async def generate(self, text: str, actor_id: str, client: httpx.AsyncClient) -> Optional[bytes]:
         try:
-            # Use edge-tts library directly in async loop
             communicate = edge_tts.Communicate(text, self.voice_name, rate=self.rate)
             data = b""
             async for chunk in communicate.stream():
@@ -174,7 +171,6 @@ class SpeechPipelineFactory:
         self.fishspeech = FishSpeechEngine()
 
     def get_engine(self, is_monster: bool, stats: dict, config: dict, vram_triggered: bool) -> SpeechEngine:
-        # 1. Check if VRAM trigger or force routing overrides are active
         if vram_triggered:
             fallback_voice = config.get("narrator_preferences", {}).get("default_voice", "en-US-ChristopherNeural")
             rate = config.get("narrator_preferences", {}).get("rate_adjustment", "+0%")
@@ -183,7 +179,6 @@ class SpeechPipelineFactory:
 
         tier_routing = config.get("tier_routing", {})
         
-        # 2. Check explicitly configured engine overrides
         if is_monster:
             if tier_routing.get("monster_engine") == "edge-tts":
                 fallback_voice = config.get("narrator_preferences", {}).get("default_voice", "en-US-ChristopherNeural")
@@ -194,7 +189,6 @@ class SpeechPipelineFactory:
                 fallback_voice = config.get("narrator_preferences", {}).get("default_voice", "en-US-ChristopherNeural")
                 return EdgeTTSEngine(voice_name=fallback_voice)
             
-            # Match heuristics if stats are provided
             if stats:
                 race = stats.get("race", "").lower()
                 level = stats.get("level", 0)
@@ -206,24 +200,25 @@ class SpeechPipelineFactory:
 pipeline_factory = SpeechPipelineFactory()
 
 async def generate_vocal_profile(actor_data: ActorMetadata) -> str:
-    """Uses Qwen 2.5 to generate a descriptive acoustic prompt for Parler-TTS."""
+    """Uses Qwen 2.5 via vLLM completions endpoint to generate a descriptive acoustic prompt."""
     system_instruction = (
         "You are an expert casting director and acoustic engineer. "
         "Analyze the character and output a single-sentence acoustic description for a voice synthesizer. "
         "Include age, gender, raspiness, pitch, inflections, and room acoustics."
     )
     payload = {
-        "model": "qwen2.5:latest",
+        "model": "Qwen/Qwen2.5-14B-Instruct",
         "messages": [
             {"role": "system", "content": system_instruction},
             {"role": "user", "content": f"Character: {actor_data.name}\nLore: {actor_data.lore}"}
         ],
-        "stream": False
+        "temperature": 0.3,
+        "max_tokens": 128
     }
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
-            response = await client.post(f"{OLLAMA_URL}/api/chat", json=payload)
-            return response.json()["message"]["content"].strip()
+            response = await client.post(f"{OLLAMA_URL}/v1/chat/completions", json=payload)
+            return response.json()["choices"][0]["message"]["content"].strip()
         except Exception as e:
             logger.error(f"Profile error: {e}")
             return "A clear, neutral speaking voice."
@@ -242,7 +237,7 @@ async def forge_voice_seed(actor_id: str, acoustic_description: str) -> str:
             logger.error(f"Seed forge error: {e}"); return ""
 
 async def enrich_and_instruct(speaker: str, role: str, text: str) -> DialogueEnrichment:
-    """Enriches dialogue with Qwen and formats it for both CosyVoice and Fish Speech."""
+    """Enriches dialogue with Qwen via vLLM endpoint and formats tags."""
     system_instruction = (
         "You are a cinematic dialogue director. Analyze the text for emotional subtext. "
         "Output JSON with 'emotional_resonance', 'vocal_delivery_prompt', "
@@ -250,17 +245,19 @@ async def enrich_and_instruct(speaker: str, role: str, text: str) -> DialogueEnr
         "and 'monster_tag' (e.g. [screaming], [low voice], [echo])."
     )
     payload = {
-        "model": "qwen2.5:latest",
+        "model": "Qwen/Qwen2.5-14B-Instruct",
         "messages": [
             {"role": "system", "content": system_instruction},
             {"role": "user", "content": f"Speaker: {speaker}, Text: {text}"}
         ],
-        "stream": False, "format": "json"
+        "temperature": 0.3,
+        "max_tokens": 256,
+        "response_format": {"type": "json_object"}
     }
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
-            response = await client.post(f"{OLLAMA_URL}/api/chat", json=payload)
-            res = json.loads(response.json()["message"]["content"])
+            response = await client.post(f"{OLLAMA_URL}/v1/chat/completions", json=payload)
+            res = json.loads(response.json()["choices"][0]["message"]["content"])
             return DialogueEnrichment(
                 speaker=speaker, role=role, raw_text=text,
                 emotional_resonance=res.get("emotional_resonance", "Measured"),
@@ -311,7 +308,7 @@ async def root():
         "service": "orchestrator",
         "status": "running",
         "version": "2.2.0",
-        "pipeline": "Factory Dynamic voice generation with VRAM failover (CosyVoice/FishSpeech/Edge-TTS)"
+        "pipeline": "Factory Dynamic voice generation with vLLM Qwen endpoints and VRAM failover"
     }
 
 @app.get("/api/v1/narrators/voices")
@@ -377,7 +374,6 @@ async def voice_conversion(request: Request):
         engine_name = "Edge-TTS"
         
         async with httpx.AsyncClient(timeout=60.0) as client:
-            # Build target prompt text
             target_text = enriched.monster_text if is_monster else enriched.instruct_text
             
             if isinstance(engine, FishSpeechEngine):
@@ -385,10 +381,8 @@ async def voice_conversion(request: Request):
             elif isinstance(engine, CosyVoiceEngine):
                 engine_name = "CosyVoice"
             
-            # Execute audio generation
             res_content = await engine.generate(target_text, actor_id, client)
             
-            # Fallback chain if local engine fails
             if res_content is None and not isinstance(engine, EdgeTTSEngine):
                 logger.warn(f"Engine {engine_name} failed. Falling back to Edge-TTS Cloud.")
                 engine_name = "Edge-TTS (Fallback)"
@@ -412,28 +406,38 @@ async def voice_conversion(request: Request):
 
 @app.post("/api/v1/dialogue/end")
 async def end_dialogue(request: DialogueEndRequest):
-    """Endpoint triggered when a dialogue session ends. Generates markdown campaign chronicles."""
+    """Endpoint triggered when a dialogue session ends, compiling summaries using vLLM."""
     logger.info(f"Received dialogue end request for NPC: {request.npcName}")
     
-    # 1. Generate summary from Ollama
-    prompt = f"Summarize the following conversation transcript in a condensed markdown format:\n\n{request.transcript}"
+    # 1. Active Chat History Truncation: Slice conversational array to last 20 messages
+    lines = [l.strip() for l in request.transcript.split("\n") if l.strip()]
+    truncated_lines = lines[-20:]
+    truncated_transcript = "\n".join(truncated_lines)
+    
+    # 2. Generate summary from local vLLM API
+    prompt = (
+        "Summarize the following conversation transcript in a condensed markdown format. "
+        "Assume preceding timeline is documented in structured journals.\n\n"
+        f"{truncated_transcript}"
+    )
     payload = {
-        "model": "qwen2.5:latest",
+        "model": "Qwen/Qwen2.5-14B-Instruct",
         "prompt": prompt,
-        "stream": False
+        "max_tokens": 512,
+        "temperature": 0.5
     }
     
     summary = "Summary generation failed."
     async with httpx.AsyncClient(timeout=60.0) as client:
         try:
-            response = await client.post(f"{OLLAMA_URL}/api/generate", json=payload)
+            response = await client.post(f"{OLLAMA_URL}/v1/completions", json=payload)
             if response.status_code == 200:
-                summary = response.json().get("response", summary)
+                summary = response.json()["choices"][0]["text"].strip()
         except Exception as e:
-            logger.error(f"Error calling Ollama: {e}")
-            raise HTTPException(status_code=502, detail=f"Ollama integration error: {str(e)}")
+            logger.error(f"Error calling vLLM: {e}")
+            raise HTTPException(status_code=502, detail=f"vLLM integration error: {str(e)}")
             
-    # 2. Log macro trigger to Foundry VTT
+    # 3. Log macro trigger to Foundry VTT
     foundry_success = await log_to_foundry(request.npcName, summary)
     
     if not foundry_success:

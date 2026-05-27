@@ -52,9 +52,9 @@ services:
 
   vox-llm-core:
     container_name: vox-llm-core
-    image: ollama/ollama:rocm
+    image: rocm/vllm:latest
     ports:
-    - 11434:11434
+    - 11434:8000
     volumes:
     - ollama_storage:/root/.ollama:Z
     devices:
@@ -66,6 +66,7 @@ services:
     - keep-groups
     environment:
     - HSA_OVERRIDE_GFX_VERSION=11.0.0
+    command: ["--model", "Qwen/Qwen2.5-14B-Instruct", "--kv-cache-dtype", "fp8", "--max-model-len", "4096", "--device", "cuda"]
     networks:
     - vox-net
 
@@ -113,7 +114,16 @@ services:
     container_name: vox-audio-generation-sfx
     ports:
     - 8001:8000
-    mem_limit: 4g
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    security_opt:
+    - seccomp=unconfined
+    group_add:
+    - keep-groups
+    environment:
+    - HSA_OVERRIDE_GFX_VERSION=11.0.0
+    - AUDIO_ENGINE_TYPE=sfx
     networks:
     - vox-net
     restart: unless-stopped
