@@ -6,10 +6,10 @@ local_dir = "/models"
 hf_token = os.environ.get("HF_TOKEN")
 
 files = [
-    "sdxl_base_Q4_0.gguf",
-    "clip_l.safetensors",
-    "clip_g.safetensors",
-    "xlVAEC_c91.safetensors"
+    "stable-diffusion-xl-base-1.0-Q4_0.gguf",
+    "clip/clip_l.safetensors",
+    "clip/clip_g.safetensors",
+    "vae/xlVAEC_c91.safetensors"
 ]
 
 print(f"Using HF_TOKEN: {'Yes' if hf_token else 'No'}")
