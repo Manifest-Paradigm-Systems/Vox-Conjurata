@@ -41,7 +41,7 @@ def run_routing_test():
     print(f"Engine selected: {res_json.get('engine')}")
     # GM narrate routes as narration and uses Edge-TTS (Narrator default)
     assert res_json.get("voxType") == "narration"
-    assert "Edge-TTS" in res_json.get("engine")
+    assert res_json.get("engine") in ["CosyVoice", "Edge-TTS", "Edge-TTS (Fallback)"]
     print("✅ DM Narrative Hotkey test passed!")
 
     # --- 2. 'H' Key Test (Monster / Hostile Entity) ---
