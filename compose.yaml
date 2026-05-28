@@ -137,7 +137,7 @@ services:
     - VLLM_ROCM_USE_AITER=0
     - GPU_ARCHS=gfx1100
     - VRAM_ALLOCATION=11.20GB
-    command: ["python3", "-m", "vllm.entrypoints.openai.api_server", "--model", "/models/bartowski/EVA-Qwen2.5-7B-v0.1-GGUF", "--tokenizer", "EVA-UNIT-01/EVA-Qwen2.5-7B-v0.1", "--served-model-name", "EVA-UNIT-01/EVA-Qwen2.5-7B-v0.1", "--quantization", "gguf", "--kv-cache-dtype", "fp8", "--max-model-len", "4096", "--gpu-memory-utilization", "0.40"]
+    command: ["python3", "-m", "vllm.entrypoints.openai.api_server", "--model", "/models/bartowski/EVA-Qwen2.5-7B-v0.1-GGUF/EVA-Qwen2.5-7B-v0.1-Q4_K_M.gguf", "--tokenizer", "EVA-UNIT-01/EVA-Qwen2.5-7B-v0.1", "--served-model-name", "EVA-UNIT-01/EVA-Qwen2.5-7B-v0.1", "--quantization", "gguf", "--kv-cache-dtype", "fp8", "--max-model-len", "4096", "--gpu-memory-utilization", "0.40"]
     networks:
     - vox-net
 
