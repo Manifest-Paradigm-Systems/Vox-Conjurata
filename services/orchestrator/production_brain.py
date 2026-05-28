@@ -56,6 +56,20 @@ CONFIG_PATH = Path("./settings/voice_routing_config.json")
 
 # --- Helper Functions ---
 
+def clean_tts_text(text: str) -> str:
+    """Strips metadata tags, bracketed instructions, and artifacts from LLM-generated dialogue."""
+    import re
+    # Remove bracketed tags like [Neutral], [enraged growl]
+    text = re.sub(r'\[.*?\]', '', text)
+    # Remove parenthetical tags like (neutral), (Whispering)
+    text = re.sub(r'\(.*?\)', '', text)
+    # Remove common metadata prefixes
+    text = re.sub(r'^(Mood|Emotion|Sentiment|Tone|Note|Instruction|Direction):\s*', '', text, flags=re.IGNORECASE)
+    # Remove leading "neutral:" or similar followed by space
+    text = re.sub(r'^\w+:\s+', '', text)
+    # Final cleanup of whitespace
+    return text.strip()
+
 def get_vram_used_gb() -> float:
     """Reads current GPU VRAM utilization from Host Linux sysfs dynamically."""
     try:
@@ -278,11 +292,14 @@ async def generate_vocal_profile(actor_data: ActorMetadata) -> dict:
 async def forge_voice_seed(actor_id: str, acoustic_description: str, gender: str = "male") -> str:
     """Calls Parler-TTS (vox-designer) to create a unique 10s voice print."""
     seed_path = VOICE_SEEDS_DIR / f"{actor_id}_seed_{gender}.wav"
+    text_path = VOICE_SEEDS_DIR / f"{actor_id}_seed_{gender}.txt"
     async with httpx.AsyncClient(timeout=60.0) as client:
         try:
             response = await client.post(f"{TTS_DESIGNER_URL}/generate", json={"text": acoustic_description})
             if response.status_code == 200:
                 with open(seed_path, "wb") as f: f.write(response.content)
+                with open(text_path, "w") as f: f.write(acoustic_description)
+                logger.info(f"[VOICE-SEED] Forged seed and saved transcript for {actor_id}")
                 return str(seed_path)
             return ""
         except Exception as e:
