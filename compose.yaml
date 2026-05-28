@@ -326,10 +326,12 @@ services:
     - ROCR_VISIBLE_DEVICES=0
     - HIP_VISIBLE_DEVICES=0
     - CUDA_VISIBLE_DEVICES=0
-    - VRAM_LIMIT=2.00GB
-    - HF_TOKEN=${HF_TOKEN}
+    - VRAM_LIMIT=5.50GB
+    - MODEL_PATH=/models/sdxl-base-1.0-Q4_K_M.gguf
+    - LORA_DIR=/loras
     volumes:
-    - ./cache/huggingface:/root/.cache/huggingface:z
+    - model_storage:/models:z
+    - ./loras:/loras:z
     networks:
     - vox-net
     restart: unless-stopped

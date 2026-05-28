@@ -1,81 +1,86 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
-from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import logging
 import os
 import tempfile
-import torch
 import gc
-from diffusers import AutoPipelineForText2Image
+
+from sdcpp import StableDiffusion
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("vox-vision-gen")
+logger = logging.getLogger("sdxl-gguf-service")
 
-app = FastAPI(title="vox-vision-gen-sdxl")
+app = FastAPI(title="SDXL GGUF LoRA Gen")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+MODEL_PATH = os.getenv("MODEL_PATH", "/models/sdxl-base-1.0-Q4_K_S.gguf")
+LORA_DIR = os.getenv("LORA_DIR", "/loras")
+THREADS = int(os.getenv("THREADS", "8"))
 
-MODEL_ID = "stabilityai/sdxl-turbo"
+try:
+    logger.info(f"Loading Base SDXL GGUF (HOT): {MODEL_PATH}")
+    sd_model = StableDiffusion(
+        model_path=MODEL_PATH,
+        wtype="q4_k",
+        n_threads=THREADS,
+    )
+    logger.info("SDXL Base loaded successfully in VRAM.")
+except Exception as e:
+    logger.error(f"Failed to load base model: {e}")
+    sd_model = None
 
 class ImageRequest(BaseModel):
     prompt: str
-    width: int = 512
-    height: int = 512
-    num_inference_steps: int = 2
-    guidance_scale: float = 0.0
+    negative_prompt: str = ""
+    lora_name: str | None = None
+    lora_multiplier: float = 1.0
+    width: int = 1024
+    height: int = 1024
+    steps: int = 20
+    cfg_scale: float = 7.0
 
 @app.get("/")
 async def root():
-    return {"service": "vox-vision-gen", "status": "running"}
+    return {"service": "vox-vision-gen", "status": "running" if sd_model else "failed"}
 
 @app.post("/generate")
 async def generate_image(request: ImageRequest):
-    logger.info(f"Generating image (SDXL Turbo JIT) for prompt: '{request.prompt[:50]}...'")
+    if sd_model is None:
+        raise HTTPException(status_code=500, detail="Base model not initialized.")
+
+    logger.info(f"Prompt: {request.prompt[:50]}...")
     
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    pipe = None
-    
+    lora_path = ""
+    if request.lora_name:
+        lora_path = os.path.join(LORA_DIR, f"{request.lora_name}.safetensors")
+        if not os.path.exists(lora_path):
+            raise HTTPException(status_code=404, detail=f"LoRA '{request.lora_name}' not found.")
+        logger.info(f"Patching LoRA weights from: {lora_path} at strength {request.lora_multiplier}")
+
     try:
-        logger.info(f"JIT Loading {MODEL_ID} to VRAM...")
-        pipe = AutoPipelineForText2Image.from_pretrained(
-            MODEL_ID, 
-            torch_dtype=torch.float16, 
-            variant="fp16"
-        ).to(device)
-        
-        # sdxl-turbo is optimized for 1-4 steps and guidance_scale=0.0
-        image = pipe(
-            prompt=request.prompt, 
-            num_inference_steps=request.num_inference_steps, 
-            guidance_scale=request.guidance_scale,
+        images = sd_model.txt2img(
+            prompt=request.prompt,
+            negative_prompt=request.negative_prompt,
+            lora_model_dir=lora_path if lora_path else "",
+            lora_multiplier=request.lora_multiplier,
             width=request.width,
-            height=request.height
-        ).images[0]
+            height=request.height,
+            sample_steps=request.steps,
+            cfg_scale=request.cfg_scale,
+        )
         
         fd, output_path = tempfile.mkstemp(suffix=".png")
         os.close(fd)
-        image.save(output_path)
+        
+        images[0].save(output_path)
         
         return FileResponse(output_path, media_type="image/png")
         
     except Exception as e:
-        logger.error(f"SDXL Gen error: {e}")
+        logger.error(f"Generation error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        if pipe is not None:
-            logger.info("Evicting SDXL model from VRAM...")
-            del pipe
-            gc.collect()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-            logger.info("SDXL JIT eviction complete.")
+        gc.collect()
 
 if __name__ == "__main__":
     import uvicorn
