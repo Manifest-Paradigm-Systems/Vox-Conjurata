@@ -1,0 +1,17 @@
+
+DevTools listening on ws://127.0.0.1:34773/devtools/browser/cc5aea15-1d8c-4537-864b-a002cc6ee5c7
+20:01:29.892 › [IDE Wizard] Already shown, skipping.
+20:01:29.894 › Starting app (v2.0.6) with dynamic port…
+20:01:29.895 › 
+Spawning: /var/home/EvokeStudio/Applications/Antigravity-x64/resources/bin/language_server --standalone --override_ide_name antigravity --subclient_type hub --override_ide_version 2.0.6 --override_user_agent_name antigravity --https_server_port 0 --csrf_token 96ba95eb-399e-49c6-87c2-99392f1dcc8f --app_data_dir antigravity --api_server_url https://generativelanguage.googleapis.com --cloud_code_endpoint https://daily-cloudcode-pa.googleapis.com --enable_sidecars
+
+WARNING: radv is not a conformant Vulkan implementation, testing use only.
+20:01:30.170 › [Auto-Restart] Port changed! Reloading all windows with URL: https://127.0.0.1:37151/
+20:01:30.170 › 
+============================================================
+20:01:30.171 ›   Local:       https://127.0.0.1:37151/
+20:01:30.171 ›   LS Logs:     /home/EvokeStudio/.config/Antigravity/logs/language_server.log
+20:01:30.171 ›   Electron Logs: /home/EvokeStudio/.config/Antigravity/logs/main.log
+20:01:30.171 › ============================================================
+
+20:01:40.194 › APPIMAGE env is not defined, current application is not an AppImage
