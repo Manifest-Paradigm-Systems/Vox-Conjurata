@@ -1,8 +1,24 @@
+# vox-actor — Service-layer dependencies only.
+#
+# NOTE: torch / torchvision / torchaudio are installed directly in the
+#       Dockerfile using the official AMD ROCm index:
+#         --index-url https://download.pytorch.org/whl/rocm6.0/
+#       Do NOT add them here — doing so risks pip pulling NVIDIA/CPU wheels
+#       from PyPI instead of the ROCm-specific index.
+#
+# NOTE: CosyVoice and its transitive deps (funasr, openai-whisper, etc.) are
+#       handled inside the Dockerfile via the upstream requirements.txt clone.
+
+# FastAPI runtime
 fastapi
-uvicorn
+uvicorn[standard]
 python-multipart
-torch
-torchaudio
+
+# Model download / management
 modelscope
-funasr
-cosyvoice
+
+# Audio I/O (used by app.py)
+soundfile
+
+# Logging
+loguru

@@ -216,13 +216,30 @@ services:
     container_name: vox-actor
     ports:
     - 5020:5020
+    # ── AMD ROCm device routing ──────────────────────────────────────────
+    # Maps host AMD render nodes into the container (mandatory for HIP/ROCm)
     devices:
     - /dev/kfd:/dev/kfd
     - /dev/dri:/dev/dri
+    # Grant access to the 'video' and 'render' groups so ROCm can open /dev/kfd
+    group_add:
+    - video
+    - render
     security_opt:
     - seccomp=unconfined
     environment:
+    # ── ROCm / HIP configuration ─────────────────────────────────────────
     - HSA_OVERRIDE_GFX_VERSION=12.0.1
+    - PYTORCH_ROCM_ARCH=gfx1201
+    - HIP_PLATFORM=amd
+    - ROCR_VISIBLE_DEVICES=0
+    - HIP_VISIBLE_DEVICES=0
+    # ── HARD BLOCK: ensure no CUDA/NVIDIA code path is activated ─────────
+    - CUDA_VISIBLE_DEVICES=""
+    # ── CosyVoice model location (shared model_storage volume) ───────────
+    - COSYVOICE_MODEL_DIR=/models/CosyVoice-300M
+    volumes:
+    - model_storage:/models:z
     networks:
     - vox-net
     restart: unless-stopped
