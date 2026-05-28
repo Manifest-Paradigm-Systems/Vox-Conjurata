@@ -137,7 +137,11 @@ services:
     - VLLM_ROCM_USE_AITER=0
     - GPU_ARCHS=gfx1100
     - VRAM_ALLOCATION=11.20GB
-    command: ["python3", "-m", "vllm.entrypoints.openai.api_server", "--model", "bartowski/EVA-Qwen2.5-7B-v0.1-GGUF", "--tokenizer", "EVA-UNIT-01/EVA-Qwen2.5-7B-v0.1", "--served-model-name", "EVA-UNIT-01/EVA-Qwen2.5-7B-v0.1", "--quantization", "gguf", "--kv-cache-dtype", "fp8", "--max-model-len", "4096", "--gpu-memory-utilization", "0.40"]
+    command: >
+      vllm serve /models/EVA-Qwen2.5-7B-v0.1-Q4_K_M.gguf
+      --tokenizer Qwen/Qwen2.5-7B-Instruct
+      --max-model-len 4096
+      --gpu-memory-utilization 0.22
     networks:
     - vox-net
 
