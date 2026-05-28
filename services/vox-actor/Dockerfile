@@ -14,23 +14,26 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install basic dependencies and build tools
-RUN pip3 install --no-cache-dir \
-    fastapi uvicorn python-multipart modelscope loguru setuptools wheel
+# We explicitly install setuptools and wheel to handle build-from-source requirements
+RUN pip3 install --no-cache-dir setuptools wheel
 
 # Clone CosyVoice
 RUN git clone --recursive https://github.com/FunAudioLLM/CosyVoice.git /app/CosyVoice
 WORKDIR /app/CosyVoice
 
 # Patch requirements to remove direct torch/torchaudio/onnxruntime references 
-# and problematic grpcio versioning that might pull in CUDA equivalents or fail builds.
+# and problematic pinned versions that might fail builds or pull in CUDA.
 RUN sed -i '/torch/d' requirements.txt && \
     sed -i '/torchaudio/d' requirements.txt && \
     sed -i '/onnxruntime/d' requirements.txt && \
     sed -i '/grpcio/d' requirements.txt && \
+    sed -i '/openai-whisper/d' requirements.txt && \
     sed -i 's/inflect==7.0.0/inflect>=7.0.0/' requirements.txt
 
-# Install requirements - ensuring binary wheels for stability
-RUN pip3 install --no-cache-dir grpcio --only-binary :all:
+# Pre-install problematic packages as binary wheels
+RUN pip3 install --no-cache-dir grpcio openai-whisper --only-binary :all:
+
+# Install remaining requirements
 RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Install ROCm compatible onnxruntime
