@@ -38,8 +38,6 @@ services:
     image: node:24-slim
     container_name: foundry-vtt
     working_dir: /app
-    ports:
-      - "30000:30000"
     volumes:
       - /home/EvokeStudio/manifest-paradigm/foundry/app:/app:z
       - /home/EvokeStudio/manifest-paradigm/foundry/data:/data:z
@@ -48,6 +46,20 @@ services:
     networks:
       - vox-net
     restart: unless-stopped
+
+  caddy:
+    image: docker.io/library/caddy:latest
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      - "30000:30000"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:z
+    networks:
+      - vox-net
+    depends_on:
+      - foundry-vtt
+      - orchestrator
 
   vox-vision-reader:
     image: ghcr.io/abetlen/llama-cpp-python:latest

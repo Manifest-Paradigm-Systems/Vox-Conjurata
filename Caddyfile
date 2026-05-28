@@ -1,0 +1,17 @@
+:30000 {
+    # Logging configuration
+    log {
+        output stdout
+        format json
+    }
+
+    # Route all API traffic to the orchestrator
+    handle /api/* {
+        reverse_proxy orchestrator:8080
+    }
+
+    # Route all other traffic to Foundry VTT (includes WebSocket support)
+    handle {
+        reverse_proxy foundry-vtt:30000
+    }
+}
