@@ -4,8 +4,10 @@ ENV HSA_OVERRIDE_GFX_VERSION=10.3.0
 ENV DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /app
-
 RUN apt-get update && apt-get install -y python3 python3-pip git && rm -rf /var/lib/apt/lists/*
+
+# Ensure the render and video groups exist for Podman group_add
+RUN groupadd -r render || true && groupadd -r video || true
 
 COPY requirements.txt .
 
