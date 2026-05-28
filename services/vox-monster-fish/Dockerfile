@@ -15,6 +15,9 @@ RUN apt-get update && apt-get install -y libsndfile1 git portaudio19-dev && rm -
 # Copy the fish-speech codebase from the source stage
 COPY --from=source /opt/fish-speech /opt/fish-speech
 
+# Patch torchaudio list_audio_backends deprecation/removal in newer TorchAudio versions
+RUN sed -i 's/torchaudio.list_audio_backends()/getattr(torchaudio, "list_audio_backends", lambda: ["soundfile"])()/g' /opt/fish-speech/fish_speech/inference_engine/reference_loader.py
+
 # Set working directory to the fish-speech code
 WORKDIR /opt/fish-speech
 
