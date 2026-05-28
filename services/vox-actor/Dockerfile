@@ -13,22 +13,19 @@ RUN apt-get update && apt-get install -y \
     git curl ffmpeg libsndfile1 \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. PYTORCH DIRECTIVE: Force ROCm 6.0 wheels (or compatible)
-# We use the explicit AMD index to bypass default CUDA-bound packages
+# 2. PYTORCH DIRECTIVE: Force ROCm 6.0 wheels
 RUN pip3 install --no-cache-dir \
     torch==2.4.0 torchaudio==2.4.0 \
     --index-url https://download.pytorch.org/whl/rocm6.0
 
-# 3. BASIC DEPS: Install core app dependencies
-RUN pip3 install --no-cache-dir \
-    fastapi uvicorn python-multipart modelscope loguru setuptools wheel
+# 3. BUILD TOOLS: Install legacy setuptools for compatibility with whisper/grpcio source builds
+RUN pip3 install --no-cache-dir "setuptools<70.0.0" wheel
 
 # 4. CLONE: Setup CosyVoice codebase
 RUN git clone --recursive https://github.com/FunAudioLLM/CosyVoice.git /app/CosyVoice
 WORKDIR /app/CosyVoice
 
 # 5. HARD BLOCKS: Aggressively sanitize requirements.txt
-# This prevents the pip manager from ever seeing NVIDIA/TensorRT packages
 RUN sed -i '/torch/d' requirements.txt && \
     sed -i '/torchaudio/d' requirements.txt && \
     sed -i '/onnxruntime/d' requirements.txt && \
@@ -38,8 +35,10 @@ RUN sed -i '/torch/d' requirements.txt && \
     sed -i '/nvidia/d' requirements.txt && \
     sed -i 's/inflect==7.0.0/inflect>=7.0.0/' requirements.txt
 
-# 6. BINARY DEPS: Install stable binary versions of problematic packages
-RUN pip3 install --no-cache-dir grpcio openai-whisper --only-binary :all:
+# 6. SOURCE DEPS: Install problematic packages from source/binary as available
+# Using --no-build-isolation ensures they use our legacy setuptools
+RUN pip3 install --no-cache-dir grpcio --only-binary :all: || pip3 install --no-cache-dir grpcio --no-build-isolation
+RUN pip3 install --no-cache-dir openai-whisper --no-build-isolation
 
 # 7. INSTALL: Remaining sanitized requirements
 RUN pip3 install --no-cache-dir -r requirements.txt
@@ -47,7 +46,10 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 # 8. ROCM ONNX: Install AMD-compatible execution provider
 RUN pip3 install --no-cache-dir onnxruntime-rocm
 
-# 9. FINAL SANITIZATION: Explicitly uninstall any stealth CUDA leftovers
+# 9. BASIC APP DEPS
+RUN pip3 install --no-cache-dir fastapi uvicorn python-multipart modelscope loguru
+
+# 10. FINAL SANITIZATION: Explicitly uninstall any stealth CUDA leftovers
 RUN pip3 list | grep -E "nvidia|tensorrt|cuda-python" | awk '{print $1}' | xargs -r pip3 uninstall -y
 
 # Add CosyVoice and dependencies to path
