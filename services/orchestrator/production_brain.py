@@ -420,18 +420,89 @@ async def get_narrator_voices():
         return ["en-US-ChristopherNeural", "en-GB-RyanNeural"]
 
 @app.post("/api/ingest-actor")
-async def ingest_actor(data: ActorMetadata):
-    existing_seeds = list(VOICE_SEEDS_DIR.glob(f"{data.actorId}_seed_*.wav"))
-    if existing_seeds: return {"status": "cached"}
+async def ingest_actor(data: ActorMetadata, force_refresh: bool = False):
+    """Ingest an actor and forge their voice seed.
     
+    Set force_refresh=true to bypass the seed cache and regenerate even if a
+    seed file already exists on disk. Required after a cache purge.
+    """
+    existing_seeds = list(VOICE_SEEDS_DIR.glob(f"{data.actorId}_seed_*.wav"))
+    if existing_seeds and not force_refresh:
+        logger.info(f"[INGEST] Cache hit for {data.actorId} ({data.name}), returning cached seed.")
+        return {"status": "cached", "seeds": [s.name for s in existing_seeds]}
+
+    if existing_seeds and force_refresh:
+        logger.info(f"[INGEST] force_refresh=True — purging {len(existing_seeds)} stale seed(s) for {data.actorId}")
+        for stale in existing_seeds:
+            stale.unlink(missing_ok=True)
+            stale.with_suffix(".txt").unlink(missing_ok=True)
+
     profile_data = await generate_vocal_profile(data)
     profile_desc = profile_data.get("description", "A clear, neutral speaking voice.")
     gender = profile_data.get("gender", "male").lower().strip()
     if gender not in ["male", "female"]:
         gender = "male"
-        
+
     path = await forge_voice_seed(data.actorId, profile_desc, gender)
     return {"status": "created", "path": path} if path else {"status": "error"}
+
+class CachePurgeRequest(BaseModel):
+    actor_ids: Optional[List[str]] = Field(
+        default=None,
+        description="List of actorIds to purge. Omit or pass empty list to purge ALL non-narrator seeds."
+    )
+    preserve_narrator: bool = Field(
+        default=True,
+        description="Keep narrator_seed_male.wav and narrator_seed_male.txt intact."
+    )
+
+@app.post("/api/v1/cache/purge")
+async def purge_voice_cache(req: CachePurgeRequest = CachePurgeRequest()):
+    """Force-purge stale voice seed files so actors will have fresh seeds generated
+    on their next /api/ingest-actor call.
+
+    - Omit body (or send {}) to nuke all non-narrator seeds.
+    - Supply actor_ids list to target specific tokens only.
+    - preserve_narrator=false to also wipe the narrator fallback seed.
+    """
+    purged: list[str] = []
+    skipped: list[str] = []
+    errors: list[str] = []
+
+    # Resolve target files
+    if req.actor_ids:
+        candidates = []
+        for actor_id in req.actor_ids:
+            candidates.extend(VOICE_SEEDS_DIR.glob(f"{actor_id}_seed_*.wav"))
+            candidates.extend(VOICE_SEEDS_DIR.glob(f"{actor_id}_seed_*.txt"))
+    else:
+        # All seeds except narrator if preserve_narrator is set
+        candidates = list(VOICE_SEEDS_DIR.glob("*_seed_*.*"))
+
+    for file in candidates:
+        if req.preserve_narrator and file.name.startswith("narrator_"):
+            skipped.append(file.name)
+            continue
+        try:
+            file.unlink(missing_ok=True)
+            purged.append(file.name)
+            logger.info(f"[CACHE-PURGE] Removed: {file.name}")
+        except Exception as exc:
+            errors.append(f"{file.name}: {exc}")
+            logger.error(f"[CACHE-PURGE] Failed to remove {file.name}: {exc}")
+
+    logger.info(f"[CACHE-PURGE] Done — purged={len(purged)}, skipped={len(skipped)}, errors={len(errors)}")
+    return {
+        "status": "ok" if not errors else "partial",
+        "purged_count": len(purged),
+        "purged": purged,
+        "skipped": skipped,
+        "errors": errors,
+        "message": (
+            f"Purged {len(purged)} seed file(s). "
+            f"Re-ingest actors to generate fresh voice profiles."
+        )
+    }
 
 @app.post("/api/voice-conversion")
 async def voice_conversion(request: Request):
