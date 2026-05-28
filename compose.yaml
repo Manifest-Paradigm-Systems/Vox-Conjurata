@@ -178,7 +178,9 @@ services:
     - seccomp=unconfined
     environment:
     - HSA_OVERRIDE_GFX_VERSION=12.0.1
-    - CUDA_VISIBLE_DEVICES=""
+    - ROCR_VISIBLE_DEVICES=0
+    - HIP_VISIBLE_DEVICES=0
+    - CUDA_VISIBLE_DEVICES=0
     - VRAM_LIMIT=0.80GB
     - HF_TOKEN=${HF_TOKEN}
     - STABLE_AUDIO_MODEL=stabilityai/stable-audio-3-small-music
@@ -205,7 +207,9 @@ services:
     - seccomp=unconfined
     environment:
     - HSA_OVERRIDE_GFX_VERSION=12.0.1
-    - CUDA_VISIBLE_DEVICES=""
+    - ROCR_VISIBLE_DEVICES=0
+    - HIP_VISIBLE_DEVICES=0
+    - CUDA_VISIBLE_DEVICES=0
     - AUDIO_ENGINE_TYPE=sfx
     - EXECUTION_DEVICE=gpu
     - VRAM_LIMIT=0.80GB
@@ -299,6 +303,33 @@ services:
     - CUDA_VISIBLE_DEVICES=""
     - TEXT_PRECISION=int8
     - VRAM_LIMIT=2.20GB
+    networks:
+    - vox-net
+    restart: unless-stopped
+
+  vox-vision-gen:
+    build:
+      context: ./services/vox-vision-gen
+    container_name: vox-vision-gen
+    ports:
+    - 8003:8003
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - video
+    - render
+    security_opt:
+    - seccomp=unconfined
+    environment:
+    - HSA_OVERRIDE_GFX_VERSION=12.0.1
+    - ROCR_VISIBLE_DEVICES=0
+    - HIP_VISIBLE_DEVICES=0
+    - CUDA_VISIBLE_DEVICES=0
+    - VRAM_LIMIT=2.00GB
+    - HF_TOKEN=${HF_TOKEN}
+    volumes:
+    - ./cache/huggingface:/root/.cache/huggingface:z
     networks:
     - vox-net
     restart: unless-stopped
