@@ -1,7 +1,7 @@
-# vox-actor (CosyVoice ROCm Clean-Slate Hardened) Dockerfile
-FROM docker.io/rocm/pytorch:latest
+# vox-actor (CosyVoice ROCm Clean-Slate Build)
+FROM docker.io/rocm/dev-ubuntu-22.04:latest
 
-# Match host HSA version for RDNA3 (7900 XTX / 7800 XT)
+# Match host HSA version for RDNA3
 ENV HSA_OVERRIDE_GFX_VERSION=12.0.1
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
@@ -10,22 +10,25 @@ WORKDIR /app
 
 # 1. BASE SYSTEM: Install essential build and runtime dependencies
 RUN apt-get update && apt-get install -y \
-    git curl ffmpeg libsndfile1 \
+    python3 python3-pip git curl ffmpeg libsndfile1 \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. PYTORCH DIRECTIVE: Force exact ROCm 6.0 versions to prevent symbol mismatches
-RUN pip3 install --no-cache-dir --force-reinstall \
-    torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 \
-    --index-url https://download.pytorch.org/whl/rocm6.0
+# 2. HARD BLOCKS: Explicitly uninstall/block NVIDIA & TensorRT related packages
+# This ensures a pure AMD environment from the start.
+RUN pip3 install --no-cache-dir setuptools wheel && \
+    pip3 list | grep -E "nvidia|tensorrt|cuda-python" | awk '{print $1}' | xargs -r pip3 uninstall -y
 
-# 3. BUILD TOOLS: Install legacy setuptools for compatibility
-RUN pip3 install --no-cache-dir "setuptools<70.0.0" wheel
+# 3. PYTORCH DIRECTIVE: Force native ROCm PyTorch wheels using AMD index
+# Using ROCm 6.0 as requested to match the stable stack requirements.
+RUN pip3 install --no-cache-dir --upgrade \
+    torch torchvision torchaudio \
+    --index-url https://download.pytorch.org/whl/rocm6.0/
 
 # 4. CLONE: Setup CosyVoice codebase
 RUN git clone --recursive https://github.com/FunAudioLLM/CosyVoice.git /app/CosyVoice
 WORKDIR /app/CosyVoice
 
-# 5. HARD BLOCKS: Aggressively sanitize requirements.txt
+# 5. SANITIZE REQUIREMENTS: Strip CUDA/NVIDIA deps from source requirements
 RUN sed -i '/torch/d' requirements.txt && \
     sed -i '/torchaudio/d' requirements.txt && \
     sed -i '/onnxruntime/d' requirements.txt && \
@@ -36,8 +39,7 @@ RUN sed -i '/torch/d' requirements.txt && \
     sed -i 's/inflect==7.0.0/inflect>=7.0.0/' requirements.txt
 
 # 6. SOURCE DEPS: Install problematic packages using legacy build support
-RUN pip3 install --no-cache-dir grpcio --only-binary :all: || pip3 install --no-cache-dir grpcio --no-build-isolation
-RUN pip3 install --no-cache-dir openai-whisper --no-build-isolation
+RUN pip3 install --no-cache-dir grpcio openai-whisper --no-build-isolation
 
 # 7. INSTALL: Remaining sanitized requirements
 RUN pip3 install --no-cache-dir -r requirements.txt
@@ -48,7 +50,7 @@ RUN pip3 install --no-cache-dir onnxruntime-rocm
 # 9. BASIC APP DEPS
 RUN pip3 install --no-cache-dir fastapi uvicorn python-multipart modelscope loguru
 
-# 10. FINAL SANITIZATION: Explicitly uninstall any stealth CUDA leftovers
+# 10. FINAL SANITIZATION: Double-check for any stealth CUDA leftovers
 RUN pip3 list | grep -E "nvidia|tensorrt|cuda-python" | awk '{print $1}' | xargs -r pip3 uninstall -y
 
 # Add CosyVoice and dependencies to path
