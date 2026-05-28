@@ -13,26 +13,34 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install PyTorch ROCm wheels directly
-# Purging any potential NVIDIA/CUDA indices by using explicit --index-url
+# We use rocm6.1 for stability with RDNA3 on current kernels
 RUN pip3 install --no-cache-dir \
-    torch torchaudio \
+    torch==2.3.1 torchaudio==2.3.1 \
     --index-url https://download.pytorch.org/whl/rocm6.1
 
-# Install basic dependencies
+# Install basic dependencies (avoiding ones that might pull in CUDA)
 RUN pip3 install --no-cache-dir \
     fastapi uvicorn python-multipart modelscope loguru
 
-# Clone CosyVoice and install its specific requirements
+# Clone CosyVoice
 RUN git clone --recursive https://github.com/FunAudioLLM/CosyVoice.git /app/CosyVoice
 WORKDIR /app/CosyVoice
 
-# Fix requirements: remove specific versions that might force CUDA/NVIDIA deps
-# and ensure compatible versions for ROCm environment.
-RUN sed -i 's/inflect==7.0.0/inflect>=7.0.0/' requirements.txt
+# Patch requirements to remove direct torch/torchaudio/onnxruntime references 
+# that might pull in CUDA equivalents, then install.
+RUN sed -i '/torch/d' requirements.txt && \
+    sed -i '/torchaudio/d' requirements.txt && \
+    sed -i '/onnxruntime/d' requirements.txt && \
+    sed -i 's/inflect==7.0.0/inflect>=7.0.0/' requirements.txt
+
+# Install remaining requirements
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# Explicitly ensure NO NVIDIA packages are present
-RUN pip3 uninstall -y tensorrt-llm cuda-python nvidia-cuda-runtime-cu12 nvidia-cudnn-cu12
+# Install ROCm compatible onnxruntime
+RUN pip3 install --no-cache-dir onnxruntime-rocm
+
+# Final Purge of NVIDIA leftovers just in case
+RUN pip3 list | grep nvidia | awk '{print $1}' | xargs -r pip3 uninstall -y
 
 # Add CosyVoice and its third-party dependencies to PYTHONPATH
 ENV PYTHONPATH="/app/CosyVoice:/app/CosyVoice/third_party/Matcha-TTS"
