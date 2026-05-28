@@ -10,12 +10,12 @@ WORKDIR /app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    git curl ffmpeg libsndfile1 \
+    git curl ffmpeg libsndfile1 python3-setuptools python3-wheel \
     && rm -rf /var/lib/apt/lists/*
 
 # Install basic dependencies
 RUN pip3 install --no-cache-dir \
-    fastapi uvicorn python-multipart modelscope loguru
+    fastapi uvicorn python-multipart modelscope loguru setuptools wheel
 
 # Clone CosyVoice
 RUN git clone --recursive https://github.com/FunAudioLLM/CosyVoice.git /app/CosyVoice
