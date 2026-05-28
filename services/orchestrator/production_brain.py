@@ -167,22 +167,31 @@ class FishSpeechEngine(SpeechEngine):
         seed_path = seeds[0] if seeds else None
         
         # Fish Speech 1.5 prefers a reference audio for in-context learning
-        # If no specific seed, we use the narrator seed as fallback
         if not seed_path:
             seed_path = VOICE_SEEDS_DIR / "narrator_seed_male.wav"
 
         try:
-            logger.info(f"[VOICE-ROUTING] Fish Speech using reference: {seed_path.name if seed_path else 'None'}")
-            
             # Prepare references in the format Fish Speech API expects (Base64 encoded)
             import base64
             references = []
             if seed_path and seed_path.exists():
+                # Look for matching transcript
+                text_path = seed_path.with_suffix(".txt")
+                ref_text = ""
+                if text_path.exists():
+                    with open(text_path, "r") as f:
+                        ref_text = f.read().strip()
+                else:
+                    # Fallback text if no .txt file found
+                    ref_text = "A clear speaking voice."
+
+                logger.info(f"[VOICE-ROUTING] Fish Speech using reference: {seed_path.name} with transcript: '{ref_text[:30]}...'")
+                
                 with open(seed_path, "rb") as f:
                     audio_b64 = base64.b64encode(f.read()).decode("utf-8")
                     references.append({
                         "audio": audio_b64,
-                        "text": "" # We don't have the transcript for the seed yet
+                        "text": ref_text
                     })
 
             payload = {
@@ -197,7 +206,7 @@ class FishSpeechEngine(SpeechEngine):
             if resp.status_code == 200:
                 return resp.content
             else:
-                logger.error(f"[VOICE-ROUTING] Fish Speech service returned error {resp.status_code}: {resp.text}")
+                logger.error(f"[VOICE-ROUTING] Fish Speech service returned error {resp.status_code}")
         except Exception as e:
             logger.error(f"[VOICE-ROUTING] Fish Speech inference failed: {e}")
         return None
@@ -329,13 +338,14 @@ async def enrich_and_instruct(speaker: str, role: str, text: str) -> DialogueEnr
             
             emotion = res.get("emotion_tag", "Neutral").strip()
             
+            # Clean the actual spoken text of any metadata tags or artifacts
+            clean_text = clean_tts_text(text)
+            
             # Formatting for Fish Speech (Monster): lowercase inline square brackets
-            # Example: [enraged growl] Dialogue text
-            monster_text = f"[{emotion.lower()}] {text}"
+            monster_text = f"[{emotion.lower()}] {clean_text}"
             
             # Formatting for CosyVoice (Humanoid): Title Case <|endofprompt|> Dialogue text
-            # Example: Enraged Growl <|endofprompt|> Dialogue text
-            instruct_text = f"{emotion.capitalize()} <|endofprompt|> {text}"
+            instruct_text = f"{emotion.capitalize()} <|endofprompt|> {clean_text}"
             
             return DialogueEnrichment(
                 speaker=speaker, role=role, raw_text=text,
