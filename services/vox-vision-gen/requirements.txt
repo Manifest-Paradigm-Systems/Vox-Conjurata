@@ -1,5 +1,5 @@
 fastapi
 uvicorn
-diffusers
-transformers
-accelerate
+pydantic
+pillow
+stable-diffusion-cpp-python
