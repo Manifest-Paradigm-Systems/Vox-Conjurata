@@ -65,6 +65,47 @@ globalThis.voxState = globalThis.voxState || {
     ingestEndpoint: "/api/ingest-actor"
 };
 
+/**
+ * resolveIsMonster(actor)
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Single authoritative source of truth for monster/humanoid routing.
+ *
+ * Priority order (first match wins):
+ *  1. actor.type === "character"  → always PC, never monster.
+ *  2. actor.type === "npc"        → always NPC; treat as monster unless the
+ *     PF2e creature-type value is explicitly "humanoid".
+ *  3. Fallback keyword scan on name (Dragon, Skeleton, Guard, Warrior…)
+ *     used only when actor.type is neither "character" nor "npc" (rare).
+ *
+ * Reasoning: actor.type is set by Foundry at document creation and is always
+ * reliable. hasPlayerOwner can return false for unassigned PCs (e.g. freshly
+ * placed tokens), causing false positives. Keyword/folder heuristics are
+ * unreliable when token data hasn't fully hydrated.
+ */
+function resolveIsMonster(actor) {
+    if (!actor) return false;
+
+    // 1. Foundry document type — most reliable signal
+    if (actor.type === "character") return false;   // PC — never a monster
+    if (actor.type === "npc") {
+        // PF2e NPC: check creature-type sub-field.
+        // Humanoid NPCs (merchants, guards-as-people, etc.) still go through
+        // CosyVoice; true monsters go through Fish Speech.
+        const creatureType = actor.system?.details?.type?.value?.toLowerCase() ?? "";
+        // Explicit humanoid → NOT a monster for TTS routing purposes
+        if (creatureType === "humanoid") return false;
+        return true;  // undead, dragon, aberration, beast, fiend, etc.
+    }
+
+    // 2. Fallback for non-standard actor types (vehicles, hazards, etc.)
+    //    Use name keywords only as a last resort.
+    const monsterKeywords = ["dragon", "skeleton", "zombie", "undead", "fiend",
+                             "demon", "devil", "beast", "guard", "warrior",
+                             "monster", "aberration", "xulgath", "goblin"];
+    const nameLower = actor.name?.toLowerCase() ?? "";
+    return monsterKeywords.some(kw => nameLower.includes(kw));
+}
+
 // ==========================================
 // 2b. EARLY AUDIO INITIALIZATION (FIX)
 // ==========================================
@@ -308,15 +349,8 @@ async function scanActiveSceneTokens() {
         if (!token.actor) continue;
         const actor = token.actor;
         
-        // Evaluate if the actor is a monster based on type or keywords
-        const monsterTypes = ["undead", "fiend", "dragon", "monstrosity", "aberration"];
-        const keywords = ["Guard", "Monster", "Warrior"];
-        const actorType = actor.system.details?.type?.value?.toLowerCase() || "";
-        const nameMatch = keywords.some(k => actor.name.includes(k));
-        const folderMatch = actor.folder?.name ? keywords.some(k => actor.folder.name.includes(k)) : false;
-        const typeMatch = monsterTypes.some(t => actorType.includes(t));
-        
-        const is_monster = !actor.hasPlayerOwner && (typeMatch || nameMatch || folderMatch);
+        // Resolve monster status via shared authoritative helper
+        const is_monster = resolveIsMonster(actor);
         
         const actorData = {
             actorId: actor.id, name: actor.name,
@@ -384,15 +418,8 @@ Hooks.on("createToken", async (tokenDoc, options, userId) => {
     if (!game.user.isGM || !tokenDoc.actor) return;
     const actor = tokenDoc.actor;
     
-    // Evaluate if the actor is a monster based on type or keywords
-    const monsterTypes = ["undead", "fiend", "dragon", "monstrosity", "aberration"];
-    const keywords = ["Guard", "Monster", "Warrior"];
-    const actorType = actor.system.details?.type?.value?.toLowerCase() || "";
-    const nameMatch = keywords.some(k => actor.name.includes(k));
-    const folderMatch = actor.folder?.name ? keywords.some(k => actor.folder.name.includes(k)) : false;
-    const typeMatch = monsterTypes.some(t => actorType.includes(t));
-    
-    const is_monster = !actor.hasPlayerOwner && (typeMatch || nameMatch || folderMatch);
+    // Resolve monster status via shared authoritative helper
+    const is_monster = resolveIsMonster(actor);
     
     const actorData = {
         actorId: actor.id, name: actor.name,
@@ -529,15 +556,8 @@ async function processAndSendAudio() {
     const micType = globalThis.voxState.activeMicType;
     const actor = canvas.tokens.controlled[0]?.actor || game.user.character;
 
-    // Evaluate if the actor is a monster based on type or keywords
-    const monsterTypes = ["undead", "fiend", "dragon", "monstrosity", "aberration"];
-    const keywords = ["Guard", "Monster", "Warrior"];
-    const actorType = actor?.system.details?.type?.value?.toLowerCase() || "";
-    const nameMatch = actor ? keywords.some(k => actor.name.includes(k)) : false;
-    const folderMatch = actor?.folder?.name ? keywords.some(k => actor.folder.name.includes(k)) : false;
-    const typeMatch = monsterTypes.some(t => actorType.includes(t));
-    
-    const is_monster = actor && !actor.hasPlayerOwner && (typeMatch || nameMatch || folderMatch);
+    // Resolve monster status via shared authoritative helper
+    const is_monster = resolveIsMonster(actor);
 
     const formData = new FormData();
     formData.append("audio_blob", audioBlob, "voice_capture.webm");
