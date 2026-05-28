@@ -43,6 +43,7 @@ services:
     volumes:
       - /home/EvokeStudio/manifest-paradigm/foundry/app:/app:z
       - /home/EvokeStudio/manifest-paradigm/foundry/data:/data:z
+      - /var/home/EvokeStudio/vox-conjurata:/var/home/EvokeStudio/vox-conjurata:ro,z
     command: ["node", "main.js", "--dataPath=/data"]
     networks:
       - vox-net
