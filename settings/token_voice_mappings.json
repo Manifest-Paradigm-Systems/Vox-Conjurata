@@ -1,0 +1,56 @@
+{
+  "active_scene": {
+    "id": "U5t0Mq8glKBXO3qH",
+    "name": "Landing"
+  },
+  "token_voice_mappings": {
+    "vcwqnXHkhzFhrt7O": {
+      "name": "Valeros",
+      "type": "PC",
+      "class": "Fighter",
+      "engine": "cosyvoice",
+      "voice_seed": "vcwqnXHkhzFhrt7O_seed.wav",
+      "profile": "A confident, robust, and slightly raspy warrior voice, medium pitch, direct delivery."
+    },
+    "czQ0MaZBu3BqMpce": {
+      "name": "Merisiel",
+      "type": "PC",
+      "class": "Rogue",
+      "engine": "cosyvoice",
+      "voice_seed": "czQ0MaZBu3BqMpce_seed.wav",
+      "profile": "A sharp, quick-tongued, agile female voice, slightly breathy, confident and expressive."
+    },
+    "WNX5OQKPh4uaV7mW": {
+      "name": "Ezren",
+      "type": "PC",
+      "class": "Wizard",
+      "engine": "cosyvoice",
+      "voice_seed": "WNX5OQKPh4uaV7mW_seed.wav",
+      "profile": "A mature, educated, and resonant elderly male voice, clear articulation, slow and calculated pacing."
+    },
+    "5vBG8a8dnJfmVd3Y": {
+      "name": "Xulgath Warrior",
+      "type": "NPC",
+      "isMonster": true,
+      "engine": "fish-speech",
+      "voice_seed": "5vBG8a8dnJfmVd3Y_seed.wav",
+      "profile": "A guttural, growling, and hissed accent, low pitch with animalistic sibilants."
+    },
+    "WPsgrCUSFCqgDvJi": {
+      "name": "Juvenile Horned Dragon",
+      "type": "NPC",
+      "isMonster": true,
+      "engine": "fish-speech",
+      "voice_seed": "WPsgrCUSFCqgDvJi_seed.wav",
+      "profile": "An ancient, rumbling, and echoey dragon growl, deep resonant chest tones, imposing presence."
+    },
+    "trchDxbDR2TiPMxT": {
+      "name": "Skeleton Guard",
+      "type": "NPC",
+      "isMonster": true,
+      "engine": "fish-speech",
+      "voice_seed": "trchDxbDR2TiPMxT_seed.wav",
+      "profile": "A dry, hollow, clacking whisper, wind-like rustling, lack of vocal cord resonance."
+    }
+  }
+}
