@@ -284,7 +284,7 @@ async def generate_vocal_profile(actor_data: ActorMetadata) -> dict:
         "'description' (a single-sentence acoustic description including age, raspiness, pitch, inflections, and room acoustics)."
     )
     payload = {
-        "model": "Qwen/Qwen2.5-14B-Instruct",
+        "model": "Qwen/Qwen2.5-7B-Instruct",
         "messages": [
             {"role": "system", "content": system_instruction},
             {"role": "user", "content": f"Character Name: {actor_data.name}\nBiography/Lore: {actor_data.lore}"}
@@ -335,7 +335,7 @@ async def enrich_and_instruct(speaker: str, role: str, text: str) -> DialogueEnr
         "and 'emotion_tag' (a single descriptive tag like 'Enraged Growl', 'Terrified Whisper', or 'Neutral')."
     )
     payload = {
-        "model": "Qwen/Qwen2.5-14B-Instruct",
+        "model": "Qwen/Qwen2.5-7B-Instruct",
         "messages": [
             {"role": "system", "content": system_instruction},
             {"role": "user", "content": f"Speaker: {speaker}, Text: {text}"}
@@ -596,7 +596,7 @@ async def end_dialogue(request: DialogueEndRequest):
         f"{truncated_transcript}"
     )
     payload = {
-        "model": "Qwen/Qwen2.5-14B-Instruct",
+        "model": "Qwen/Qwen2.5-7B-Instruct",
         "prompt": prompt,
         "max_tokens": 512,
         "temperature": 0.5
