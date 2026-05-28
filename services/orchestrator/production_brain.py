@@ -56,19 +56,32 @@ CONFIG_PATH = Path("./settings/voice_routing_config.json")
 
 # --- Helper Functions ---
 
-def clean_tts_text(text: str) -> str:
-    """Strips metadata tags, bracketed instructions, and artifacts from LLM-generated dialogue."""
+def standardize_speech_text(text: str, engine_type: str, emotion: str) -> str:
+    """Maps and formats emotional tags and sound effects to engine-specific syntax."""
     import re
-    # Remove bracketed tags like [Neutral], [enraged growl]
-    text = re.sub(r'\[.*?\]', '', text)
-    # Remove parenthetical tags like (neutral), (Whispering)
-    text = re.sub(r'\(.*?\)', '', text)
-    # Remove common metadata prefixes
-    text = re.sub(r'^(Mood|Emotion|Sentiment|Tone|Note|Instruction|Direction):\s*', '', text, flags=re.IGNORECASE)
-    # Remove leading "neutral:" or similar followed by space
-    text = re.sub(r'^\w+:\s+', '', text)
-    # Final cleanup of whitespace
-    return text.strip()
+    
+    # 1. Strip EXISTING tags to avoid double-processing and standardization
+    # This removes [neutral], (happy), "Mood: sad", etc.
+    clean_text = re.sub(r'\[.*?\]|\(.*?\)|\w+:\s*', '', text).strip()
+    
+    # 2. Sound Effect Parser (*gasp* -> <gasp> for CosyVoice)
+    if engine_type == "cosyvoice":
+        # Translate *action* into <action>
+        clean_text = re.sub(r'\*(.*?)\*', r'<>', clean_text)
+    else:
+        # Strip SFX for engines that don't support acoustic generation
+        clean_text = re.sub(r'\*.*?\*', '', clean_text)
+
+    # 3. Engine-Specific Syntax Mapping
+    if engine_type == "fish-speech":
+        # Monster: strict square brackets [emotion] at start
+        return f"[{emotion.lower()}] {clean_text}"
+    elif engine_type == "cosyvoice":
+        # Humanoid: inline parentheses (emotion) at start
+        return f"({emotion.lower()}) {clean_text}"
+    else:
+        # Fallback/Edge-TTS: Just the clean text
+        return clean_text
 
 def get_vram_used_gb() -> float:
     """Reads current GPU VRAM utilization from Host Linux sysfs dynamically."""
@@ -338,14 +351,9 @@ async def enrich_and_instruct(speaker: str, role: str, text: str) -> DialogueEnr
             
             emotion = res.get("emotion_tag", "Neutral").strip()
             
-            # Clean the actual spoken text of any metadata tags or artifacts
-            clean_text = clean_tts_text(text)
-            
-            # Formatting for Fish Speech (Monster): lowercase inline square brackets
-            monster_text = f"[{emotion.lower()}] {clean_text}"
-            
-            # Formatting for CosyVoice (Humanoid): Title Case <|endofprompt|> Dialogue text
-            instruct_text = f"{emotion.capitalize()} <|endofprompt|> {clean_text}"
+            # Apply engine-specific syntax mapping and SFX parsing
+            monster_text = standardize_speech_text(text, "fish-speech", emotion)
+            instruct_text = standardize_speech_text(text, "cosyvoice", emotion)
             
             return DialogueEnrichment(
                 speaker=speaker, role=role, raw_text=text,
@@ -485,7 +493,7 @@ async def voice_conversion(request: Request):
                 fallback_voice = config.get("narrator_preferences", {}).get("default_voice", "en-US-ChristopherNeural")
                 rate = config.get("narrator_preferences", {}).get("rate_adjustment", "+0%")
                 edge_engine = EdgeTTSEngine(voice_name=fallback_voice, rate=rate)
-                res_content = await edge_engine.generate(clean_tts_text(transcription), actor_id, client)
+                res_content = await edge_engine.generate(standardize_speech_text(transcription, "edge-tts", "neutral"), actor_id, client)
 
             if res_content:
                 audio_base64 = base64.b64encode(res_content).decode('utf-8')
