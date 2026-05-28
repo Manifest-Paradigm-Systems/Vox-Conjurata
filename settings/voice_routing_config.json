@@ -1,6 +1,6 @@
 {
   "system_settings": {
-    "vram_threshold_gb": 23.0
+    "vram_threshold_gb": 30.5
   },
   "narrator_preferences": {
     "default_voice": "en-US-ChristopherNeural",
