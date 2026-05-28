@@ -479,12 +479,13 @@ async def voice_conversion(request: Request):
             res_content = await engine.generate(target_text, actor_id, client)
             
             if res_content is None and not isinstance(engine, EdgeTTSEngine):
-                logger.warn(f"Engine {engine_name} failed. Falling back to Edge-TTS Cloud.")
+                logger.error(f"🚨 [PIPELINE-CRITICAL] High-fidelity engine {engine_name} failed to generate audio for {actor_id}!")
+                logger.warn(f"⚠️ [FALLBACK] Reverting to generic Edge-TTS Cloud as an emergency failsafe.")
                 engine_name = "Edge-TTS (Fallback)"
                 fallback_voice = config.get("narrator_preferences", {}).get("default_voice", "en-US-ChristopherNeural")
                 rate = config.get("narrator_preferences", {}).get("rate_adjustment", "+0%")
                 edge_engine = EdgeTTSEngine(voice_name=fallback_voice, rate=rate)
-                res_content = await edge_engine.generate(transcription, actor_id, client)
+                res_content = await edge_engine.generate(clean_tts_text(transcription), actor_id, client)
 
             if res_content:
                 audio_base64 = base64.b64encode(res_content).decode('utf-8')
