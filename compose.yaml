@@ -221,7 +221,7 @@ services:
   vox-monster-fish:
     image: fishaudio/fish-speech:v1.5.1
     container_name: vox-monster-fish
-    entrypoint: ["/app/.venv/bin/python", "-m", "tools.api_server"]
+    entrypoint: ["python", "-m", "tools.api_server"]
     command: ["--listen", "0.0.0.0:7860", "--half"]
     ports:
     - 5030:7860
