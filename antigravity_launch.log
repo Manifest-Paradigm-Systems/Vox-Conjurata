@@ -49,3 +49,4 @@ WARNING: radv is not a conformant Vulkan implementation, testing use only.
 22:45:27.377 › APPIMAGE env is not defined, current application is not an AppImage
 23:45:27.478 › APPIMAGE env is not defined, current application is not an AppImage
 [559490:0528/001823.951035:ERROR:ui/compositor/compositor_animation_observer.cc:65] CompositorAnimationObserver is active for too long (6502.5s) location=Button@ui/views/controls/button/button.cc:668
+[559644:0528/003329.136898:ERROR:components/viz/service/display/display.cc:298] Frame latency is negative: -0.043 ms
