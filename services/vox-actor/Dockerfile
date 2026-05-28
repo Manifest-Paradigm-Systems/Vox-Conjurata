@@ -10,10 +10,10 @@ WORKDIR /app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    git curl ffmpeg libsndfile1 python3-setuptools python3-wheel \
+    git curl ffmpeg libsndfile1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install basic dependencies
+# Install basic dependencies and build tools
 RUN pip3 install --no-cache-dir \
     fastapi uvicorn python-multipart modelscope loguru setuptools wheel
 
@@ -28,7 +28,8 @@ RUN sed -i '/torch/d' requirements.txt && \
     sed -i '/onnxruntime/d' requirements.txt && \
     sed -i 's/inflect==7.0.0/inflect>=7.0.0/' requirements.txt
 
-# Install remaining requirements
+# Install requirements - ensuring build-time dependencies are met for problematic packages
+RUN pip3 install --no-cache-dir grpcio --only-binary :all: || pip3 install --no-cache-dir grpcio
 RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Install ROCm compatible onnxruntime
