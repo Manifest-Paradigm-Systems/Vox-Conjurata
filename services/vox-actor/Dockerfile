@@ -84,25 +84,19 @@ WORKDIR /app/CosyVoice
 # ---------------------------------------------------------------------------
 RUN echo "=== [SANITIZE] Stripping NVIDIA/CUDA/TensorRT deps from upstream requirements ===" && \
     sed -i \
-        # Remove explicit torch/audio pins (we supply our own ROCm wheels)
         -e '/^\s*torch[^a-z]/d' \
         -e '/^\s*torchvision/d' \
         -e '/^\s*torchaudio/d' \
-        # Hard block list
         -e '/tensorrt/Id' \
         -e '/tensorrt-llm/Id' \
         -e '/cuda-python/Id' \
         -e '/nvidia/Id' \
-        # Remove onnxruntime (CPU flavour) — we'll install rocm variant below
         -e '/^\s*onnxruntime\b/d' \
-        # Remove grpcio (we re-add with --no-build-isolation)
         -e '/^\s*grpcio\b/d' \
-        # Remove openai-whisper (re-add with --no-build-isolation)
         -e '/^\s*openai-whisper/d' \
-        # Relax a pinned inflect version that breaks on Py3.12
         -e 's/inflect==7\.0\.0/inflect>=7.0.0/' \
     requirements.txt && \
-    echo "=== [SANITIZE] Done. Remaining requirements ===" && \
+    echo "=== [SANITIZE] Done — remaining requirements:" && \
     cat requirements.txt
 
 # ---------------------------------------------------------------------------
