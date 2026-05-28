@@ -12,8 +12,8 @@ RUN groupadd -r render || true && groupadd -r video || true
 
 COPY requirements.txt .
 
-# Install stable-diffusion-cpp-python natively compiled for ROCm AMD architecture
-RUN CMAKE_ARGS="-DGGML_HIPBLAS=ON -DAMDGPU_TARGETS=gfx1201" pip3 install --no-cache-dir stable-diffusion-cpp-python
+# Install stable-diffusion-cpp-python# Explicitly compile against AMD ROCm (gfx1201)
+RUN CMAKE_ARGS="-DSD_HIPBLAS=ON -DCMAKE_C_COMPILER=hipcc -DCMAKE_CXX_COMPILER=hipcc -DAMDGPU_TARGETS=gfx1201" pip3 install --no-cache-dir stable-diffusion-cpp-python
 
 # Install the rest of the dependencies
 RUN pip3 install --no-cache-dir -r requirements.txt
