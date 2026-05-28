@@ -4,6 +4,6 @@ This document tracks the execution of unit, integration, and E2E tests across th
 
 ## Test Checklist
 
-- [ ] **Unit Tests**: `pytest services/orchestrator/test_orchestrator_unit.py`
-- [ ] **E2E Integration Flow**: `python services/orchestrator/test_e2e.py`
+- [x] **Unit Tests**: `pytest services/orchestrator/test_orchestrator_unit.py`
+- [x] **E2E Integration Flow**: `python services/orchestrator/test_e2e.py`
 - [ ] **System Diagnostics**: `python run_diagnostics.py`
