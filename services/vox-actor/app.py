@@ -23,10 +23,14 @@ logging.basicConfig(
 logger = logging.getLogger("vox-actor")
 
 # ── ROCm device check ─────────────────────────────────────────────────────────
-_device = "cuda" if torch.cuda.is_available() else "cpu"
-logger.info(f"PyTorch device: {_device} | ROCm available: {torch.cuda.is_available()}")
-if _device == "cuda":
-    logger.info(f"GPU: {torch.cuda.get_device_name(0)}")
+# On AMD ROCm hardware torch.cuda.* IS the HIP API — not NVIDIA CUDA.
+# torch.cuda.is_available() returns True when a ROCm GPU is present.
+_rocm_available = torch.cuda.is_available()
+_device = "hip" if _rocm_available else "cpu"   # Canonical label for AMD
+_torch_device = "cuda" if _rocm_available else "cpu"  # PyTorch internal name
+logger.info(f"PyTorch backend: {_device} | ROCm/HIP available: {_rocm_available}")
+if _rocm_available:
+    logger.info(f"AMD GPU: {torch.cuda.get_device_name(0)}")
 
 # ── CosyVoice import (deferred — library lives in cloned repo) ────────────────
 CosyVoice = None
@@ -85,15 +89,16 @@ async def root():
     return {
         "service": "vox-actor",
         "engine": "CosyVoice-300M",
-        "backend": "AMD ROCm",
+        "backend": "AMD ROCm / HIP",
         "device": _device,
+        "rocm_available": _rocm_available,
         "status": "ready" if _cosyvoice_engine else "idle",
     }
 
 
 @app.get("/health")
 async def health():
-    return JSONResponse({"status": "ok", "device": _device})
+    return JSONResponse({"status": "ok", "device": _device, "rocm": _rocm_available})
 
 
 @app.post("/api/tts")
