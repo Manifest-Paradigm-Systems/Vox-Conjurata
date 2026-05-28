@@ -22,14 +22,15 @@ RUN git clone --recursive https://github.com/FunAudioLLM/CosyVoice.git /app/Cosy
 WORKDIR /app/CosyVoice
 
 # Patch requirements to remove direct torch/torchaudio/onnxruntime references 
-# that might pull in CUDA equivalents, then install remaining deps.
+# and problematic grpcio versioning that might pull in CUDA equivalents or fail builds.
 RUN sed -i '/torch/d' requirements.txt && \
     sed -i '/torchaudio/d' requirements.txt && \
     sed -i '/onnxruntime/d' requirements.txt && \
+    sed -i '/grpcio/d' requirements.txt && \
     sed -i 's/inflect==7.0.0/inflect>=7.0.0/' requirements.txt
 
-# Install requirements - ensuring build-time dependencies are met for problematic packages
-RUN pip3 install --no-cache-dir grpcio --only-binary :all: || pip3 install --no-cache-dir grpcio
+# Install requirements - ensuring binary wheels for stability
+RUN pip3 install --no-cache-dir grpcio --only-binary :all:
 RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Install ROCm compatible onnxruntime
