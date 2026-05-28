@@ -109,8 +109,10 @@ globalThis.voxState = globalThis.voxState || {
 // ==========================================
 // 3. KEYBINDING REGISTRATION (INIT)
 // ==========================================
-Hooks.once("init", () => {
-    console.log("🎙️ Vox-Conjurata: init hook fired.");
+function registerKeybindings() {
+    if (globalThis.voxKeybindingsRegistered) return;
+    console.log("🎙️ Vox-Conjurata: Registering settings and keybindings.");
+    globalThis.voxKeybindingsRegistered = true;
     
     game.settings.register("vox-conjurata", "narratorVoice", {
         name: "Vox: Narrator Voice Profile",
@@ -196,7 +198,15 @@ Hooks.once("init", () => {
             statusMessage(`Character Mic [I] (${globalThis.voxState.activeSpeakerName}): CLOSED`, false);
         }
     });
-});
+}
+
+if (typeof game !== 'undefined' && game.keybindings) {
+    registerKeybindings();
+} else {
+    Hooks.once("init", () => {
+        registerKeybindings();
+    });
+}
 
 // ==========================================
 // 4. MODULE LIFECYCLE (READY & SCENE SCAN)
@@ -232,12 +242,14 @@ async function scanActiveSceneTokens() {
     }
 }
 
-Hooks.once("ready", async () => {
+async function onReady() {
+    if (globalThis.voxReadyExecuted) return;
     console.log("vox-conjurata | System initialized.");
+    globalThis.voxReadyExecuted = true;
     
     if (game.user.isGM) {
         try {
-            const response = await fetch("http://127.0.0.1:8080/api/v1/narrators/voices");
+            const response = await fetch(`http://${voxHost}:8080/api/v1/narrators/voices`);
             if (response.ok) {
                 const voices = await response.json();
                 const choices = {};
@@ -259,7 +271,15 @@ Hooks.once("ready", async () => {
         // Scan current active scene tokens on startup
         await scanActiveSceneTokens();
     }
-});
+}
+
+if (typeof game !== 'undefined' && game.ready) {
+    onReady();
+} else {
+    Hooks.once("ready", () => {
+        onReady();
+    });
+}
 
 // Scan tokens whenever a scene completes loading/rendering on canvas
 Hooks.on("canvasReady", async () => {
