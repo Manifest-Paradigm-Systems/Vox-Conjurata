@@ -3,6 +3,7 @@ from huggingface_hub import hf_hub_download
 
 repo_id = "hum-ma/SDXL-models-GGUF"
 local_dir = "/models"
+hf_token = os.environ.get("HF_TOKEN")
 
 files = [
     "sdxl_base_Q4_0.gguf",
@@ -11,10 +12,18 @@ files = [
     "xlVAEC_c91.safetensors"
 ]
 
+print(f"Using HF_TOKEN: {'Yes' if hf_token else 'No'}")
+
 for filename in files:
     print(f"Downloading {filename}...")
     try:
-        path = hf_hub_download(repo_id=repo_id, filename=filename, local_dir=local_dir, local_dir_use_symlinks=False)
+        path = hf_hub_download(
+            repo_id=repo_id, 
+            filename=filename, 
+            local_dir=local_dir, 
+            local_dir_use_symlinks=False,
+            token=hf_token
+        )
         print(f"Saved to {path}")
     except Exception as e:
         print(f"Error downloading {filename}: {e}")
