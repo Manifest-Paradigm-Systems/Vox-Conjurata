@@ -25,12 +25,28 @@ services:
     - TTS_MONSTER_URL=http://vox-monster-fish:7860
     - TTS_MUSIC_URL=http://vox-audio-generation-music:8000
     - TTS_SFX_URL=http://vox-audio-generation-sfx:8001
+    - FOUNDRY_API_URL=http://foundry-vtt:30000/api
+    - FOUNDRY_API_KEY=${FOUNDRY_API_KEY}
     volumes:
     - model_storage:/models:z
     - ./services/orchestrator/voice_seeds:/app/voice_seeds:Z
     - /sys:/sys:ro
     networks:
     - vox-net
+
+  foundry-vtt:
+    image: node:24-slim
+    container_name: foundry-vtt
+    working_dir: /app
+    ports:
+      - "30000:30000"
+    volumes:
+      - /home/EvokeStudio/manifest-paradigm/foundry/app:/app:z
+      - /home/EvokeStudio/manifest-paradigm/foundry/data:/data:z
+    command: ["node", "main.js", "--dataPath=/data"]
+    networks:
+      - vox-net
+    restart: unless-stopped
 
   vox-vision-reader:
     image: ghcr.io/abetlen/llama-cpp-python:latest
