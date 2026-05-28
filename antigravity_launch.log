@@ -27,3 +27,4 @@ WARNING: radv is not a conformant Vulkan implementation, testing use only.
 [559644:0527/202513.896613:ERROR:components/viz/service/display/display.cc:298] Frame latency is negative: -0.008 ms
 [559644:0527/202515.832922:ERROR:components/viz/service/display/display.cc:298] Frame latency is negative: -0.003 ms
 [559644:0527/202621.314413:ERROR:components/viz/service/display/display.cc:298] Frame latency is negative: -0.029 ms
+[559644:0527/213406.021909:ERROR:components/viz/service/display/display.cc:298] Frame latency is negative: -0.01 ms
