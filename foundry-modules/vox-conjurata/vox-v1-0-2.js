@@ -8,7 +8,7 @@
 // ==========================================
 (function() {
     try {
-        const ORCHESTRATOR_URL = "http://127.0.0.1:8080/api/v1/diagnostics/logs";
+        const ORCHESTRATOR_URL = `http://${window.location.hostname || "127.0.0.1"}:8080/api/v1/diagnostics/logs`;
 
         const shipLog = async (data) => {
             try {
@@ -96,6 +96,13 @@ globalThis.voxState = globalThis.voxState || {
         console.log("🎙️ Vox-Conjurata: Hardware microphone pipeline ready.");
     } catch (err) {
         console.error("❌ Vox Audio Fail:", err);
+        if (typeof ui !== 'undefined' && ui.notifications) {
+            ui.notifications.error(`❌ Vox Audio Fail: Microphone access error: ${err.message || err}`);
+        } else {
+            Hooks.once("ready", () => {
+                ui.notifications.error(`❌ Vox Audio Fail: Microphone access error: ${err.message || err}`);
+            });
+        }
     }
 })();
 
@@ -343,7 +350,7 @@ function startRecording(micType) {
         if (globalThis.voxState.mediaRecorder && globalThis.voxState.mediaRecorder.state === "inactive") {
             globalThis.voxState.audioChunks = [];
             globalThis.voxState.activeMicType = micType;
-            globalThis.voxState.mediaRecorder.start();
+            globalThis.voxState.mediaRecorder.start(250);
             console.log(`🎙️ Vox-Conjurata: Recording started (${micType}).`);
         } else {
             console.warn("🎙️ Vox-Conjurata: startRecording called but MediaRecorder not ready.", {

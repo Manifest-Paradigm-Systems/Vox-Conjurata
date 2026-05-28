@@ -5,7 +5,8 @@
  */
 Hooks.on("renderChatLog", (app, html, data) => {
     // Navigate the jQuery wrapper element provided by the Foundry hook context
-    const chatSidebar = html[0] || html;
+    const chatSidebar = html.jquery ? html[0] : (html[0] || html);
+    if (!chatSidebar || typeof chatSidebar.querySelector !== 'function') return;
     const editorContainer = chatSidebar.querySelector('.editor-container');
     
     // Safety exit if the chat box isn't initialized or rendered yet
@@ -60,16 +61,18 @@ Hooks.on("renderChatLog", (app, html, data) => {
                     globalThis.voxState.activeSpeakerName = selectedToken.actor?.name || "Unknown NPC";
                     globalThis.voxState.activeActorId = selectedToken.actor?.id || "unknown";
                     micType = "vox-conjurata-gm-puppet-mic";
-                    if (typeof statusMessage === 'function') {
-                        statusMessage(`Puppeteer Mic (${globalThis.voxState.activeSpeakerName}): OPEN`, true);
+                    const statMsg = globalThis.statusMessage || window.statusMessage;
+                    if (typeof statMsg === 'function') {
+                        statMsg(`Puppeteer Mic (${globalThis.voxState.activeSpeakerName}): OPEN`, true);
                     }
                 } else {
                     globalThis.voxState.narratorActive = true;
                     globalThis.voxState.activeSpeakerName = "Narrator";
                     globalThis.voxState.activeActorId = "narrator";
                     micType = "vox-conjurata-gm-narrate-mic";
-                    if (typeof statusMessage === 'function') {
-                        statusMessage("Narrator Mic: OPEN", true);
+                    const statMsg = globalThis.statusMessage || window.statusMessage;
+                    if (typeof statMsg === 'function') {
+                        statMsg("Narrator Mic: OPEN", true);
                     }
                 }
             } else {
@@ -78,15 +81,15 @@ Hooks.on("renderChatLog", (app, html, data) => {
                 globalThis.voxState.activeSpeakerName = speakerActor?.name || game.user.name;
                 globalThis.voxState.activeActorId = speakerActor?.id || game.user.id;
                 micType = "vox-conjurata-player-mic";
-                if (typeof statusMessage === 'function') {
-                    statusMessage(`Character Mic (${globalThis.voxState.activeSpeakerName}): OPEN`, true);
+                const statMsg = globalThis.statusMessage || window.statusMessage;
+                if (typeof statMsg === 'function') {
+                    statMsg(`Character Mic (${globalThis.voxState.activeSpeakerName}): OPEN`, true);
                 }
             }
-
-            if (typeof startRecording === 'function') {
-                startRecording(micType);
-            } else if (typeof window.startRecording === 'function') {
-                window.startRecording(micType);
+ 
+            const startRec = globalThis.startRecording || window.startRecording;
+            if (typeof startRec === 'function') {
+                startRec(micType);
             } else {
                 console.error("❌ Vox-Voice: startRecording function not found in global scope.");
             }
@@ -95,20 +98,21 @@ Hooks.on("renderChatLog", (app, html, data) => {
             if (game.user.isGM) {
                 globalThis.voxState.narratorActive = false;
                 globalThis.voxState.puppetActive = false;
-                if (typeof statusMessage === 'function') {
-                    statusMessage("Narrator/Puppeteer Mic: CLOSED", false);
+                const statMsg = globalThis.statusMessage || window.statusMessage;
+                if (typeof statMsg === 'function') {
+                    statMsg("Narrator/Puppeteer Mic: CLOSED", false);
                 }
             } else {
                 globalThis.voxState.playerActive = false;
-                if (typeof statusMessage === 'function') {
-                    statusMessage(`Character Mic (${globalThis.voxState.activeSpeakerName}): CLOSED`, false);
+                const statMsg = globalThis.statusMessage || window.statusMessage;
+                if (typeof statMsg === 'function') {
+                    statMsg(`Character Mic (${globalThis.voxState.activeSpeakerName}): CLOSED`, false);
                 }
             }
-
-            if (typeof stopRecording === 'function') {
-                stopRecording();
-            } else if (typeof window.stopRecording === 'function') {
-                window.stopRecording();
+ 
+            const stopRec = globalThis.stopRecording || window.stopRecording;
+            if (typeof stopRec === 'function') {
+                stopRec();
             } else {
                 console.error("❌ Vox-Voice: stopRecording function not found in global scope.");
             }
