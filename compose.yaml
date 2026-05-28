@@ -231,7 +231,8 @@ services:
     restart: unless-stopped
 
   vox-monster-fish:
-    image: fishaudio/fish-speech:v1.5.1
+    build:
+      context: ./services/vox-monster-fish
     container_name: vox-monster-fish
     entrypoint: ["python", "-m", "tools.api_server"]
     command: ["--listen", "0.0.0.0:7860", "--half"]
