@@ -480,6 +480,11 @@ async def receive_logs(log: DiagnosticLog):
 async def get_latest_error():
     return error_buffer[-1] if error_buffer else {"status": "nominal"}
 
+@app.get("/api/v1/diagnostics/history")
+async def get_diagnostics_history():
+    return error_buffer
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8080)
