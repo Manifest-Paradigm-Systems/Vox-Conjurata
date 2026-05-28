@@ -11,9 +11,8 @@ RUN apt-get update && apt-get install -y python3 python3-pip && rm -rf /var/lib/
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# Actual Parler-TTS installation would go here
-# RUN pip install parler-tts
-
+# Install Parler-TTS from GitHub to ensure latest compatibility
+RUN pip3 install --no-cache-dir git+https://github.com/huggingface/parler-tts.git
 COPY app.py .
 
 EXPOSE 5010
