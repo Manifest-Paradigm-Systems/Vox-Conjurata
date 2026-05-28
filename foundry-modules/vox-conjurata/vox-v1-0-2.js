@@ -209,6 +209,95 @@ if (typeof game !== 'undefined' && game.keybindings) {
 }
 
 // ==========================================
+// 3b. GLOBAL KEYBOARD LISTENER FALLBACKS (FAIL-SAFE)
+// ==========================================
+window.addEventListener("keydown", (event) => {
+    // Safety check: ignore events if typing in input fields or textareas
+    const target = event.target;
+    if (!target) return;
+    if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable || target.closest(".editor-container") || target.closest(".prosemirror")) {
+        return;
+    }
+    
+    // Y Key Down (Narrator GM PTT)
+    if (event.code === "KeyY" || event.key === "y" || event.key === "Y") {
+        if (typeof game !== 'undefined' && game.user && game.user.isGM) {
+            console.log("🎙️ Fallback: Key Y Down caught globally");
+            if (globalThis.voxState.narratorActive) return;
+            globalThis.voxState.narratorActive = true;
+            globalThis.voxState.activeSpeakerName = "Narrator";
+            globalThis.voxState.activeActorId = "narrator";
+            if (typeof startRecording === 'function') startRecording("vox-conjurata-gm-narrate-mic");
+            if (typeof statusMessage === 'function') statusMessage("Narrator Mic [Y]: OPEN", true);
+        }
+    }
+    
+    // H Key Down (Puppeteer GM PTT)
+    if (event.code === "KeyH" || event.key === "h" || event.key === "H") {
+        if (typeof game !== 'undefined' && game.user && game.user.isGM) {
+            console.log("🎭 Fallback: Key H Down caught globally");
+            if (globalThis.voxState.puppetActive) return;
+            const selectedToken = typeof canvas !== 'undefined' && canvas.tokens && canvas.tokens.controlled ? canvas.tokens.controlled[0] : null;
+            if (!selectedToken) {
+                if (typeof ui !== 'undefined' && ui.notifications) ui.notifications.warn("❌ Puppeteer: Select an NPC token first!");
+                return;
+            }
+            globalThis.voxState.puppetActive = true;
+            globalThis.voxState.activeSpeakerName = selectedToken.actor?.name || "Unknown NPC";
+            globalThis.voxState.activeActorId = selectedToken.actor?.id || "unknown";
+            if (typeof startRecording === 'function') startRecording("vox-conjurata-gm-puppet-mic");
+            if (typeof statusMessage === 'function') statusMessage(`Puppeteer [H] (${globalThis.voxState.activeSpeakerName}): OPEN`, true);
+        }
+    }
+    
+    // I Key Down (Character PTT)
+    if (event.code === "KeyI" || event.key === "i" || event.key === "I") {
+        if (typeof game !== 'undefined' && game.user) {
+            console.log("👤 Fallback: Key I Down caught globally");
+            if (globalThis.voxState.playerActive) return;
+            const speakerActor = typeof canvas !== 'undefined' && canvas.tokens && canvas.tokens.controlled && canvas.tokens.controlled[0] ? canvas.tokens.controlled[0].actor : (game.user.character || null);
+            globalThis.voxState.playerActive = true;
+            globalThis.voxState.activeSpeakerName = speakerActor?.name || game.user.name;
+            globalThis.voxState.activeActorId = speakerActor?.id || game.user.id;
+            if (typeof startRecording === 'function') startRecording("vox-conjurata-player-mic");
+            if (typeof statusMessage === 'function') statusMessage(`Character Mic [I] (${globalThis.voxState.activeSpeakerName}): OPEN`, true);
+        }
+    }
+});
+
+window.addEventListener("keyup", (event) => {
+    // Y Key Up
+    if (event.code === "KeyY" || event.key === "y" || event.key === "Y") {
+        if (typeof game !== 'undefined' && game.user && game.user.isGM && globalThis.voxState.narratorActive) {
+            console.log("🎙️ Fallback: Key Y Up caught globally");
+            globalThis.voxState.narratorActive = false;
+            if (typeof stopRecording === 'function') stopRecording();
+            if (typeof statusMessage === 'function') statusMessage("Narrator Mic [Y]: CLOSED", false);
+        }
+    }
+    
+    // H Key Up
+    if (event.code === "KeyH" || event.key === "h" || event.key === "H") {
+        if (typeof game !== 'undefined' && game.user && game.user.isGM && globalThis.voxState.puppetActive) {
+            console.log("🎭 Fallback: Key H Up caught globally");
+            globalThis.voxState.puppetActive = false;
+            if (typeof stopRecording === 'function') stopRecording();
+            if (typeof statusMessage === 'function') statusMessage(`Puppeteer Mic [H] (${globalThis.voxState.activeSpeakerName}): CLOSED`, false);
+        }
+    }
+    
+    // I Key Up
+    if (event.code === "KeyI" || event.key === "i" || event.key === "I") {
+        if (globalThis.voxState.playerActive) {
+            console.log("👤 Fallback: Key I Up caught globally");
+            globalThis.voxState.playerActive = false;
+            if (typeof stopRecording === 'function') stopRecording();
+            if (typeof statusMessage === 'function') statusMessage(`Character Mic [I] (${globalThis.voxState.activeSpeakerName}): CLOSED`, false);
+        }
+    }
+});
+
+// ==========================================
 // 4. MODULE LIFECYCLE (READY & SCENE SCAN)
 // ==========================================
 async function scanActiveSceneTokens() {
