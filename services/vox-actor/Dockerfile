@@ -14,8 +14,8 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install basic dependencies and build tools
-# We explicitly install setuptools and wheel to handle build-from-source requirements
-RUN pip3 install --no-cache-dir setuptools wheel
+# We use setuptools<70.0.0 to ensure pkg_resources is available for legacy builds
+RUN pip3 install --no-cache-dir "setuptools<70.0.0" wheel
 
 # Clone CosyVoice
 RUN git clone --recursive https://github.com/FunAudioLLM/CosyVoice.git /app/CosyVoice
@@ -30,8 +30,8 @@ RUN sed -i '/torch/d' requirements.txt && \
     sed -i '/openai-whisper/d' requirements.txt && \
     sed -i 's/inflect==7.0.0/inflect>=7.0.0/' requirements.txt
 
-# Pre-install problematic packages as binary wheels
-RUN pip3 install --no-cache-dir grpcio openai-whisper --only-binary :all:
+# Install problematic packages with build isolation disabled to use our installed setuptools
+RUN pip3 install --no-cache-dir grpcio openai-whisper --no-build-isolation
 
 # Install remaining requirements
 RUN pip3 install --no-cache-dir -r requirements.txt
