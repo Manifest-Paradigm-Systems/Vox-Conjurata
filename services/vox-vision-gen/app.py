@@ -6,7 +6,7 @@ import os
 import tempfile
 import gc
 
-from sdcpp import StableDiffusion
+from stable_diffusion_cpp import StableDiffusion
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("sdxl-gguf-service")
