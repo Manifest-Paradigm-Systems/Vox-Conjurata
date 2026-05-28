@@ -69,10 +69,14 @@ services:
     devices:
     - /dev/kfd:/dev/kfd
     - /dev/dri:/dev/dri
+    group_add:
+    - video
+    - render
     security_opt:
     - seccomp=unconfined
     environment:
     - HSA_OVERRIDE_GFX_VERSION=12.0.1
+    - CUDA_VISIBLE_DEVICES=""
     - MODEL=/models/MiniCPM-V-2_6-GGUF/MiniCPM-V-2_6-Q4_K_M.gguf
     - N_GPU_LAYERS=-1
     - CHAT_FORMAT=minicpm-v-2.6
@@ -92,10 +96,14 @@ services:
     devices:
     - /dev/kfd:/dev/kfd
     - /dev/dri:/dev/dri
+    group_add:
+    - video
+    - render
     security_opt:
     - seccomp=unconfined
     environment:
     - HSA_OVERRIDE_GFX_VERSION=12.0.1
+    - CUDA_VISIBLE_DEVICES=""
     - VRAM_LIMIT=5.50GB
     - QUANTIZATION=nf4
     command: ["python", "main.py", "--pin-shared-memory"]
@@ -113,11 +121,16 @@ services:
     devices:
     - /dev/kfd:/dev/kfd
     - /dev/dri:/dev/dri
+    group_add:
+    - video
+    - render
     security_opt:
     - seccomp=unconfined
     environment:
     - HSA_OVERRIDE_GFX_VERSION=12.0.1
     - PYTORCH_ROCM_ARCH=gfx1201
+    - HIP_PLATFORM=amd
+    - CUDA_VISIBLE_DEVICES=""
     - VLLM_ROCM_USE_AITER=0
     - GPU_ARCHS=gfx1100
     - VRAM_ALLOCATION=11.20GB
@@ -134,10 +147,14 @@ services:
     devices:
     - /dev/kfd:/dev/kfd
     - /dev/dri:/dev/dri
+    group_add:
+    - video
+    - render
     security_opt:
     - seccomp=unconfined
     environment:
     - HSA_OVERRIDE_GFX_VERSION=12.0.1
+    - CUDA_VISIBLE_DEVICES=""
     networks:
     - vox-net
     restart: unless-stopped
@@ -151,10 +168,14 @@ services:
     devices:
     - /dev/kfd:/dev/kfd
     - /dev/dri:/dev/dri
+    group_add:
+    - video
+    - render
     security_opt:
     - seccomp=unconfined
     environment:
     - HSA_OVERRIDE_GFX_VERSION=12.0.1
+    - CUDA_VISIBLE_DEVICES=""
     - VRAM_LIMIT=0.80GB
     - HF_TOKEN=${HF_TOKEN}
     - STABLE_AUDIO_MODEL=stabilityai/stable-audio-3-small-music
@@ -174,10 +195,14 @@ services:
     devices:
     - /dev/kfd:/dev/kfd
     - /dev/dri:/dev/dri
+    group_add:
+    - video
+    - render
     security_opt:
     - seccomp=unconfined
     environment:
     - HSA_OVERRIDE_GFX_VERSION=12.0.1
+    - CUDA_VISIBLE_DEVICES=""
     - AUDIO_ENGINE_TYPE=sfx
     - EXECUTION_DEVICE=gpu
     - VRAM_LIMIT=0.80GB
@@ -199,10 +224,14 @@ services:
     devices:
     - /dev/kfd:/dev/kfd
     - /dev/dri:/dev/dri
+    group_add:
+    - video
+    - render
     security_opt:
     - seccomp=unconfined
     environment:
     - HSA_OVERRIDE_GFX_VERSION=12.0.1
+    - CUDA_VISIBLE_DEVICES=""
     - QUANTIZATION=int8
     - VRAM_LIMIT=1.20GB
     command: ["python3", "app.py", "--keep_alive", "0"]
@@ -257,10 +286,14 @@ services:
     devices:
     - /dev/kfd:/dev/kfd
     - /dev/dri:/dev/dri
+    group_add:
+    - video
+    - render
     security_opt:
     - seccomp=unconfined
     environment:
     - HSA_OVERRIDE_GFX_VERSION=12.0.1
+    - CUDA_VISIBLE_DEVICES=""
     - TEXT_PRECISION=int8
     - VRAM_LIMIT=2.20GB
     networks:
