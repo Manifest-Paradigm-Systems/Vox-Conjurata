@@ -1,5 +1,12 @@
+"""
+vox-actor — CosyVoice TTS Service
+Platform: AMD ROCm (gfx1201 / RDNA3)
+Engine:   CosyVoice-300M (zero-shot voice cloning)
+Port:     5020
+"""
+
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 import logging
 import os
 import tempfile
@@ -8,108 +15,161 @@ import torchaudio
 import hashlib
 from modelscope import snapshot_download
 
-# Attempt to import CosyVoice - assumes it will be installed via requirements.txt
+# ── Logger must be defined BEFORE any module-level usage ──────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
+)
+logger = logging.getLogger("vox-actor")
+
+# ── ROCm device check ─────────────────────────────────────────────────────────
+_device = "cuda" if torch.cuda.is_available() else "cpu"
+logger.info(f"PyTorch device: {_device} | ROCm available: {torch.cuda.is_available()}")
+if _device == "cuda":
+    logger.info(f"GPU: {torch.cuda.get_device_name(0)}")
+
+# ── CosyVoice import (deferred — library lives in cloned repo) ────────────────
+CosyVoice = None
+load_wav = None
 try:
     from cosyvoice.cli.cosyvoice import CosyVoice
     from cosyvoice.utils.file_utils import load_wav
-except ImportError:
-    # Fallback/Placeholder if installation is still in progress
-    CosyVoice = None
-    logger.warning("CosyVoice library not found. Service will run in placeholder mode.")
+    logger.info("CosyVoice library loaded successfully.")
+except ImportError as _import_err:
+    logger.warning(
+        f"CosyVoice library not found ({_import_err}). "
+        "Service will run in placeholder mode until the model is available."
+    )
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("vox-actor")
+# ─────────────────────────────────────────────────────────────────────────────
+app = FastAPI(
+    title="vox-actor",
+    description="CosyVoice zero-shot voice-cloning TTS — AMD ROCm backend",
+    version="1.0.0",
+)
 
-app = FastAPI(title="vox-actor-cosyvoice-genuine")
-
-# Model configuration
+# Model configuration (override via compose env)
 MODEL_DIR = os.getenv("COSYVOICE_MODEL_DIR", "/models/CosyVoice-300M")
 
-# Global engine instance
-_cosyvoice = None
+# Singleton engine instance
+_cosyvoice_engine = None
+
 
 def get_cosyvoice():
-    global _cosyvoice
-    if _cosyvoice is None:
-        if CosyVoice is None:
-            raise HTTPException(status_code=503, detail="CosyVoice engine not initialized (library missing).")
-        
-        if not os.path.exists(MODEL_DIR):
-            logger.info(f"Downloading CosyVoice weights to {MODEL_DIR}...")
-            snapshot_download('iic/CosyVoice-300M', local_dir=MODEL_DIR)
-            
-        logger.info(f"Initializing CosyVoice from {MODEL_DIR}...")
-        _cosyvoice = CosyVoice(MODEL_DIR)
-    return _cosyvoice
+    """Lazy-load and cache the CosyVoice engine."""
+    global _cosyvoice_engine
+
+    if _cosyvoice_engine is not None:
+        return _cosyvoice_engine
+
+    if CosyVoice is None:
+        raise HTTPException(
+            status_code=503,
+            detail="CosyVoice library not installed — check container build logs.",
+        )
+
+    if not os.path.exists(MODEL_DIR):
+        logger.info(f"Downloading CosyVoice weights → {MODEL_DIR} ...")
+        snapshot_download("iic/CosyVoice-300M", local_dir=MODEL_DIR)
+
+    logger.info(f"Initialising CosyVoice engine from {MODEL_DIR} ...")
+    _cosyvoice_engine = CosyVoice(MODEL_DIR)
+    logger.info("CosyVoice engine ready.")
+    return _cosyvoice_engine
+
+
+# ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.get("/")
 async def root():
     return {
-        "service": "vox-actor", 
-        "engine": "CosyVoice-300M", 
-        "status": "ready" if _cosyvoice else "loading"
+        "service": "vox-actor",
+        "engine": "CosyVoice-300M",
+        "backend": "AMD ROCm",
+        "device": _device,
+        "status": "ready" if _cosyvoice_engine else "idle",
     }
+
+
+@app.get("/health")
+async def health():
+    return JSONResponse({"status": "ok", "device": _device})
+
 
 @app.post("/api/tts")
 async def text_to_speech(
     text: str = Form(...),
-    reference_audio: UploadFile = File(...)
+    reference_audio: UploadFile = File(...),
+    prompt_text: str = Form(default="A clear speaking voice."),
 ):
-    if not text:
-        raise HTTPException(status_code=400, detail="No text provided.")
+    """
+    Zero-shot voice cloning.
 
-    logger.info(f"Acting: Genuine CosyVoice cloning for: '{text[:50]}...'")
+    Parameters
+    ----------
+    text            : Text to synthesise.
+    reference_audio : Short WAV clip of the target speaker (3–15 s, 16 kHz).
+    prompt_text     : Transcript of the reference clip (improves fidelity).
+    """
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="'text' field must not be empty.")
+
+    logger.info(f"TTS request — {len(text)} chars, ref: {reference_audio.filename!r}")
+
+    ref_path = None
+    output_path = None
 
     try:
-        # 1. Save reference audio to temp file
+        # 1. Save reference audio to a temp file
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as ref_tmp:
             ref_tmp.write(await reference_audio.read())
             ref_path = ref_tmp.name
 
-        # 2. Load and resample reference audio (CosyVoice wants 16k)
+        # 2. Resample reference audio to 16 kHz (CosyVoice requirement)
         prompt_speech_16k = load_wav(ref_path, 16000)
-        
-        # 3. Generate audio using zero-shot cloning
-        cosyvoice = get_cosyvoice()
-        
-        # We assume the user wants zero-shot cloning
-        # CosyVoice inference_zero_shot(tts_text, prompt_text, prompt_speech_16k)
-        # We'll use a generic prompt text as we don't have the seed transcript here yet
-        # But we could potentially pass it if the orchestrator sends it.
-        prompt_text = "A clear speaking voice." 
-        
-        # Generate
-        output = cosyvoice.inference_zero_shot(text, prompt_text, prompt_speech_16k)
-        
-        # 4. Save to output wav
+
+        # 3. Infer
+        engine = get_cosyvoice()
+        output_iter = engine.inference_zero_shot(text, prompt_text, prompt_speech_16k)
+
+        # 4. Collect generator output and concatenate tensors
+        chunks = [chunk["tts_speech"] for chunk in output_iter]
+        if not chunks:
+            raise RuntimeError("CosyVoice returned an empty audio stream.")
+
+        full_audio = torch.cat(chunks, dim=1)
+
+        # 5. Write to temp WAV
         fd, output_path = tempfile.mkstemp(suffix=".wav")
         os.close(fd)
-        
-        # CosyVoice returns a generator of dicts
-        combined_audio = []
-        for result in output:
-            combined_audio.append(result['tts_speech'])
-        
-        if not combined_audio:
-            raise Exception("CosyVoice generated no audio data.")
-            
-        full_audio = torch.cat(combined_audio, dim=1)
         torchaudio.save(output_path, full_audio, 22050)
-            
-        os.remove(ref_path)
-        return FileResponse(output_path, media_type="audio/wav")
-        
-    except Exception as e:
-        logger.error(f"Acting error: {e}")
-        if 'ref_path' in locals() and os.path.exists(ref_path):
-            os.remove(ref_path)
-        raise HTTPException(status_code=500, detail=str(e))
 
+        logger.info(f"Audio ready → {output_path}")
+        return FileResponse(output_path, media_type="audio/wav")
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"TTS inference error: {exc}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    finally:
+        # Clean up reference temp file regardless of outcome
+        if ref_path and os.path.exists(ref_path):
+            os.remove(ref_path)
+        # Note: output_path is intentionally NOT deleted here —
+        # FileResponse streams it after this function returns.
+        # Uvicorn cleans up temp files after the response is sent.
+
+
+# ── Entry point ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     import uvicorn
-    # Pre-warm the model
+
+    # Pre-warm the model on startup (optional — comment out to lazy-load)
     try:
         get_cosyvoice()
-    except Exception as e:
-        logger.error(f"Failed to pre-warm CosyVoice: {e}")
-    uvicorn.run(app, host="0.0.0.0", port=5020)
+    except Exception as exc:
+        logger.warning(f"Pre-warm skipped — model will load on first request. ({exc})")
+
+    uvicorn.run(app, host="0.0.0.0", port=5020, log_level="info")
