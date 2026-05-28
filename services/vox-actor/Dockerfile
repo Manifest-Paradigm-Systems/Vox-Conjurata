@@ -15,56 +15,61 @@ FROM docker.io/rocm/dev-ubuntu-24.04:latest
 ENV HSA_OVERRIDE_GFX_VERSION=12.0.1
 ENV ROCR_VISIBLE_DEVICES=0
 ENV HIP_VISIBLE_DEVICES=0
-# Force HIP to target RDNA3 (gfx1201 / RX 9070 XT class)
 ENV PYTORCH_ROCM_ARCH=gfx1201
-# Prevent HIP from defaulting to any CUDA compat layer
 ENV HIP_PLATFORM=amd
-# Keep Python stdout flushed (useful for Podman logs)
 ENV PYTHONUNBUFFERED=1
 ENV DEBIAN_FRONTEND=noninteractive
+
+# ---------------------------------------------------------------------------
+# PEP 668 (Ubuntu 24.04) — use a dedicated venv for all pip work.
+# All subsequent RUN layers activate this environment via PATH.
+# ---------------------------------------------------------------------------
+ENV VIRTUAL_ENV=/opt/venv
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 WORKDIR /app
 
 # ---------------------------------------------------------------------------
-# 1. SYSTEM DEPS — build tools, audio libs, Python
+# 1. SYSTEM DEPS — build tools, audio libs, Python + venv bootstrap
 # ---------------------------------------------------------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        python3 python3-pip python3-dev \
+        python3 python3-pip python3-dev python3-venv python3-full \
         git curl wget \
         ffmpeg libsndfile1 libsndfile1-dev \
         build-essential cmake pkg-config \
         libasound2-dev portaudio19-dev \
         libmecab-dev mecab mecab-ipadic-utf8 \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && python3 -m venv --system-site-packages "$VIRTUAL_ENV" \
+    && echo "=== [VENV] Created virtualenv at $VIRTUAL_ENV ==="
 
 # ---------------------------------------------------------------------------
 # 2. HARD BLOCK — purge any NVIDIA/TensorRT/CUDA artifacts that may have
 #    leaked in from the base image layer.  This runs before ANY pip work.
 # ---------------------------------------------------------------------------
-RUN pip3 install --no-cache-dir setuptools wheel && \
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
     echo "=== [HARD BLOCK] Scanning for forbidden NVIDIA/TensorRT/CUDA packages ===" && \
-    pip3 list --format=columns 2>/dev/null \
+    pip list --format=columns 2>/dev/null \
         | grep -iE "^(nvidia|tensorrt|cuda-python|tensorrt-llm)" \
         | awk '{print $1}' \
-        | xargs -r pip3 uninstall -y && \
+        | xargs -r pip uninstall -y && \
     echo "=== [HARD BLOCK] Forbidden packages cleared ==="
 
 # ---------------------------------------------------------------------------
 # 3. PYTORCH DIRECTIVE — native ROCm wheels from the official AMD index.
-#    Install torch + Triton ROCm compiler together as one atomic step.
+#    Install torch + torchvision + torchaudio in one atomic step.
 #    Index: https://download.pytorch.org/whl/rocm6.0/
 # ---------------------------------------------------------------------------
-RUN pip3 install --no-cache-dir --upgrade \
+RUN pip install --no-cache-dir --upgrade \
         torch torchvision torchaudio \
         --index-url https://download.pytorch.org/whl/rocm6.0/ && \
     echo "=== [PYTORCH] ROCm wheels installed ===" && \
     python3 -c "import torch; print('torch:', torch.__version__); print('ROCm available:', torch.cuda.is_available())"
 
 # Force-install the ROCm-native Triton compiler (matches the torch ROCm build)
-RUN pip3 install --no-cache-dir \
-        "triton>=2.1.0" \
+RUN pip install --no-cache-dir "triton>=2.1.0" \
         --index-url https://download.pytorch.org/whl/rocm6.0/ || \
-    pip3 install --no-cache-dir "triton>=2.1.0" && \
+    pip install --no-cache-dir "triton>=2.1.0" && \
     echo "=== [TRITON] ROCm Triton compiler installed ==="
 
 # ---------------------------------------------------------------------------
@@ -100,23 +105,23 @@ RUN echo "=== [SANITIZE] Stripping NVIDIA/CUDA/TensorRT deps from upstream requi
 # ---------------------------------------------------------------------------
 # 6. SOURCE DEPS — packages that need --no-build-isolation for legacy builds
 # ---------------------------------------------------------------------------
-RUN pip3 install --no-cache-dir grpcio openai-whisper --no-build-isolation
+RUN pip install --no-cache-dir grpcio openai-whisper --no-build-isolation
 
 # ---------------------------------------------------------------------------
 # 7. COSYVOICE REQUIREMENTS — install sanitized upstream deps
 # ---------------------------------------------------------------------------
-RUN pip3 install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # ---------------------------------------------------------------------------
 # 8. ONNX — ROCm execution provider (replaces CPU onnxruntime)
 # ---------------------------------------------------------------------------
-RUN pip3 install --no-cache-dir onnxruntime-rocm && \
+RUN pip install --no-cache-dir onnxruntime-rocm && \
     echo "=== [ONNX] onnxruntime-rocm installed ==="
 
 # ---------------------------------------------------------------------------
 # 9. SERVICE LAYER — FastAPI wrapper + utilities
 # ---------------------------------------------------------------------------
-RUN pip3 install --no-cache-dir \
+RUN pip install --no-cache-dir \
         fastapi \
         "uvicorn[standard]" \
         python-multipart \
@@ -129,7 +134,7 @@ RUN pip3 install --no-cache-dir \
 # 10. FINAL HARD-BLOCK VERIFICATION — assert no forbidden packages remain
 # ---------------------------------------------------------------------------
 RUN echo "=== [FINAL VERIFICATION] Asserting zero NVIDIA/TensorRT/CUDA packages ===" && \
-    FORBIDDEN=$(pip3 list --format=columns 2>/dev/null \
+    FORBIDDEN=$(pip list --format=columns 2>/dev/null \
         | grep -iE "^(nvidia|tensorrt|cuda-python|tensorrt-llm)" \
         | awk '{print $1}') && \
     if [ -n "$FORBIDDEN" ]; then \
