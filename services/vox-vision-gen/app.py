@@ -64,7 +64,7 @@ async def generate_image(request: ImageRequest):
         logger.info(f"Patching LoRA weights from: {lora_path} at strength {request.lora_multiplier}")
 
     try:
-        images = sd_model.txt2img(
+        images = sd_model.generate_image(
             prompt=request.prompt,
             negative_prompt=request.negative_prompt,
             lora_model_dir=lora_path if lora_path else "",
