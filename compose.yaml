@@ -140,6 +140,7 @@ services:
     command: >
       vllm serve /models/EVA-Qwen2.5-7B-v0.1-Q4_K_M.gguf
       --tokenizer Qwen/Qwen2.5-7B-Instruct
+      --quantization gguf
       --max-model-len 4096
       --gpu-memory-utilization 0.22
     networks:
