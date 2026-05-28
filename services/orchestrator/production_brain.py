@@ -207,29 +207,41 @@ class SpeechPipelineFactory:
 
 pipeline_factory = SpeechPipelineFactory()
 
-async def generate_vocal_profile(actor_data: ActorMetadata) -> str:
-    """Uses Qwen 2.5 via vLLM completions endpoint to generate a descriptive acoustic prompt."""
+async def generate_vocal_profile(actor_data: ActorMetadata) -> dict:
+    """Uses Qwen 2.5 via vLLM completions endpoint to generate a descriptive acoustic prompt and gender."""
     system_instruction = (
         "You are an expert casting director and acoustic engineer. "
-        "Analyze the character and output a single-sentence acoustic description for a voice synthesizer. "
-        "Include age, gender, raspiness, pitch, inflections, and room acoustics."
+        "Analyze the character name and biography. Output a JSON object with: "
+        "'gender' (strictly 'male' or 'female') and "
+        "'description' (a single-sentence acoustic description including age, raspiness, pitch, inflections, and room acoustics)."
     )
     payload = {
         "model": "Qwen/Qwen2.5-14B-Instruct",
         "messages": [
             {"role": "system", "content": system_instruction},
-            {"role": "user", "content": f"Character: {actor_data.name}\nLore: {actor_data.lore}"}
+            {"role": "user", "content": f"Character Name: {actor_data.name}\nBiography/Lore: {actor_data.lore}"}
         ],
         "temperature": 0.3,
-        "max_tokens": 128
+        "max_tokens": 256,
+        "response_format": {"type": "json_object"}
     }
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
             response = await client.post(f"{OLLAMA_URL}/v1/chat/completions", json=payload)
-            return response.json()["choices"][0]["message"]["content"].strip()
+            res = json.loads(response.json()["choices"][0]["message"]["content"])
+            return {
+                "gender": res.get("gender", "male").lower().strip(),
+                "description": res.get("description", "A clear, neutral speaking voice.")
+            }
         except Exception as e:
             logger.error(f"Profile error: {e}")
-            return "A clear, neutral speaking voice."
+            desc_lower = (actor_data.name + " " + actor_data.lore).lower()
+            is_female = any(w in desc_lower for w in ["female", "woman", "girl", "lady", "queen", "goddess", "mother", "sister", "wife", "she", "her", "herself"])
+            gender = "female" if is_female else "male"
+            return {
+                "gender": gender,
+                "description": "A clear, neutral speaking voice."
+            }
 
 async def forge_voice_seed(actor_id: str, acoustic_description: str, gender: str = "male") -> str:
     """Calls Parler-TTS (vox-designer) to create a unique 10s voice print."""
@@ -345,12 +357,13 @@ async def ingest_actor(data: ActorMetadata):
     existing_seeds = list(VOICE_SEEDS_DIR.glob(f"{data.actorId}_seed_*.wav"))
     if existing_seeds: return {"status": "cached"}
     
-    profile = await generate_vocal_profile(data)
-    desc_lower = profile.lower()
-    is_female = any(w in desc_lower for w in ["female", "woman", "girl", "lady", "queen", "goddess", "mother", "sister", "wife"])
-    gender = "female" if is_female else "male"
-    
-    path = await forge_voice_seed(data.actorId, profile, gender)
+    profile_data = await generate_vocal_profile(data)
+    profile_desc = profile_data.get("description", "A clear, neutral speaking voice.")
+    gender = profile_data.get("gender", "male").lower().strip()
+    if gender not in ["male", "female"]:
+        gender = "male"
+        
+    path = await forge_voice_seed(data.actorId, profile_desc, gender)
     return {"status": "created", "path": path} if path else {"status": "error"}
 
 @app.post("/api/voice-conversion")
