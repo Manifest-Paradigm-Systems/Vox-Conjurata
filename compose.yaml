@@ -25,6 +25,7 @@ services:
     - TTS_MONSTER_URL=http://vox-monster-fish:7860
     - TTS_MUSIC_URL=http://vox-audio-generation-music:8000
     - TTS_SFX_URL=http://vox-audio-generation-sfx:8001
+    - IMAGE_GEN_URL=http://vox-vision-gen:8003
     - FOUNDRY_API_URL=http://foundry-vtt:30000/api
     - FOUNDRY_API_KEY=${FOUNDRY_API_KEY}
     volumes:
