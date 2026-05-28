@@ -462,12 +462,20 @@ function startRecording(micType) {
             globalThis.voxState.mediaRecorder.start(250);
             console.log(`🎙️ Vox-Conjurata: Recording started (${micType}).`);
         } else {
-            console.warn("🎙️ Vox-Conjurata: startRecording called but MediaRecorder not ready.", {
-                exists: !!globalThis.voxState.mediaRecorder,
-                state: globalThis.voxState.mediaRecorder?.state
-            });
+            const reason = !globalThis.voxState.mediaRecorder 
+                ? "Microphone recorder not initialized. Ensure secure context (HTTPS/localhost) and grant mic permissions." 
+                : `Recorder state is "${globalThis.voxState.mediaRecorder.state}" (expected "inactive").`;
+            console.warn("🎙️ Vox-Conjurata: startRecording called but MediaRecorder not ready.", reason);
+            if (typeof ui !== 'undefined' && ui.notifications) {
+                ui.notifications.error(`🎙️ Vox-Conjurata: Microphone not ready! ${reason}`);
+            }
         }
-    } catch (e) { console.error("🎙️ Vox-Conjurata: Failed to start recording:", e); }
+    } catch (e) { 
+        console.error("🎙️ Vox-Conjurata: Failed to start recording:", e);
+        if (typeof ui !== 'undefined' && ui.notifications) {
+            ui.notifications.error(`🎙️ Vox-Conjurata: Failed to start recording: ${e.message || e}`);
+        }
+    }
 }
 
 function stopRecording() {
@@ -529,7 +537,12 @@ async function processAndSendAudio() {
             }
             await ChatMessage.create({ content: transcription, speaker: ChatMessage.getSpeaker({ actor: canvas.tokens.controlled[0]?.actor || game.user.character, alias: globalThis.voxState.activeSpeakerName }), flags: { "vox-conjurata": { type: voxType, emotionalResonance: enrichment.emotional_resonance, vocalDelivery: enrichment.vocal_delivery_prompt, audioUrl: audioUrl, engine: engine } } });
         }
-    } catch (err) { console.error("❌ Vox-Conjurata: Pipeline failure:", err); }
+    } catch (err) { 
+        console.error("❌ Vox-Conjurata: Pipeline failure:", err); 
+        if (typeof ui !== 'undefined' && ui.notifications) {
+            ui.notifications.error(`❌ Vox-Conjurata: Pipeline failure! Ensure the orchestrator is reachable. Error: ${err.message || err}`);
+        }
+    }
 }
 
 // Expose functions globally for cross-script access
