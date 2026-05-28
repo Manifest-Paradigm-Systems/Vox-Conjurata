@@ -120,11 +120,14 @@ class SpeechEngine:
 
 class CosyVoiceEngine(SpeechEngine):
     async def generate(self, text: str, actor_id: str, client: httpx.AsyncClient) -> Optional[bytes]:
-        seed_path = VOICE_SEEDS_DIR / f"{actor_id}_seed.wav"
-        if not seed_path.exists():
-            await forge_voice_seed(actor_id, f"A clear speaking voice for {actor_id}.")
+        seeds = list(VOICE_SEEDS_DIR.glob(f"{actor_id}_seed_*.wav"))
+        seed_path = seeds[0] if seeds else None
         
-        if seed_path.exists():
+        if not seed_path:
+            seed_path = VOICE_SEEDS_DIR / f"{actor_id}_seed_male.wav"
+            await forge_voice_seed(actor_id, f"A clear speaking voice for {actor_id}.", "male")
+        
+        if seed_path and seed_path.exists():
             try:
                 with open(seed_path, "rb") as f:
                     resp = await client.post(
@@ -228,9 +231,9 @@ async def generate_vocal_profile(actor_data: ActorMetadata) -> str:
             logger.error(f"Profile error: {e}")
             return "A clear, neutral speaking voice."
 
-async def forge_voice_seed(actor_id: str, acoustic_description: str) -> str:
+async def forge_voice_seed(actor_id: str, acoustic_description: str, gender: str = "male") -> str:
     """Calls Parler-TTS (vox-designer) to create a unique 10s voice print."""
-    seed_path = VOICE_SEEDS_DIR / f"{actor_id}_seed.wav"
+    seed_path = VOICE_SEEDS_DIR / f"{actor_id}_seed_{gender}.wav"
     async with httpx.AsyncClient(timeout=60.0) as client:
         try:
             response = await client.post(f"{TTS_DESIGNER_URL}/generate", json={"text": acoustic_description})
@@ -339,10 +342,15 @@ async def get_narrator_voices():
 
 @app.post("/api/ingest-actor")
 async def ingest_actor(data: ActorMetadata):
-    seed_path = VOICE_SEEDS_DIR / f"{data.actorId}_seed.wav"
-    if seed_path.exists(): return {"status": "cached"}
+    existing_seeds = list(VOICE_SEEDS_DIR.glob(f"{data.actorId}_seed_*.wav"))
+    if existing_seeds: return {"status": "cached"}
+    
     profile = await generate_vocal_profile(data)
-    path = await forge_voice_seed(data.actorId, profile)
+    desc_lower = profile.lower()
+    is_female = any(w in desc_lower for w in ["female", "woman", "girl", "lady", "queen", "goddess", "mother", "sister", "wife"])
+    gender = "female" if is_female else "male"
+    
+    path = await forge_voice_seed(data.actorId, profile, gender)
     return {"status": "created", "path": path} if path else {"status": "error"}
 
 @app.post("/api/voice-conversion")
