@@ -20,6 +20,8 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 
 COPY app.py .
 
+ENV LD_LIBRARY_PATH=/usr/lib/llvm-14/lib:$LD_LIBRARY_PATH
+
 EXPOSE 8003
 
 CMD ["python3", "app.py"]
