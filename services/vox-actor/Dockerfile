@@ -13,9 +13,9 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install PyTorch ROCm wheels directly
-# We use rocm6.1 for stability with RDNA3 on current kernels
+# Using 2.4.0+rocm6.1 as it is the closest stable version available for this index
 RUN pip3 install --no-cache-dir \
-    torch==2.3.1 torchaudio==2.3.1 \
+    torch==2.4.0 torchaudio==2.4.0 \
     --index-url https://download.pytorch.org/whl/rocm6.1
 
 # Install basic dependencies (avoiding ones that might pull in CUDA)
