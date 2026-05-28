@@ -13,10 +13,10 @@ logger = logging.getLogger("sdxl-gguf-service")
 
 app = FastAPI(title="SDXL GGUF LoRA Gen")
 
-MODEL_PATH = os.getenv("MODEL_PATH", "/models/sdxl_base_Q4_0.gguf")
-CLIP_L_PATH = os.getenv("CLIP_L_PATH", "/models/clip_l.safetensors")
-CLIP_G_PATH = os.getenv("CLIP_G_PATH", "/models/clip_g.safetensors")
-VAE_PATH = os.getenv("VAE_PATH", "/models/xlVAEC_c91.safetensors")
+MODEL_PATH = os.getenv("MODEL_PATH", "/models/stable-diffusion-xl-base-1.0-Q4_0.gguf")
+CLIP_L_PATH = os.getenv("CLIP_L_PATH", "/models/clip/clip_l.safetensors")
+CLIP_G_PATH = os.getenv("CLIP_G_PATH", "/models/clip/clip_g.safetensors")
+VAE_PATH = os.getenv("VAE_PATH", "/models/vae/xlVAEC_c91.safetensors")
 LORA_DIR = os.getenv("LORA_DIR", "/loras")
 THREADS = int(os.getenv("THREADS", "8"))
 

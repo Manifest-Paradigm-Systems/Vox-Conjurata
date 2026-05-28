@@ -327,7 +327,7 @@ services:
     - HIP_VISIBLE_DEVICES=0
     - CUDA_VISIBLE_DEVICES=0
     - VRAM_LIMIT=5.50GB
-    - MODEL_PATH=/models/sdxl_base_Q4_0.gguf
+    - MODEL_PATH=/models/stable-diffusion-xl-base-1.0-Q4_0.gguf
     - LORA_DIR=/loras
     volumes:
     - model_storage:/models:z
