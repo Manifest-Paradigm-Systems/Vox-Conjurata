@@ -1,5 +1,6 @@
 // Initialize a global, volatile transaction memory buffer for in-progress dialogue streams
 globalThis.voxDialogueCache = globalThis.voxDialogueCache || {};
+const voxHost = window.location.hostname || "127.0.0.1";
 
 console.log("🌲 Vox Chronicle | Initializing Ambient Campaign Tracker Pipeline...");
 
@@ -52,7 +53,7 @@ Hooks.on("canvasReady", () => {
                 callback: async () => {
                     for (const npc of pendingNPCs) {
                         const transcript = globalThis.voxDialogueCache[npc].join("\n");
-                        await fetch('http://localhost:8080/api/v1/dialogue/end', {
+                        await fetch(`http://${voxHost}:8080/api/v1/dialogue/end`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ npcName: npc, transcript: transcript })
@@ -97,7 +98,7 @@ Hooks.on("updateActor", (actor, updateData, options, userId) => {
                 icon: '<i class="fas fa-feather-alt"></i>',
                 label: "Compile Summary",
                 callback: () => {
-                    fetch('http://localhost:8080/api/v1/dialogue/end', {
+                    fetch(`http://${voxHost}:8080/api/v1/dialogue/end`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -140,7 +141,7 @@ Hooks.on("deleteCombat", (combat, options, userId) => {
                 icon: '<i class="fas fa-swords"></i>',
                 label: "Log Battle Chronicle",
                 callback: () => {
-                    fetch('http://localhost:8080/api/v1/dialogue/end', {
+                    fetch(`http://${voxHost}:8080/api/v1/dialogue/end`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
