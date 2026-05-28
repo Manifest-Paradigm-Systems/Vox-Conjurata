@@ -13,13 +13,12 @@ RUN apt-get update && apt-get install -y \
     git curl ffmpeg libsndfile1 \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. PYTORCH DIRECTIVE: Force ROCm 6.0 wheels for Torch and Torchvision
-# Installing both from the same index to ensure operator compatibility (nms error)
-RUN pip3 install --no-cache-dir \
-    torch==2.4.0 torchvision torchaudio \
+# 2. PYTORCH DIRECTIVE: Force exact ROCm 6.0 versions to prevent symbol mismatches
+RUN pip3 install --no-cache-dir --force-reinstall \
+    torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 \
     --index-url https://download.pytorch.org/whl/rocm6.0
 
-# 3. BUILD TOOLS: Install legacy setuptools for compatibility with whisper/grpcio source builds
+# 3. BUILD TOOLS: Install legacy setuptools for compatibility
 RUN pip3 install --no-cache-dir "setuptools<70.0.0" wheel
 
 # 4. CLONE: Setup CosyVoice codebase
@@ -36,7 +35,7 @@ RUN sed -i '/torch/d' requirements.txt && \
     sed -i '/nvidia/d' requirements.txt && \
     sed -i 's/inflect==7.0.0/inflect>=7.0.0/' requirements.txt
 
-# 6. SOURCE DEPS: Install problematic packages from source/binary as available
+# 6. SOURCE DEPS: Install problematic packages using legacy build support
 RUN pip3 install --no-cache-dir grpcio --only-binary :all: || pip3 install --no-cache-dir grpcio --no-build-isolation
 RUN pip3 install --no-cache-dir openai-whisper --no-build-isolation
 
