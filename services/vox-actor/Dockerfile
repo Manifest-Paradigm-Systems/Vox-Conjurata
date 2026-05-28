@@ -33,9 +33,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         git curl wget \
         ffmpeg libsndfile1 libsndfile1-dev \
         build-essential cmake pkg-config \
-        # Audio / signal processing runtime libs
         libasound2-dev portaudio19-dev \
-        # Needed by CosyVoice text-frontend
         libmecab-dev mecab mecab-ipadic-utf8 \
     && rm -rf /var/lib/apt/lists/*
 
