@@ -8,7 +8,7 @@
 // ==========================================
 (function() {
     try {
-        const ORCHESTRATOR_URL = `http://${window.location.hostname || "127.0.0.1"}:8080/api/v1/diagnostics/logs`;
+        const ORCHESTRATOR_URL = "/api/v1/diagnostics/logs";
 
         const shipLog = async (data) => {
             try {
@@ -60,9 +60,9 @@ globalThis.voxState = globalThis.voxState || {
     activeActorId: "", 
     mediaRecorder: null,
     audioChunks: [],
-    sttEndpoint: `http://${voxHost}:5000/v1/audio/transcriptions`,
-    voiceConversionEndpoint: `http://${voxHost}:8080/api/voice-conversion`,
-    ingestEndpoint: `http://${voxHost}:8080/api/ingest-actor`
+    sttEndpoint: "/api/v1/audio/transcriptions",
+    voiceConversionEndpoint: "/api/voice-conversion",
+    ingestEndpoint: "/api/ingest-actor"
 };
 
 // ==========================================
@@ -130,7 +130,7 @@ function registerKeybindings() {
         editable: [{ key: "KeyY" }],
         onDown: () => {
             console.log("🎙️ Vox-Conjurata: Narrator Key Down");
-            try { if (game.audio) game.audio.play({src: "sounds/lock.wav", volume: 0}, false); } catch (err) {}
+            try { playAudio("sounds/lock.wav", 0); } catch (err) {}
             if (!game.user.isGM || globalThis.voxState.narratorActive) return;
             globalThis.voxState.narratorActive = true;
             globalThis.voxState.activeSpeakerName = "Narrator";
@@ -153,7 +153,7 @@ function registerKeybindings() {
         editable: [{ key: "KeyH" }],
         onDown: () => {
             console.log("🎭 Vox-Conjurata: Puppeteer Key Down");
-            try { if (game.audio) game.audio.play({src: "sounds/lock.wav", volume: 0}, false); } catch (err) {}
+            try { playAudio("sounds/lock.wav", 0); } catch (err) {}
             if (!game.user.isGM || globalThis.voxState.puppetActive) return;
             const selectedToken = canvas.tokens.controlled[0];
             if (!selectedToken) {
@@ -181,7 +181,7 @@ function registerKeybindings() {
         editable: [{ key: "KeyI" }],
         onDown: () => {
             console.log("👤 Vox-Conjurata: Character Key Down");
-            try { if (game.audio) game.audio.play({src: "sounds/lock.wav", volume: 0}, false); } catch (err) {}
+            try { playAudio("sounds/lock.wav", 0); } catch (err) {}
             if (globalThis.voxState.playerActive) return;
             const speakerActor = canvas.tokens.controlled[0]?.actor || game.user.character;
             globalThis.voxState.playerActive = true;
@@ -338,7 +338,7 @@ async function onReady() {
     
     if (game.user.isGM) {
         try {
-            const response = await fetch(`http://${voxHost}:8080/api/v1/narrators/voices`);
+            const response = await fetch("/api/v1/narrators/voices");
             if (response.ok) {
                 const voices = await response.json();
                 const choices = {};
@@ -441,11 +441,11 @@ Hooks.on("renderChatMessageHTML", (message, html, data) => {
         jHtml.empty().append(`${contextLine}<div class="puppet-layout"><img class="puppet-avatar ${voxType === 'ai' ? 'ai-border' : ''}" src="${actorImg}"/><div class="puppet-body"><header class="message-header ${voxType}-header"><span class="sender ${voxType}-name">${actorName}</span><span class="${voxType}-tag"><i class="fas ${icon}"></i> ${tag}</span></header><div class="message-content ${voxType}-text">${originalContent}</div>${audioHtml}</div></div>`);
 
         if (audioUrl) {
-            jHtml.find(".vox-conjurata-audio-play-btn").on("click", (e) => { try { if (game.audio) game.audio.play({src: audioUrl, volume: 1.0}, false); else new Audio(audioUrl).play(); } catch (err) {} });
+            jHtml.find(".vox-conjurata-audio-play-btn").on("click", (e) => { playAudio(audioUrl, 1.0); });
             const timeSinceCreated = Date.now() - message.timestamp;
             if (timeSinceCreated < 5000) {
                 console.log("🎙️ Vox-Conjurata: Auto-playing generated voice...");
-                try { if (game.audio) game.audio.play({src: audioUrl, volume: 1.0}, false); else new Audio(audioUrl).play(); } catch (err) {}
+                playAudio(audioUrl, 1.0);
             }
         }
     }
@@ -454,6 +454,34 @@ Hooks.on("renderChatMessageHTML", (message, html, data) => {
 // ==========================================
 // 6. HELPER FUNCTIONS
 // ==========================================
+function playAudio(audioUrl, volume = 1.0) {
+    if (!audioUrl) return;
+    console.log(`🎙️ Vox-Conjurata: Playing audio: ${audioUrl} at volume ${volume}`);
+    try {
+        if (typeof AudioHelper !== "undefined" && typeof AudioHelper.play === "function") {
+            AudioHelper.play({ src: audioUrl, volume: volume }, false);
+            return;
+        }
+    } catch (err) {
+        console.warn("🎙️ Vox-Conjurata: AudioHelper.play failed, falling back", err);
+    }
+    try {
+        if (game.audio && typeof game.audio.play === "function") {
+            game.audio.play(audioUrl);
+            return;
+        }
+    } catch (err) {
+        console.warn("🎙️ Vox-Conjurata: game.audio.play failed, falling back", err);
+    }
+    try {
+        const audio = new Audio(audioUrl);
+        audio.volume = volume;
+        audio.play();
+    } catch (err) {
+        console.error("🎙️ Vox-Conjurata: HTML5 Audio play failed", err);
+    }
+}
+
 function startRecording(micType) {
     try {
         if (globalThis.voxState.mediaRecorder && globalThis.voxState.mediaRecorder.state === "inactive") {
@@ -533,7 +561,7 @@ async function processAndSendAudio() {
 
             if (audioUrl) { 
                 console.log(`🎙️ Vox-Conjurata: Auto-playing generated voice via ${engine}...`); 
-                try { if (game.audio) game.audio.play({src: audioUrl, volume: 1.0}, false); else new Audio(audioUrl).play(); } catch (err) {} 
+                playAudio(audioUrl, 1.0);
             }
             await ChatMessage.create({ content: transcription, speaker: ChatMessage.getSpeaker({ actor: canvas.tokens.controlled[0]?.actor || game.user.character, alias: globalThis.voxState.activeSpeakerName }), flags: { "vox-conjurata": { type: voxType, emotionalResonance: enrichment.emotional_resonance, vocalDelivery: enrichment.vocal_delivery_prompt, audioUrl: audioUrl, engine: engine } } });
         }
@@ -550,3 +578,4 @@ globalThis.startRecording = startRecording;
 globalThis.stopRecording = stopRecording;
 globalThis.statusMessage = statusMessage;
 globalThis.processAndSendAudio = processAndSendAudio;
+globalThis.playAudio = playAudio;
