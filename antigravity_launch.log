@@ -16,3 +16,5 @@ WARNING: radv is not a conformant Vulkan implementation, testing use only.
 
 20:01:40.194 › APPIMAGE env is not defined, current application is not an AppImage
 [559644:0527/200234.985579:ERROR:components/viz/service/display/display.cc:298] Frame latency is negative: -0.016 ms
+[559644:0527/201120.006490:ERROR:components/viz/service/display/display.cc:298] Frame latency is negative: -0.195 ms
+[559644:0527/201121.219122:ERROR:components/viz/service/display/display.cc:298] Frame latency is negative: -0.108 ms
