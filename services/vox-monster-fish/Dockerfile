@@ -9,8 +9,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV HSA_OVERRIDE_GFX_VERSION=12.0.1
 ENV PYTHONPATH=/opt/fish-speech
 
-# Install libsndfile1 (required by soundfile)
-RUN apt-get update && apt-get install -y libsndfile1 git && rm -rf /var/lib/apt/lists/*
+# Install libsndfile1 (required by soundfile) and portaudio19-dev (required by pyaudio)
+RUN apt-get update && apt-get install -y libsndfile1 git portaudio19-dev && rm -rf /var/lib/apt/lists/*
 
 # Copy the fish-speech codebase from the source stage
 COPY --from=source /opt/fish-speech /opt/fish-speech
