@@ -50,6 +50,7 @@
 // ==========================================
 // 2. GLOBAL STATE & CONFIGURATION
 // ==========================================
+const voxHost = window.location.hostname || "127.0.0.1";
 globalThis.voxState = globalThis.voxState || { 
     narratorActive: false, 
     puppetActive: false,
@@ -59,9 +60,9 @@ globalThis.voxState = globalThis.voxState || {
     activeActorId: "", 
     mediaRecorder: null,
     audioChunks: [],
-    sttEndpoint: "http://127.0.0.1:5000/v1/audio/transcriptions",
-    voiceConversionEndpoint: "http://127.0.0.1:8080/api/voice-conversion",
-    ingestEndpoint: "http://127.0.0.1:8080/api/ingest-actor"
+    sttEndpoint: `http://${voxHost}:5000/v1/audio/transcriptions`,
+    voiceConversionEndpoint: `http://${voxHost}:8080/api/voice-conversion`,
+    ingestEndpoint: `http://${voxHost}:8080/api/ingest-actor`
 };
 
 // ==========================================
@@ -70,6 +71,13 @@ globalThis.voxState = globalThis.voxState || {
 (async function initAudio() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         console.error("❌ Vox Audio Fail: Secure context required.");
+        if (typeof ui !== 'undefined' && ui.notifications) {
+            ui.notifications.error("❌ Vox Audio Fail: Secure context (HTTPS or localhost) required for microphone access!");
+        } else {
+            Hooks.once("ready", () => {
+                ui.notifications.error("❌ Vox Audio Fail: Secure context (HTTPS or localhost) required for microphone access!");
+            });
+        }
         return;
     }
     try {
@@ -407,3 +415,9 @@ async function processAndSendAudio() {
         }
     } catch (err) { console.error("❌ Vox-Conjurata: Pipeline failure:", err); }
 }
+
+// Expose functions globally for cross-script access
+globalThis.startRecording = startRecording;
+globalThis.stopRecording = stopRecording;
+globalThis.statusMessage = statusMessage;
+globalThis.processAndSendAudio = processAndSendAudio;
