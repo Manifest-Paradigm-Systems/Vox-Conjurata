@@ -357,7 +357,7 @@ async def enrich_and_instruct(speaker: str, role: str, text: str) -> DialogueEnr
             
             return DialogueEnrichment(
                 speaker=speaker, role=role, raw_text=text,
-                emotional_resonance=res.get("emotional_resonance", emotion),
+                emotional_resonance=str(res.get("emotional_resonance", emotion)),
                 vocal_delivery_prompt=res.get("vocal_delivery_prompt", f"Deliver as {emotion}."),
                 instruct_text=instruct_text,
                 monster_text=monster_text
