@@ -468,12 +468,11 @@ Hooks.on("renderChatMessageHTML", (message, html, data) => {
         jHtml.empty().append(`${contextLine}<div class="puppet-layout"><img class="puppet-avatar ${voxType === 'ai' ? 'ai-border' : ''}" src="${actorImg}"/><div class="puppet-body"><header class="message-header ${voxType}-header"><span class="sender ${voxType}-name">${actorName}</span><span class="${voxType}-tag"><i class="fas ${icon}"></i> ${tag}</span></header><div class="message-content ${voxType}-text">${originalContent}</div>${audioHtml}</div></div>`);
 
         if (audioUrl) {
+            // Wire up the manual replay button only.
+            // processAndSendAudio() already plays audio immediately on the GM's
+            // machine the moment the server responds. Auto-playing here causes
+            // a double-play (and can trigger additional Edge TTS via AudioHelper).
             jHtml.find(".vox-conjurata-audio-play-btn").on("click", (e) => { playAudio(audioUrl, 1.0); });
-            const timeSinceCreated = Date.now() - message.timestamp;
-            if (timeSinceCreated < 5000) {
-                console.log("🎙️ Vox-Conjurata: Auto-playing generated voice...");
-                playAudio(audioUrl, 1.0);
-            }
         }
     }
 });
