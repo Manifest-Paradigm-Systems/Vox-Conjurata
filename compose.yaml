@@ -132,7 +132,7 @@ services:
     - HSA_OVERRIDE_GFX_VERSION=12.0.1
     command: >
       --host 0.0.0.0 --port 8080
-      -m /models/eva-qwen-2.5-7b-Q4_K_M.gguf
+      -m /models/bartowski/EVA-Qwen2.5-7B-v0.1-GGUF/EVA-Qwen2.5-7B-v0.1-Q4_K_M.gguf
       -c 16000
       --cache-type-k q8_0
       --cache-type-v q8_0
