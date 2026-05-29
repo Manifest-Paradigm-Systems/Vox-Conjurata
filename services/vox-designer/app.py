@@ -31,10 +31,28 @@ async def generate_seed(payload: dict):
     try:
         # We choose a diverse voice to act as a "seed"
         communicate = edge_tts.Communicate(text, "en-GB-ThomasNeural")
-        await communicate.save(output_path)
+        temp_mp3 = output_path + ".mp3"
+        await communicate.save(temp_mp3)
+        
+        # Convert MP3 to WAV using ffmpeg
+        import subprocess
+        subprocess.run([
+            "ffmpeg", "-y", "-i", temp_mp3,
+            "-acodec", "pcm_s16le", "-ar", "22050", "-ac", "1",
+            output_path
+        ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        
+        # Clean up temp MP3
+        if os.path.exists(temp_mp3):
+            os.remove(temp_mp3)
+            
         return FileResponse(output_path, media_type="audio/wav")
     except Exception as e:
         logger.error(f"Forge error: {e}")
+        # Clean up temp MP3 if it exists on error
+        temp_mp3 = output_path + ".mp3"
+        if os.path.exists(temp_mp3):
+            os.remove(temp_mp3)
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
