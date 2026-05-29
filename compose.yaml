@@ -142,7 +142,7 @@ services:
       -c 16000
       --cache-type-k q8_0
       --cache-type-v q8_0
-      --flash-attn
+      --flash-attn on
       -ngl 99
       --keep -1
       --n-predict 150

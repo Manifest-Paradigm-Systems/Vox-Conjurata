@@ -15,7 +15,9 @@ RUN git clone https://github.com/ggerganov/llama.cpp.git && \
     cmake -B build -DGGML_HIPBLAS=ON -DAMDGPU_TARGETS=gfx1201 -DCMAKE_BUILD_TYPE=Release && \
     cmake --build build --config Release --target llama-server -j$(nproc)
 
-RUN cp /build/llama.cpp/build/bin/llama-server /usr/local/bin/llama-server && \
+RUN cp -P /build/llama.cpp/build/bin/* /usr/local/bin/ 2>/dev/null || true && \
+    find /build/llama.cpp/build -name "*.so*" -exec cp -d {} /usr/local/lib/ \; && \
+    ldconfig && \
     rm -rf /build
 
 EXPOSE 8080
