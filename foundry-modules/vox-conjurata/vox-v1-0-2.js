@@ -379,7 +379,7 @@ async function onReady() {
                 voices.forEach(v => { choices[v] = v; });
                 game.settings.settings.get("vox-conjurata.narratorVoice").choices = choices;
                 if (ui.activeWindow?.id === "client-settings") ui.activeWindow.render();
-                console.log("📡 Vox-Conjurata: Loaded dynamic Edge-TTS voices roster.");
+                console.log("📡 Vox-Conjurata: Edge-TTS suppressed \u2014 narrator voice driven by CosyVoice seed.");
             }
         } catch (e) {
             console.error("❌ Vox-Conjurata: Failed to load dynamic narrator voices.", e);

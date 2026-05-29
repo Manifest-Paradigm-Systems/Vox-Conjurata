@@ -406,14 +406,8 @@ async def root():
 
 @app.get("/api/v1/narrators/voices")
 async def get_narrator_voices():
-    """Fetches all free Microsoft English neural voice names live."""
-    try:
-        voices = await edge_tts.list_voices()
-        english_voices = [v["ShortName"] for v in voices if v["Locale"].startswith("en-")]
-        return english_voices
-    except Exception as e:
-        logger.error(f"Failed to fetch edge-tts voice profiles: {e}")
-        return ["en-US-ChristopherNeural", "en-GB-RyanNeural"]
+    """Edge-TTS suppressed: returns empty list. Narrator voice is driven by CosyVoice seed."""
+    return []
 
 @app.post("/api/ingest-actor")
 async def ingest_actor(data: ActorMetadata, force_refresh: bool = False):
