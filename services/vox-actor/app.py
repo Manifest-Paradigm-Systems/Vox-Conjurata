@@ -158,12 +158,9 @@ async def text_to_speech(
             ref_tmp.write(await reference_audio.read())
             ref_path = ref_tmp.name
 
-        # 2. Resample reference audio to 16 kHz (CosyVoice requirement)
-        prompt_speech_16k = load_wav(ref_path, 16000)
-
         # 3. Infer
         engine = get_cosyvoice()
-        output_iter = engine.inference_zero_shot(text, prompt_text, prompt_speech_16k)
+        output_iter = engine.inference_zero_shot(text, prompt_text, ref_path)
 
         # 4. Collect generator output and concatenate tensors
         chunks = [chunk["tts_speech"] for chunk in output_iter]
