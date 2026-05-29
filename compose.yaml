@@ -28,6 +28,7 @@ services:
     - IMAGE_GEN_URL=http://vox-vision-gen:8003
     - FOUNDRY_API_URL=http://foundry-vtt:30000/api
     - FOUNDRY_API_KEY=${FOUNDRY_API_KEY}
+    - PYTHONUNBUFFERED=1
     volumes:
     - model_storage:/models:z
     - ./services/orchestrator/voice_seeds:/app/voice_seeds:Z
@@ -167,6 +168,7 @@ services:
     environment:
     - HSA_OVERRIDE_GFX_VERSION=12.0.1
     - CUDA_VISIBLE_DEVICES=""
+    - PYTHONUNBUFFERED=1
     networks:
     - vox-net
     restart: unless-stopped
