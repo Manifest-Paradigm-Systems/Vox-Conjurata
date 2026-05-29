@@ -71,8 +71,8 @@ services:
     - /dev/kfd:/dev/kfd
     - /dev/dri:/dev/dri
     group_add:
-    - video
-    - render
+    - "39"
+    - "105"
     security_opt:
     - seccomp=unconfined
     environment:
@@ -98,8 +98,8 @@ services:
     - /dev/kfd:/dev/kfd
     - /dev/dri:/dev/dri
     group_add:
-    - video
-    - render
+    - "39"
+    - "105"
     security_opt:
     - seccomp=unconfined
     environment:
@@ -123,8 +123,8 @@ services:
     - /dev/kfd:/dev/kfd
     - /dev/dri:/dev/dri
     group_add:
-    - video
-    - render
+    - "39"
+    - "105"
     ipc: host
     security_opt:
     - seccomp=unconfined
@@ -154,8 +154,8 @@ services:
     - /dev/kfd:/dev/kfd
     - /dev/dri:/dev/dri
     group_add:
-    - video
-    - render
+    - "39"
+    - "105"
     security_opt:
     - seccomp=unconfined
     environment:
@@ -175,8 +175,8 @@ services:
     - /dev/kfd:/dev/kfd
     - /dev/dri:/dev/dri
     group_add:
-    - video
-    - render
+    - "39"
+    - "105"
     security_opt:
     - seccomp=unconfined
     environment:
@@ -204,8 +204,8 @@ services:
     - /dev/kfd:/dev/kfd
     - /dev/dri:/dev/dri
     group_add:
-    - video
-    - render
+    - "39"
+    - "105"
     security_opt:
     - seccomp=unconfined
     environment:
@@ -235,8 +235,8 @@ services:
     - /dev/kfd:/dev/kfd
     - /dev/dri:/dev/dri
     group_add:
-    - video
-    - render
+    - "39"
+    - "105"
     security_opt:
     - seccomp=unconfined
     environment:
@@ -262,8 +262,8 @@ services:
     - /dev/dri:/dev/dri
     # Grant access to the 'video' and 'render' groups so ROCm can open /dev/kfd
     group_add:
-    - video
-    - render
+    - "39"
+    - "105"
     security_opt:
     - seccomp=unconfined
     environment:
@@ -297,8 +297,8 @@ services:
     - /dev/kfd:/dev/kfd
     - /dev/dri:/dev/dri
     group_add:
-    - video
-    - render
+    - "39"
+    - "105"
     security_opt:
     - seccomp=unconfined
     environment:
@@ -320,8 +320,8 @@ services:
     - /dev/kfd:/dev/kfd
     - /dev/dri:/dev/dri
     group_add:
-    - video
-    - render
+    - "39"
+    - "105"
     security_opt:
     - seccomp=unconfined
     environment:
