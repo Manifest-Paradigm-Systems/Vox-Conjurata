@@ -109,9 +109,12 @@ async def clear_cache():
     _cosyvoice_engine = None
     
     # 1. Clear CUDA/ROCm cache layers if GPU runtime is pinned
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-        torch.cuda.ipc_collect()
+    try:
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
+    except Exception as e:
+        logger.warning(f"Failed to clear GPU memory cache: {e}")
     
     # 2. Force Python engine to wipe unreferenced weight tensors from memory
     gc.collect()
