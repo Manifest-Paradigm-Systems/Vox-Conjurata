@@ -114,7 +114,8 @@ services:
 
   vox-llm-core:
     container_name: vox-llm-core
-    image: ghcr.io/ggerganov/llama.cpp:server-rocm
+    build:
+      context: ./services/vox-llm-core
     ports:
     - 11434:8080
     volumes:

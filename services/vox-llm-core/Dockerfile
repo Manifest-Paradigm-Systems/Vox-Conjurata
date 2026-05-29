@@ -1,0 +1,23 @@
+# vox-llm-core (llama-server compiled natively for AMD ROCm gfx1201)
+FROM docker.io/rocm/dev-ubuntu-24.04:latest
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PATH="/opt/rocm/bin:${PATH}"
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    git build-essential cmake libcurl4-openssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+RUN git clone https://github.com/ggerganov/llama.cpp.git && \
+    cd llama.cpp && \
+    cmake -B build -DGGML_HIPBLAS=ON -DAMDGPU_TARGETS=gfx1201 -DCMAKE_BUILD_TYPE=Release && \
+    cmake --build build --config Release --target llama-server -j$(nproc)
+
+RUN cp /build/llama.cpp/build/bin/llama-server /usr/local/bin/llama-server && \
+    rm -rf /build
+
+EXPOSE 8080
+
+ENTRYPOINT ["llama-server"]
