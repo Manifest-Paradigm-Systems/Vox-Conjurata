@@ -26,7 +26,7 @@
     "minimumCoreVersion": "11",
     "compatibleCoreVersion": "13",
     "scripts": [
-        "vox-v1-0-3.js",
+        "vox-v1-0-4.js",
         "vox-interface-fix.js"
     ]
 }
