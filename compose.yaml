@@ -17,7 +17,7 @@ services:
     ports:
     - 8080:8080
     environment:
-    - OLLAMA_URL=http://vox-llm-core:8000
+    - OLLAMA_URL=http://vox-llm-core:8080
     - VISION_READER_URL=http://vox-vision-reader:8000
     - STT_URL=http://vox-voice:5000
     - TTS_DESIGNER_URL=http://vox-designer:5010
@@ -114,9 +114,9 @@ services:
 
   vox-llm-core:
     container_name: vox-llm-core
-    image: rocm/vllm:latest
+    image: ghcr.io/ggerganov/llama.cpp:server-rocm
     ports:
-    - 11434:8000
+    - 11434:8080
     volumes:
     - model_storage:/models:z
     devices:
@@ -125,25 +125,24 @@ services:
     group_add:
     - video
     - render
+    ipc: host
     security_opt:
     - seccomp=unconfined
     environment:
     - HSA_OVERRIDE_GFX_VERSION=12.0.1
-    - PYTORCH_ROCM_ARCH=gfx1201
-    - HIP_PLATFORM=amd
-    - ROCR_VISIBLE_DEVICES=0
-    - HIP_VISIBLE_DEVICES=0
-    - CUDA_VISIBLE_DEVICES=0
-    - VLLM_ROCM_USE_AITER=0
-    - GPU_ARCHS=gfx1100
-    - VRAM_ALLOCATION=11.20GB
     command: >
-      vllm serve /models/EVA-Qwen2.5-7B-v0.1-Q4_K_M.gguf
-      --tokenizer Qwen/Qwen2.5-7B-Instruct
-      --max-model-len 4096
-      --gpu-memory-utilization 0.22
+      --host 0.0.0.0 --port 8080
+      -m /models/eva-qwen-2.5-7b-Q4_K_M.gguf
+      -c 16000
+      --cache-type-k q8_0
+      --cache-type-v q8_0
+      --flash-attn on
+      -ngl 99
+      --keep -1
+      --n-predict 150
     networks:
     - vox-net
+    restart: unless-stopped
 
   vox-voice:
     build:

@@ -13,6 +13,7 @@ import tempfile
 import torch
 import torchaudio
 import hashlib
+import gc
 from modelscope import snapshot_download
 
 # ── Logger must be defined BEFORE any module-level usage ──────────────────────
@@ -99,6 +100,26 @@ async def root():
 @app.get("/health")
 async def health():
     return JSONResponse({"status": "ok", "device": _device, "rocm": _rocm_available})
+
+
+@app.post("/api/clear_cache")
+async def clear_cache():
+    global _cosyvoice_engine
+    logger.info("Purging Vox-Actor Engine cache and VRAM...")
+    _cosyvoice_engine = None
+    
+    # 1. Clear CUDA/ROCm cache layers if GPU runtime is pinned
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
+    
+    # 2. Force Python engine to wipe unreferenced weight tensors from memory
+    gc.collect()
+    logger.info("[-] Vox-Actor Engine cache successfully purged.")
+    return JSONResponse({
+        "status": "success",
+        "message": "Vox-Actor Engine cache successfully purged."
+    })
 
 
 @app.post("/api/tts")

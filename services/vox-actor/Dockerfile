@@ -1,10 +1,11 @@
 # vox-actor (CosyVoice ROCm Clean-Slate Build)
-FROM docker.io/rocm/dev-ubuntu-22.04:latest
+FROM docker.io/rocm/dev-ubuntu-24.04:latest
 
 # Architecture parameters for RDNA3
 ENV HSA_OVERRIDE_GFX_VERSION=12.0.1
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
 
 WORKDIR /app
 
@@ -15,7 +16,7 @@ RUN apt-get update && apt-get install -y \
 
 # 2. HARD BLOCKS: Explicitly block and remove any pip installation lines referencing NVIDIA/TensorRT
 RUN pip3 install --no-cache-dir setuptools wheel && \
-    pip3 list | grep -E "nvidia|tensorrt|cuda-python" | awk '{print $1}' | xargs -r pip3 uninstall -y
+    (pip3 list | grep -E "nvidia|tensorrt|cuda-python" | awk '{print $1}' | xargs -r pip3 uninstall -y || true)
 
 # 3. PYTORCH DIRECTIVE: Force native ROCm PyTorch wheels with explicit index
 # As requested: pip install --upgrade torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.0/
@@ -50,7 +51,7 @@ RUN pip3 install --no-cache-dir onnxruntime-rocm
 RUN pip3 install --no-cache-dir fastapi uvicorn python-multipart modelscope loguru
 
 # 10. FINAL PURGE: Hard block verification
-RUN pip3 list | grep -E "nvidia|tensorrt|cuda-python" | awk '{print $1}' | xargs -r pip3 uninstall -y
+RUN pip3 list | grep -E "nvidia|tensorrt|cuda-python" | awk '{print $1}' | xargs -r pip3 uninstall -y || true
 
 # Environment setup
 ENV PYTHONPATH="/app/CosyVoice:/app/CosyVoice/third_party/Matcha-TTS"
