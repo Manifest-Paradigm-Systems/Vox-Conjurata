@@ -86,25 +86,32 @@ globalThis.voxState = globalThis.voxState || {
 function resolveIsMonster(actor) {
     if (!actor) return false;
 
-    // 1. Foundry document type — most reliable signal
-    if (actor.type === "character") return false;   // PC — never a monster
-    if (actor.type === "npc") {
-        // PF2e NPC: check creature-type sub-field.
-        // Humanoid NPCs (merchants, guards-as-people, etc.) still go through
-        // CosyVoice; true monsters go through Fish Speech.
-        const creatureType = actor.system?.details?.type?.value?.toLowerCase() ?? "";
-        // Explicit humanoid → NOT a monster for TTS routing purposes
-        if (creatureType === "humanoid") return false;
-        return true;  // undead, dragon, aberration, beast, fiend, etc.
+    // 1. PCs are never monsters
+    if (actor.type === "character") return false;
+
+    // 2. Specific beast/monster race keywords in the name override everything else.
+    //    This ensures tokens named "Zulgath Warrior" or "Goblin Scout" get routed
+    //    to the monster voice engine (Fish Speech) even though they are mechanically humanoids in PF2e.
+    const strictMonsterKeywords = [
+        "dragon", "skeleton", "zombie", "undead", "fiend", "demon", "devil", 
+        "beast", "monster", "aberration", "xulgath", "zulgath", "goblin", 
+        "kobold", "orc", "troll", "ogre", "bugbear", "ghoul", "lich"
+    ];
+    const nameLower = actor.name?.toLowerCase() ?? "";
+    if (strictMonsterKeywords.some(kw => nameLower.includes(kw))) {
+        return true;
     }
 
-    // 2. Fallback for non-standard actor types (vehicles, hazards, etc.)
-    //    Use name keywords only as a last resort.
-    const monsterKeywords = ["dragon", "skeleton", "zombie", "undead", "fiend",
-                             "demon", "devil", "beast", "guard", "warrior",
-                             "monster", "aberration", "xulgath", "goblin"];
-    const nameLower = actor.name?.toLowerCase() ?? "";
-    return monsterKeywords.some(kw => nameLower.includes(kw));
+    // 3. For standard NPCs, check creature type
+    if (actor.type === "npc") {
+        const creatureType = actor.system?.details?.type?.value?.toLowerCase() ?? "";
+        if (creatureType === "humanoid") return false;
+        return true;  // non-humanoid NPC (beast, undead, construct, etc.)
+    }
+
+    // 4. Fallback for non-standard actor types (vehicles, hazards, etc.)
+    const fallbackKeywords = ["guard", "warrior"];
+    return fallbackKeywords.some(kw => nameLower.includes(kw));
 }
 
 /**
