@@ -315,7 +315,7 @@ async def forge_voice_seed(actor_id: str, acoustic_description: str, gender: str
     """Calls Parler-TTS (vox-designer) to create a unique 10s voice print."""
     seed_path = VOICE_SEEDS_DIR / f"{actor_id}_seed_{gender}.wav"
     text_path = VOICE_SEEDS_DIR / f"{actor_id}_seed_{gender}.txt"
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with httpx.AsyncClient(timeout=120.0) as client:
         try:
             response = await client.post(f"{TTS_DESIGNER_URL}/generate", json={"text": acoustic_description})
             if response.status_code == 200:
@@ -547,7 +547,7 @@ async def voice_conversion(request: Request):
         audio_data = None
         engine_name = "Edge-TTS"
         
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=120.0) as client:
             target_text = enriched.monster_text if is_monster else enriched.instruct_text
             
             if isinstance(engine, FishSpeechEngine):
@@ -567,8 +567,17 @@ async def voice_conversion(request: Request):
                 res_content = await edge_engine.generate(standardize_speech_text(transcription, "edge-tts", "neutral"), actor_id, client)
 
             if res_content:
+                # Detect audio format using magic bytes
+                mime_type = "audio/wav"
+                if res_content.startswith(b"RIFF"):
+                    mime_type = "audio/wav"
+                elif res_content.startswith(b"\x1a\x45\xdf\xa3"):
+                    mime_type = "audio/webm"
+                elif res_content.startswith(b"ID3") or res_content.startswith(b"\xff\xfb") or res_content.startswith(b"\xff\xf3") or res_content.startswith(b"\xff\xf2"):
+                    mime_type = "audio/mpeg"
+                
                 audio_base64 = base64.b64encode(res_content).decode('utf-8')
-                audio_data = f"data:audio/webm;base64,{audio_base64}"
+                audio_data = f"data:{mime_type};base64,{audio_base64}"
 
         return {
             "status": "success", "transcription": transcription, "enrichment": enriched.model_dump(),

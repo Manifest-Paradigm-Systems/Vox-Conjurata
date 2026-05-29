@@ -311,7 +311,7 @@ services:
     - seccomp=unconfined
     environment:
     - HSA_OVERRIDE_GFX_VERSION=12.0.1
-    - CUDA_VISIBLE_DEVICES=""
+    - CUDA_VISIBLE_DEVICES=0
     - TEXT_PRECISION=int8
     - VRAM_LIMIT=2.20GB
     networks:
