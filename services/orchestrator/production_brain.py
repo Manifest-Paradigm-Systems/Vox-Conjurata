@@ -247,24 +247,20 @@ class SpeechPipelineFactory:
         self.fishspeech = FishSpeechEngine()
 
     def get_engine(self, is_monster: bool, stats: dict, config: dict, vram_triggered: bool) -> SpeechEngine:
+        # Edge-TTS SUPPRESSED: never route to Edge-TTS regardless of VRAM or config.
         if vram_triggered:
-            fallback_voice = config.get("narrator_preferences", {}).get("default_voice", "en-US-ChristopherNeural")
-            rate = config.get("narrator_preferences", {}).get("rate_adjustment", "+0%")
-            logger.info(f"Using isolated Edge-TTS Voice Factory due to VRAM threshold trigger ({fallback_voice}).")
-            return EdgeTTSEngine(voice_name=fallback_voice, rate=rate)
+            logger.warning("[VRAM] Threshold triggered but Edge-TTS is suppressed. Using local engine.")
 
         tier_routing = config.get("tier_routing", {})
-        
+
         if is_monster:
             if tier_routing.get("monster_engine") == "edge-tts":
-                fallback_voice = config.get("narrator_preferences", {}).get("default_voice", "en-US-ChristopherNeural")
-                return EdgeTTSEngine(voice_name=fallback_voice)
+                logger.warning("[ROUTING] Config requests edge-tts for monster — suppressed, using Fish Speech.")
             return self.fishspeech
         else:
             if tier_routing.get("humanoid_engine") == "edge-tts":
-                fallback_voice = config.get("narrator_preferences", {}).get("default_voice", "en-US-ChristopherNeural")
-                return EdgeTTSEngine(voice_name=fallback_voice)
-            
+                logger.warning("[ROUTING] Config requests edge-tts for humanoid — suppressed, using CosyVoice.")
+
             if stats:
                 race = stats.get("race", "").lower()
                 level = stats.get("level", 0)
@@ -545,26 +541,21 @@ async def voice_conversion(request: Request):
         )
 
         audio_data = None
-        engine_name = "Edge-TTS"
-        
+        engine_name = "Unknown"
+
         async with httpx.AsyncClient(timeout=120.0) as client:
             target_text = enriched.monster_text if is_monster else enriched.instruct_text
-            
+
             if isinstance(engine, FishSpeechEngine):
                 engine_name = "Fish Speech"
             elif isinstance(engine, CosyVoiceEngine):
                 engine_name = "CosyVoice"
-            
+
             res_content = await engine.generate(target_text, actor_id, client)
-            
-            if res_content is None and not isinstance(engine, EdgeTTSEngine):
-                logger.error(f"🚨 [PIPELINE-CRITICAL] High-fidelity engine {engine_name} failed to generate audio for {actor_id}!")
-                logger.warn(f"⚠️ [FALLBACK] Reverting to generic Edge-TTS Cloud as an emergency failsafe.")
-                engine_name = "Edge-TTS (Fallback)"
-                fallback_voice = config.get("narrator_preferences", {}).get("default_voice", "en-US-ChristopherNeural")
-                rate = config.get("narrator_preferences", {}).get("rate_adjustment", "+0%")
-                edge_engine = EdgeTTSEngine(voice_name=fallback_voice, rate=rate)
-                res_content = await edge_engine.generate(standardize_speech_text(transcription, "edge-tts", "neutral"), actor_id, client)
+
+            if res_content is None:
+                # Edge-TTS SUPPRESSED: do not fall back to cloud TTS.
+                logger.error(f"🚨 [PIPELINE-CRITICAL] {engine_name} failed for {actor_id}. Edge-TTS suppressed — returning empty response.")
 
             if res_content:
                 # Detect audio format using magic bytes
