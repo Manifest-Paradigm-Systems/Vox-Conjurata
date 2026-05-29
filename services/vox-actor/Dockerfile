@@ -50,6 +50,9 @@ RUN pip3 install --no-cache-dir onnxruntime-rocm
 # 9. BASIC APP DEPS
 RUN pip3 install --no-cache-dir fastapi uvicorn python-multipart modelscope loguru
 
+# 9.5 PRE-DOWNLOAD MODELS: Bake Modelscope frontend models into the image filesystem
+RUN python3 -c "from modelscope import snapshot_download; snapshot_download('pengzhendong/wetext', local_dir='/root/.cache/modelscope/hub/pengzhendong/wetext')"
+
 # 10. FINAL PURGE: Hard block verification
 RUN pip3 list | grep -E "nvidia|tensorrt|cuda-python" | awk '{print $1}' | xargs -r pip3 uninstall -y || true
 
