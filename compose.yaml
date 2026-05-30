@@ -80,7 +80,7 @@ services:
     - HSA_OVERRIDE_GFX_VERSION=12.0.1
     - CUDA_VISIBLE_DEVICES=""
     - MODEL=/models/MiniCPM-V-2_6-GGUF/MiniCPM-V-2_6-Q4_K_M.gguf
-    - CLIP_MODEL_PATH=/models/MiniCPM-V-2_6-GGUF/MiniCPM-V-2_6-Q4_K_M.gguf
+    - CLIP_MODEL_PATH=/models/MiniCPM-V-2_6-GGUF/mmproj-model-f16.gguf
     - N_GPU_LAYERS=-1
     - CHAT_FORMAT=minicpm-v-2.6
     - VRAM_ALLOCATION=4.80GB
