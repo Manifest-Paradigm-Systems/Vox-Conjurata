@@ -16,7 +16,10 @@ RUN apt-get update && apt-get install -y \
     git curl ffmpeg libsndfile1 espeak-ng mecab libmecab-dev cargo rustc \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Install MeloTTS from GitHub
+# 2. Pre-install newer tokenizers and transformers to bypass Python 3.12 build issues
+RUN pip3 install --no-cache-dir "tokenizers>=0.19.0" "transformers>=4.40.0"
+
+# 3. Install MeloTTS from GitHub
 RUN pip3 install --no-cache-dir git+https://github.com/myshell-ai/MeloTTS.git
 
 # 3. Clone and install OpenVoice in editable mode
