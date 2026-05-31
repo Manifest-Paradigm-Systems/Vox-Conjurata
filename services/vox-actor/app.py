@@ -92,6 +92,28 @@ async def clear_cache():
         "message": "Vox-Actor cache successfully purged."
     })
 
+def map_emotion(tag: str) -> str:
+    tag = tag.lower().strip()
+    if not tag or tag == "default" or tag == "neutral":
+        return "default"
+    if "whisper" in tag:
+        return "whispering"
+    if "shout" in tag or "scream" in tag or "yell" in tag:
+        return "shouting"
+    if "excit" in tag:
+        return "excited"
+    if "cheer" in tag or "happy" in tag or "joy" in tag:
+        return "cheerful"
+    if "terror" in tag or "fear" in tag or "scar" in tag or "panic" in tag or "fright" in tag:
+        return "terrified"
+    if "angr" in tag or "enrag" in tag or "furi" in tag or "mad" in tag or "growl" in tag or "annoy" in tag:
+        return "angry"
+    if "sad" in tag or "sorrow" in tag or "cry" in tag or "mourn" in tag or "grief" in tag:
+        return "sad"
+    if "friend" in tag or "kind" in tag or "warm" in tag or "love" in tag:
+        return "friendly"
+    return "default"
+
 @app.post("/api/tts")
 async def text_to_speech(
     text: str = Form(...),
@@ -104,14 +126,14 @@ async def text_to_speech(
 
     logger.info(f"TTS request received: {len(text)} chars, initial emotion: {emotion}")
 
-    # Parse inline emotion brackets [emotion] or parentheses (emotion)
-    match = re.match(r'^[\[(]([a-zA-Z]+)[\])]\s*(.*)', text, re.IGNORECASE)
+    # Parse inline emotion brackets [emotion] or parentheses (emotion) (supporting spaces like "Terrified Whisper")
+    match = re.match(r'^[\[(]([a-zA-Z\s]+)[\])]\s*(.*)', text, re.IGNORECASE)
     if match:
-        parsed_emotion = match.group(1).lower().strip()
-        if parsed_emotion in SUPPORTED_EMOTIONS:
-            emotion = parsed_emotion
-            text = match.group(2)
-            logger.info(f"Parsed emotion from text prefix: {emotion}")
+        parsed_emotion = match.group(1).strip()
+        mapped = map_emotion(parsed_emotion)
+        emotion = mapped
+        text = match.group(2)
+        logger.info(f"Parsed emotion '{parsed_emotion}' -> mapped to '{emotion}'")
 
     emotion = emotion.lower().strip()
     if emotion not in SUPPORTED_EMOTIONS:
