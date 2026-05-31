@@ -22,7 +22,7 @@ WORKDIR /app/MeloTTS
 RUN sed -i 's/transformers==4.27.4/transformers>=4.40.0/g' requirements.txt
 
 # 3. Pre-install newer tokenizers, transformers, and numpy to bypass Python 3.12 build issues
-RUN pip3 install --no-cache-dir "tokenizers>=0.19.0" "transformers>=4.40.0" "numpy>=1.24.0" "setuptools>=65.0.0"
+RUN pip3 install --no-cache-dir "tokenizers>=0.19.0" "transformers>=4.40.0" "numpy>=1.24.0" "setuptools<80.0.0"
 
 # 4. Install MeloTTS from local modified directory
 RUN pip3 install --no-cache-dir .
