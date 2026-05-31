@@ -1,4 +1,4 @@
-# vox-actor (CosyVoice AMD PyTorch Base Build)
+# vox-actor (OpenVoice V2 AMD PyTorch Base Build)
 FROM docker.io/rocm/pytorch:latest
 
 # Architecture parameters for RDNA3/RDNA4
@@ -13,34 +13,28 @@ RUN groupadd -r render || true && groupadd -r video || true
 
 # 1. SYSTEM DEPS: runtime dependencies
 RUN apt-get update && apt-get install -y \
-    git curl ffmpeg libsndfile1 \
+    git curl ffmpeg libsndfile1 espeak-ng \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. CLONE: Setup CosyVoice codebase
-RUN git clone --recursive https://github.com/FunAudioLLM/CosyVoice.git /app/CosyVoice
-WORKDIR /app/CosyVoice
+# 2. Install MeloTTS from GitHub
+RUN pip3 install --no-cache-dir git+https://github.com/myshell-ai/MeloTTS.git
 
-# 3. SANITIZE: Remove PyTorch and library locks to use pre-installed AMD binaries
-RUN sed -i '/torch/d' requirements.txt && \
-    sed -i '/torchaudio/d' requirements.txt && \
-    sed -i '/onnxruntime/d' requirements.txt && \
-    sed -i '/grpcio/d' requirements.txt && \
-    sed -i '/openai-whisper/d' requirements.txt && \
-    sed -i '/tensorrt/d' requirements.txt && \
-    sed -i '/nvidia/d' requirements.txt && \
-    sed -i 's/inflect==7.0.0/inflect>=7.0.0/' requirements.txt
+# 3. Clone and install OpenVoice in editable mode
+RUN git clone https://github.com/myshell-ai/OpenVoice.git /app/OpenVoice
+WORKDIR /app/OpenVoice
+RUN pip3 install --no-cache-dir -e .
 
-# 4. Install dependencies
-RUN pip3 install --no-cache-dir grpcio openai-whisper --no-build-isolation
-RUN pip3 install --no-cache-dir -r requirements.txt
-RUN pip3 install --no-cache-dir onnxruntime-rocm
-RUN pip3 install --no-cache-dir fastapi uvicorn python-multipart modelscope loguru
+# 4. Install additional server dependencies
+RUN pip3 install --no-cache-dir fastapi uvicorn[standard] python-multipart pydantic loguru soundfile librosa
 
-# 5. PRE-DOWNLOAD MODELS
-RUN python3 -c "from modelscope import snapshot_download; snapshot_download('pengzhendong/wetext', local_dir='/root/.cache/modelscope/hub/pengzhendong/wetext')"
+# 5. Pre-download NLTK data and Unidic required by MeloTTS
+RUN python3 -m unidic download
+RUN python3 -c "import nltk; \
+nltk.download('averaged_perceptron_tagger', quiet=True); \
+nltk.download('averaged_perceptron_tagger_eng', quiet=True); \
+nltk.download('cmudict', quiet=True)"
 
-# Environment setup
-ENV PYTHONPATH="/app/CosyVoice:/app/CosyVoice/third_party/Matcha-TTS"
+WORKDIR /app
 COPY app.py /app/app.py
 
 EXPOSE 5020
