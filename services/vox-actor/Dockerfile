@@ -13,7 +13,7 @@ RUN groupadd -r render || true && groupadd -r video || true
 
 # 1. SYSTEM DEPS: runtime dependencies
 RUN apt-get update && apt-get install -y \
-    git curl ffmpeg libsndfile1 espeak-ng mecab libmecab-dev \
+    git curl ffmpeg libsndfile1 espeak-ng mecab libmecab-dev cargo rustc \
     && rm -rf /var/lib/apt/lists/*
 
 # 2. Install MeloTTS from GitHub
