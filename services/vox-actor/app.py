@@ -12,10 +12,10 @@ import os
 import tempfile
 import torch
 # Force PyTorch to CPU mode globally to prevent internal GPU-probing crashes
-torch.cuda.is_available = lambda: False
-torch.cuda.device_count = lambda: 0
-torch.set_num_threads(12)
-torch.set_num_interop_threads(4)
+# torch.cuda.is_available = lambda: False
+# torch.cuda.device_count = lambda: 0
+# torch.set_num_threads(12)
+# torch.set_num_interop_threads(4)
 
 import torchaudio
 import hashlib
