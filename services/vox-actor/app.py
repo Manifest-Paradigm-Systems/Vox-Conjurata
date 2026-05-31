@@ -169,12 +169,20 @@ async def text_to_speech(
 
         # 3. Extract target speaker SE
         logger.info("Extracting target speaker embedding...")
-        target_se, audio_name = se_extractor.get_se(
-            ref_path, 
-            tone_color_converter, 
-            target_dir=processed_dir, 
-            vad=True
-        )
+        try:
+            target_se, audio_name = se_extractor.get_se(
+                ref_path, 
+                tone_color_converter, 
+                target_dir=processed_dir, 
+                vad=True
+            )
+        except Exception as vad_err:
+            logger.warning(f"VAD SE extraction failed ({vad_err}). Falling back to direct extraction from reference audio...")
+            from openvoice.se_extractor import hash_numpy_array
+            audio_name = f"{os.path.basename(ref_path).rsplit('.', 1)[0]}_v2_{hash_numpy_array(ref_path)}"
+            se_path = os.path.join(processed_dir, audio_name, 'se.pth')
+            os.makedirs(os.path.dirname(se_path), exist_ok=True)
+            target_se = tone_color_converter.extract_se([ref_path], se_save_path=se_path)
 
         # 4. Select appropriate source SE
         source_se = source_se_default if emotion == "default" else source_se_style
