@@ -1,34 +1,26 @@
-# vox-actor (CosyVoice ROCm Clean-Slate Build)
-FROM docker.io/rocm/dev-ubuntu-24.04:latest
+# vox-actor (CosyVoice AMD PyTorch Base Build)
+FROM docker.io/rocm/pytorch:latest
 
-# Architecture parameters for RDNA3
-ENV HSA_OVERRIDE_GFX_VERSION=12.0.1
+# Architecture parameters for RDNA3/RDNA4
+ENV HSA_OVERRIDE_GFX_VERSION=11.0.0
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
-ENV PIP_BREAK_SYSTEM_PACKAGES=1
 
 WORKDIR /app
 
-# 1. SYSTEM DEPS: Essential build and runtime dependencies
+# Ensure video/render groups exist for Podman group_add mapping
+RUN groupadd -r render || true && groupadd -r video || true
+
+# 1. SYSTEM DEPS: runtime dependencies
 RUN apt-get update && apt-get install -y \
-    python3 python3-pip git curl ffmpeg libsndfile1 \
+    git curl ffmpeg libsndfile1 \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. HARD BLOCKS: Explicitly block and remove any pip installation lines referencing NVIDIA/TensorRT
-RUN pip3 install --no-cache-dir setuptools wheel && \
-    (pip3 list | grep -E "nvidia|tensorrt|cuda-python" | awk '{print $1}' | xargs -r pip3 uninstall -y || true)
-
-# 3. PYTORCH DIRECTIVE: Force native ROCm PyTorch wheels with explicit index
-# Upgraded to rocm6.2 to enable RDNA4 (gfx1201) GPU support
-RUN pip3 install --no-cache-dir --upgrade \
-    torch torchvision torchaudio \
-    --index-url https://download.pytorch.org/whl/rocm6.2/
-
-# 4. CLONE: Setup CosyVoice codebase
+# 2. CLONE: Setup CosyVoice codebase
 RUN git clone --recursive https://github.com/FunAudioLLM/CosyVoice.git /app/CosyVoice
 WORKDIR /app/CosyVoice
 
-# 5. SANITIZE: Aggressively strip CUDA/NVIDIA deps from source requirements
+# 3. SANITIZE: Remove PyTorch and library locks to use pre-installed AMD binaries
 RUN sed -i '/torch/d' requirements.txt && \
     sed -i '/torchaudio/d' requirements.txt && \
     sed -i '/onnxruntime/d' requirements.txt && \
@@ -38,23 +30,14 @@ RUN sed -i '/torch/d' requirements.txt && \
     sed -i '/nvidia/d' requirements.txt && \
     sed -i 's/inflect==7.0.0/inflect>=7.0.0/' requirements.txt
 
-# 6. SOURCE DEPS: Install problematic packages with legacy build support
+# 4. Install dependencies
 RUN pip3 install --no-cache-dir grpcio openai-whisper --no-build-isolation
-
-# 7. INSTALL: Remaining sanitized requirements
 RUN pip3 install --no-cache-dir -r requirements.txt
-
-# 8. ROCM ONNX: AMD-compatible execution provider
 RUN pip3 install --no-cache-dir onnxruntime-rocm
-
-# 9. BASIC APP DEPS
 RUN pip3 install --no-cache-dir fastapi uvicorn python-multipart modelscope loguru
 
-# 9.5 PRE-DOWNLOAD MODELS: Bake Modelscope frontend models into the image filesystem
+# 5. PRE-DOWNLOAD MODELS
 RUN python3 -c "from modelscope import snapshot_download; snapshot_download('pengzhendong/wetext', local_dir='/root/.cache/modelscope/hub/pengzhendong/wetext')"
-
-# 10. FINAL PURGE: Hard block verification
-RUN pip3 list | grep -E "nvidia|tensorrt|cuda-python" | awk '{print $1}' | xargs -r pip3 uninstall -y || true
 
 # Environment setup
 ENV PYTHONPATH="/app/CosyVoice:/app/CosyVoice/third_party/Matcha-TTS"
@@ -62,5 +45,4 @@ COPY app.py /app/app.py
 
 EXPOSE 5020
 
-# Run from the CosyVoice directory
 CMD ["python3", "/app/app.py"]
