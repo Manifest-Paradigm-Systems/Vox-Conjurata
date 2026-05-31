@@ -277,7 +277,7 @@ services:
     - seccomp=unconfined
     environment:
     # ── ROCm / HIP configuration ─────────────────────────────────────────
-    - HSA_OVERRIDE_GFX_VERSION=11.0.0
+    - HSA_OVERRIDE_GFX_VERSION=12.0.1
     - PYTORCH_ROCM_ARCH=gfx1201
     - HIP_PLATFORM=amd
     - ROCR_VISIBLE_DEVICES=0

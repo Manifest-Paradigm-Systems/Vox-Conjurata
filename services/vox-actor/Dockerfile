@@ -2,7 +2,7 @@
 FROM docker.io/rocm/pytorch:latest
 
 # Architecture parameters for RDNA3/RDNA4
-ENV HSA_OVERRIDE_GFX_VERSION=11.0.0
+ENV HSA_OVERRIDE_GFX_VERSION=12.0.1
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 
