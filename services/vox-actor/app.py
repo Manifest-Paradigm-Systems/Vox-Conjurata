@@ -54,6 +54,15 @@ logger.info("Loading source speaker embeddings...")
 source_se_default = torch.load(f"{CKPT_BASE}/en_default_se.pth", map_location=_device)
 source_se_style = torch.load(f"{CKPT_BASE}/en_style_se.pth", map_location=_device)
 
+# Load MeloTTS on startup for British/other V2 accents
+melo_tts_en = None
+try:
+    from melo.api import TTS
+    logger.info("Loading MeloTTS English model for base speaker accents...")
+    melo_tts_en = TTS(language='EN', device=_device)
+except Exception as e:
+    logger.error(f"Failed to load MeloTTS engine: {e}")
+
 app = FastAPI(
     title="vox-actor",
     description="OpenVoice V2 zero-shot voice-cloning TTS — AMD ROCm backend",
