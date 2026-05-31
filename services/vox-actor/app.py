@@ -124,6 +124,25 @@ except Exception as e:
     logger.warning(f"Silero VAD pre-warm failed (will retry on first request): {e}")
 
 # ---------------------------------------------------------------------------
+# ROCm/MIOpen kernel warm-up
+#
+# On AMD ROCm, MIOpen JIT-compiles GPU kernels on the very first forward pass
+# (~6-18s). Running a dummy inference at startup burns that cost once so every
+# real request thereafter runs at full GPU speed (~0.4s for MeloTTS).
+# ---------------------------------------------------------------------------
+if melo_tts_en is not None and melo_enbr_spk_id is not None:
+    logger.info("ROCm kernel warm-up: running dummy MeloTTS inference...")
+    try:
+        import tempfile as _tf
+        _warmup_fd, _warmup_path = _tf.mkstemp(suffix=".wav")
+        os.close(_warmup_fd)
+        melo_tts_en.tts_to_file("Warming up.", melo_enbr_spk_id, _warmup_path, speed=1.0)
+        os.unlink(_warmup_path)
+        logger.info("MeloTTS ROCm kernels compiled and warmed up. ✓")
+    except Exception as e:
+        logger.warning(f"MeloTTS warm-up failed (first real request will be slower): {e}")
+
+# ---------------------------------------------------------------------------
 # Pre-extract Jarvis seed speaker embedding — held as persistent HIP tensor
 #
 # This is the single biggest latency win: SE extraction (VAD + ToneColorConverter
