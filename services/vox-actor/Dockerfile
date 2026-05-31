@@ -39,7 +39,7 @@ RUN sed -i "s/'numpy==1.22.0'/'numpy>=1.22.0'/g" setup.py && \
     pip3 install --no-cache-dir -e .
 
 # 6. Install additional server dependencies
-RUN pip3 install --no-cache-dir fastapi uvicorn[standard] python-multipart pydantic loguru soundfile
+RUN pip3 install --no-cache-dir fastapi uvicorn[standard] python-multipart pydantic loguru soundfile soxr
 
 # 7. Pre-download NLTK data and Unidic required by MeloTTS
 RUN python3 -m unidic download
