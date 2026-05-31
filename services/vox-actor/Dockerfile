@@ -19,10 +19,10 @@ RUN pip3 install --no-cache-dir setuptools wheel && \
     (pip3 list | grep -E "nvidia|tensorrt|cuda-python" | awk '{print $1}' | xargs -r pip3 uninstall -y || true)
 
 # 3. PYTORCH DIRECTIVE: Force native ROCm PyTorch wheels with explicit index
-# As requested: pip install --upgrade torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.0/
+# Upgraded to rocm6.2 to enable RDNA4 (gfx1201) GPU support
 RUN pip3 install --no-cache-dir --upgrade \
     torch torchvision torchaudio \
-    --index-url https://download.pytorch.org/whl/rocm6.0/
+    --index-url https://download.pytorch.org/whl/rocm6.2/
 
 # 4. CLONE: Setup CosyVoice codebase
 RUN git clone --recursive https://github.com/FunAudioLLM/CosyVoice.git /app/CosyVoice
