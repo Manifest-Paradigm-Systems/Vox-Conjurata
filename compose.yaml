@@ -277,13 +277,13 @@ services:
     - seccomp=unconfined
     environment:
     # ── ROCm / HIP configuration ─────────────────────────────────────────
-    - HSA_OVERRIDE_GFX_VERSION=12.0.1
+    - HSA_OVERRIDE_GFX_VERSION=11.0.0
     - PYTORCH_ROCM_ARCH=gfx1201
     - HIP_PLATFORM=amd
     - ROCR_VISIBLE_DEVICES=0
     - HIP_VISIBLE_DEVICES=0
     # ── HARD BLOCK: ensure no CUDA/NVIDIA code path is activated ─────────
-    - CUDA_VISIBLE_DEVICES=""
+    - CUDA_VISIBLE_DEVICES=0
     # ── CosyVoice model location (shared model_storage volume) ───────────
     - COSYVOICE_MODEL_DIR=/models/CosyVoice-300M
     volumes:
