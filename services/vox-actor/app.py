@@ -128,12 +128,13 @@ async def text_to_speech(
     text: str = Form(...),
     reference_audio: UploadFile = File(...),
     prompt_text: str = Form(default="A clear speaking voice."),
-    emotion: str = Form(default="default")
+    emotion: str = Form(default="default"),
+    accent: str = Form(default="en-us")
 ):
     if not text.strip():
         raise HTTPException(status_code=400, detail="'text' field must not be empty.")
 
-    logger.info(f"TTS request received: {len(text)} chars, initial emotion: {emotion}")
+    logger.info(f"TTS request received: {len(text)} chars, initial emotion: {emotion}, accent: {accent}")
 
     # Parse inline emotion brackets [emotion] or parentheses (emotion) (supporting spaces like "Terrified Whisper")
     match = re.match(r'^[\[(]([a-zA-Z\s]+)[\])]\s*(.*)', text, re.IGNORECASE)
@@ -156,6 +157,9 @@ async def text_to_speech(
     output_path = None
     processed_dir = None
 
+    accent = accent.lower().strip()
+    is_british = accent in ['en-br', 'en-gb', 'british', 'uk', 'en_br']
+
     try:
         # 1. Save reference audio to a temp file
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as ref_tmp:
@@ -172,9 +176,20 @@ async def text_to_speech(
         # Create a directory for processed VAD files
         processed_dir = tempfile.mkdtemp()
 
-        # 2. Run base speaker TTS
-        logger.info(f"Running base speaker TTS for emotion: {emotion}, speed: {speed}")
-        base_speaker_tts.tts(text, src_path, speaker=emotion, language='English', speed=speed)
+        # 2. Run base speaker TTS & 4. Select appropriate source SE
+        source_se = None
+        if is_british and melo_tts_en is not None:
+            logger.info(f"Synthesizing base speech with British accent using MeloTTS V2: '{text[:50]}...'")
+            speaker_id = melo_tts_en.hps.data.spk2id['EN-BR']
+            melo_tts_en.tts_to_file(text, speaker_id, src_path, speed=speed)
+            
+            # Load the V2 EN-BR source speaker embedding
+            source_se_path = f"{CKPT_CONVERTER.replace('/converter', '')}/base_speakers/ses/en-br.pth"
+            source_se = torch.load(source_se_path, map_location=_device)
+        else:
+            logger.info(f"Running base speaker TTS for emotion: {emotion}, speed: {speed}")
+            base_speaker_tts.tts(text, src_path, speaker=emotion, language='English', speed=speed)
+            source_se = source_se_default if emotion == "default" else source_se_style
 
         # 3. Extract target speaker SE
         logger.info("Extracting target speaker embedding...")
@@ -192,9 +207,6 @@ async def text_to_speech(
             se_path = os.path.join(processed_dir, audio_name, 'se.pth')
             os.makedirs(os.path.dirname(se_path), exist_ok=True)
             target_se = tone_color_converter.extract_se([ref_path], se_save_path=se_path)
-
-        # 4. Select appropriate source SE
-        source_se = source_se_default if emotion == "default" else source_se_style
 
         # 5. Run tone color converter
         logger.info("Converting tone color...")
