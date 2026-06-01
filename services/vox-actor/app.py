@@ -368,13 +368,16 @@ def text_to_speech(
         # ------------------------------------------------------------------
         # 3. Target speaker SE — use pre-cached Jarvis SE when available
         # ------------------------------------------------------------------
-        if _jarvis_se_cache is not None:
+        filename = getattr(reference_audio, "filename", "") or ""
+        is_jarvis_req = "jarvis" in filename.lower()
+
+        if is_jarvis_req and _jarvis_se_cache is not None:
             # Fast path: reuse the startup-extracted HIP tensor
             target_se = _jarvis_se_cache
             logger.info("Using pre-cached Jarvis seed SE (fast path). ✓")
         else:
             # Slow fallback: extract SE from the uploaded reference audio
-            logger.info("Pre-cached SE unavailable — extracting from uploaded audio...")
+            logger.info(f"Pre-cached SE unavailable or not Jarvis request (filename={filename}) — extracting from uploaded audio...")
             use_tmp_seed = True
             tmp_se_dir = tempfile.mkdtemp()
             try:

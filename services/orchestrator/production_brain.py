@@ -158,12 +158,27 @@ class CosyVoiceEngine(SpeechEngine):
         if seed_path and seed_path.exists():
             logger.info(f"[VOICE-ROUTING] Using voice seed: {seed_path.name}")
             try:
-                with open(seed_path, "rb") as f:
+                # Opportunity 1: Send dummy file for Jarvis to avoid 15MB disk read and HTTP upload
+                is_jarvis = "jarvis" in seed_path.name.lower() or actor_id.lower() == "jarvis"
+                
+                if is_jarvis:
+                    logger.info("[VOICE-ROUTING] Jarvis detected — sending dummy reference file (fast-path)")
+                    files = {"reference_audio": (seed_path.name, b"dummy", "audio/wav")}
+                    f_handle = None
+                else:
+                    f_handle = open(seed_path, "rb")
+                    files = {"reference_audio": (seed_path.name, f_handle, "audio/wav")}
+
+                try:
                     resp = await client.post(
                         f"{TTS_ACTOR_URL}/api/tts",
                         data={"text": text},
-                        files={"reference_audio": (seed_path.name, f, "audio/wav")}
+                        files=files
                     )
+                finally:
+                    if f_handle:
+                        f_handle.close()
+
                 if resp.status_code == 200:
                     return resp.content
                 else:
