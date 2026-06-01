@@ -119,7 +119,7 @@ services:
     build:
       context: ./services/vox-llm-core
     ports:
-    - 11434:8080
+    - 11435:8080  # host 11434 is reserved for the standalone ollama container
     volumes:
     - model_storage:/models:z
     devices:
