@@ -381,28 +381,47 @@ window.addEventListener("keyup", (event) => {
 // ==========================================
 // 4. MODULE LIFECYCLE (READY & SCENE SCAN)
 // ==========================================
+const scannedScenes = new Set();
+
+async function scanActiveSceneBattlemap() {
+    if (!game.user.isGM || !canvas.ready || !canvas.scene) return;
+    
+    const sceneId = canvas.scene.id;
+    const bgImage = canvas.scene.background?.src;
+    
+    if (!bgImage || scannedScenes.has(sceneId)) return;
+    
+    console.log(`🗺️ Vox-Conjurata: New scene detected (${canvas.scene.name}). Triggering spatial analysis...`);
+    scannedScenes.add(sceneId);
+    
+    try {
+        const response = await fetch("/api/scan-battlemap", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ imagePath: bgImage, sceneId: sceneId })
+        });
+        const data = await response.json();
+        if (data.status === "success") {
+            console.log("🗺️ Vox-Conjurata: Spatial analysis complete. Data received:", data.data);
+            ui.notifications.info(`🗺️ Vox-Conjurata: Spatial analysis complete for ${canvas.scene.name}.`);
+            // Logic to draw walls/doors/lights would go here, 
+            // potentially calling a Foundry macro or internal API.
+        }
+    } catch (err) {
+        console.error("❌ Vox-Conjurata: Failed to trigger battlemap scan:", err);
+    }
+}
+
 async function scanActiveSceneTokens() {
     if (!game.user.isGM || !canvas.ready) return;
-    console.log("📡 Vox-Conjurata: Scanning active scene tokens for pre-session ingestion...");
-    const tokens = canvas.tokens?.placeables || [];
-    for (const token of tokens) {
-        if (!token.actor) continue;
-        const actor = token.actor;
-        
-        // Resolve monster status via shared authoritative helper
-        const is_monster = resolveIsMonster(actor);
-        
-        const actorData = {
-            actorId: actor.id, name: actor.name,
-            lore: actor.system.details?.biography?.value || actor.system.description?.value || "No bio available.",
-            stats: { race: actor.system.details?.race || "Unknown", alignment: actor.system.details?.alignment || "Neutral", level: actor.system.details?.level?.value || 0 },
-            artPath: actor.img, isMonster: is_monster
-        };
-        console.log(`📦 Vox-Conjurata: Pre-session scraping for ${actorData.name} (Monster: ${is_monster})...`);
+...
         try {
             await fetch(globalThis.voxState.ingestEndpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(actorData) });
         } catch (err) { console.error(`❌ Vox-Conjurata: Failed to ingest token metadata for ${actorData.name}:`, err); }
     }
+    
+    // Also scan the battlemap itself
+    await scanActiveSceneBattlemap();
 }
 
 async function onReady() {
