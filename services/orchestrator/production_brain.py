@@ -402,19 +402,22 @@ class SpeechPipelineFactory:
 
 pipeline_factory = SpeechPipelineFactory()
 
-async def generate_vocal_profile(actor_data: ActorMetadata) -> dict:
+async def generate_vocal_profile(actor_data: ActorMetadata, visual_description: str = "") -> dict:
     """Uses Qwen 2.5 via vLLM completions endpoint to generate a descriptive acoustic prompt and gender."""
     system_instruction = (
         "You are an expert casting director and acoustic engineer. "
-        "Analyze the character name and biography. Output a JSON object with: "
+        "Analyze the character name, biography, and physical appearance. Output a JSON object with: "
         "'gender' (strictly 'male' or 'female') and "
         "'description' (a single-sentence acoustic description including age, raspiness, pitch, inflections, and room acoustics)."
     )
+    
+    appearance_info = f"\nPhysical Appearance: {visual_description}" if visual_description else ""
+    
     payload = {
         "model": "EVA-UNIT-01/EVA-Qwen2.5-7B-v0.1",
         "messages": [
             {"role": "system", "content": system_instruction},
-            {"role": "user", "content": f"Character Name: {actor_data.name}\nBiography/Lore: {actor_data.lore}"}
+            {"role": "user", "content": f"Character Name: {actor_data.name}\nBiography/Lore: {actor_data.lore}{appearance_info}"}
         ],
         "temperature": 0.3,
         "max_tokens": 256,
