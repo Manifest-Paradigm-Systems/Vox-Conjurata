@@ -33,6 +33,8 @@ services:
     - model_storage:/models:z
     - ./services/orchestrator/voice_seeds:/app/voice_seeds:Z
     - /sys:/sys:ro
+    - /home/EvokeStudio/manifest-paradigm/foundry/data:/foundry_data:ro,z
+    - /run/user/1000/podman/podman.sock:/var/run/docker.sock
     networks:
     - vox-net
 
