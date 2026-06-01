@@ -10,6 +10,9 @@ import json
 import urllib.parse
 import base64
 import edge_tts
+import re
+import wave
+import io
 from pathlib import Path
 
 # --- vox-conjurata Orchestrator Service ---
@@ -55,6 +58,42 @@ VOICE_SEEDS_DIR.mkdir(exist_ok=True)
 CONFIG_PATH = Path("./settings/voice_routing_config.json")
 
 # --- Helper Functions ---
+
+def split_into_sentences(text: str) -> List[str]:
+    # Split by punctuation followed by space, or by newline
+    raw_sentences = re.split(r'(?<=[.!?])\s+|\n+', text)
+    return [s.strip() for s in raw_sentences if s.strip()]
+
+def concatenate_wavs(wav_bytes_list: List[bytes]) -> Optional[bytes]:
+    if not wav_bytes_list:
+        return None
+    # Filter out empty or None responses
+    valid_wavs = [w for w in wav_bytes_list if w]
+    if not valid_wavs:
+        return None
+    if len(valid_wavs) == 1:
+        return valid_wavs[0]
+        
+    try:
+        first_wav = wave.open(io.BytesIO(valid_wavs[0]), 'rb')
+        params = first_wav.getparams()
+        
+        output_io = io.BytesIO()
+        out_wav = wave.open(output_io, 'wb')
+        out_wav.setparams(params)
+        
+        for w_bytes in valid_wavs:
+            w_file = wave.open(io.BytesIO(w_bytes), 'rb')
+            out_wav.writeframes(w_file.readframes(w_file.getnframes()))
+            w_file.close()
+            
+        out_wav.close()
+        first_wav.close()
+        return output_io.getvalue()
+    except Exception as e:
+        logger.error(f"Error concatenating WAVs: {e}")
+        return valid_wavs[0]
+
 
 def standardize_speech_text(text: str, engine_type: str, emotion: str) -> str:
     """Maps and formats emotional tags and sound effects to engine-specific syntax."""
@@ -560,7 +599,22 @@ async def voice_conversion(request: Request):
             elif isinstance(engine, CosyVoiceEngine):
                 engine_name = "CosyVoice"
 
-            res_content = await engine.generate(target_text, actor_id, client)
+            # Opportunity 2: Split text into sentences and process concurrently, then concatenate
+            sentences = split_into_sentences(target_text)
+            logger.info(f"[VOICE-ROUTING] Dialogue text split into {len(sentences)} sentences: {sentences}")
+            
+            if len(sentences) <= 1:
+                res_content = await engine.generate(target_text, actor_id, client)
+            else:
+                logger.info(f"[VOICE-ROUTING] Running concurrent synthesis for {len(sentences)} sentences...")
+                tasks = [engine.generate(s, actor_id, client) for s in sentences]
+                results = await asyncio.gather(*tasks)
+                
+                # Check if all sentences failed
+                if not any(results):
+                    res_content = None
+                else:
+                    res_content = concatenate_wavs(results)
 
             if res_content is None:
                 # Edge-TTS SUPPRESSED: do not fall back to cloud TTS.
