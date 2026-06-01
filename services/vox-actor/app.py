@@ -295,7 +295,7 @@ def map_emotion(tag: str) -> str:
         return "excited"
     if "cheer" in tag or "happy" in tag or "joy" in tag:
         return "cheerful"
-    if "terror" in tag or "fear" in tag or "scar" in tag or "panic" in tag or "fright" in tag:
+    if "terrif" in tag or "fear" in tag or "scar" in tag or "panic" in tag or "fright" in tag:
         return "terrified"
     if "angr" in tag or "enrag" in tag or "furi" in tag or "mad" in tag or "growl" in tag or "annoy" in tag:
         return "angry"
