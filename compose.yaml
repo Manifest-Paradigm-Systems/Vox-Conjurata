@@ -66,6 +66,7 @@ services:
   vox-vision-reader:
     image: ghcr.io/abetlen/llama-cpp-python:latest
     container_name: vox-vision-reader
+    profiles: ["ondemand"]
     ports:
     - 8002:8000
     devices:
@@ -94,6 +95,7 @@ services:
     build:
       context: ./services/vox-vision
     container_name: vox-vision
+    profiles: ["ondemand"]
     ports:
     - 7860:7860
     devices:
