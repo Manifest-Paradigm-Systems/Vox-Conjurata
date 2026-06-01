@@ -72,7 +72,7 @@ base_speaker_tts = BaseSpeakerTTS(f"{CKPT_BASE}/config.json", device=_device)
 base_speaker_tts.load_ckpt(f"{CKPT_BASE}/checkpoint.pth")
 
 logger.info(f"Loading ToneColorConverter from {CKPT_CONVERTER}...")
-tone_color_converter = ToneColorConverter(f"{CKPT_CONVERTER}/config.json", device=_device)
+tone_color_converter = ToneColorConverter(f"{CKPT_CONVERTER}/config.json", device=_device, enable_watermark=False)
 tone_color_converter.load_ckpt(f"{CKPT_CONVERTER}/checkpoint.pth")
 
 # ---------------------------------------------------------------------------
@@ -180,6 +180,37 @@ def _extract_jarvis_se():
         _jarvis_se_cache = None
 
 _extract_jarvis_se()
+
+# ---------------------------------------------------------------------------
+# ToneColorConverter ROCm kernel warm-up
+#
+# Compile voice conversion kernels before the first user request by running a
+# dummy conversion at startup.
+# ---------------------------------------------------------------------------
+if _jarvis_se_cache is not None and melo_tts_en is not None and source_se_enbr is not None:
+    logger.info("ROCm kernel warm-up: running dummy ToneColorConverter conversion...")
+    try:
+        import tempfile as _tf
+        _dummy_src_fd, _dummy_src_path = _tf.mkstemp(suffix=".wav")
+        os.close(_dummy_src_fd)
+        melo_tts_en.tts_to_file("Warm up.", melo_enbr_spk_id, _dummy_src_path, speed=1.0)
+        
+        _dummy_out_fd, _dummy_out_path = _tf.mkstemp(suffix=".wav")
+        os.close(_dummy_out_fd)
+        
+        tone_color_converter.convert(
+            audio_src_path=_dummy_src_path,
+            src_se=source_se_enbr,
+            tgt_se=_jarvis_se_cache,
+            output_path=_dummy_out_path,
+            message="@MyShell",
+        )
+        os.unlink(_dummy_src_path)
+        os.unlink(_dummy_out_path)
+        logger.info("ToneColorConverter ROCm kernels compiled and warmed up. ✓")
+    except Exception as e:
+        logger.warning(f"ToneColorConverter warm-up failed: {e}")
+
 
 # ---------------------------------------------------------------------------
 # FastAPI app
