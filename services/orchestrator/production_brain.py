@@ -14,6 +14,7 @@ import re
 import wave
 import io
 from pathlib import Path
+import docker
 
 # --- vox-conjurata Orchestrator Service ---
 # Master Controller with VRAM Guardrails and Qwen-vLLM Memory Optimizations
