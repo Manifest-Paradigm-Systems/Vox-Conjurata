@@ -543,14 +543,65 @@ async def get_narrator_voices():
     """Edge-TTS suppressed: returns empty list. Narrator voice is driven by CosyVoice seed."""
     return []
 
+async def get_visual_description(image_path_relative: str) -> str:
+    """Uses MiniCPM-V-2.6 (vox-vision-reader) to describe the character image."""
+    full_path = FOUNDRY_DATA_DIR / image_path_relative
+    if not full_path.exists():
+        logger.warning(f"🖼️ Visual Scan: Image not found at {full_path}")
+        return ""
+
+    try:
+        await hotswap_manager.swap_to("vox-vision-reader")
+        
+        # Prepare the image payload for llama-cpp-python vision endpoint
+        import base64
+        with open(full_path, "rb") as image_file:
+            base64_image = base64.b64encode(image_file.read()).decode('utf-8')
+            
+        payload = {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Describe the physical appearance of this creature or person in detail. Focus on race, species, age, gender, and distinguishing features like raspiness or vocal potential indicators."},
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+                    ]
+                }
+            ],
+            "max_tokens": 300
+        }
+        
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(f"{VISION_READER_URL}/v1/chat/completions", json=payload)
+            if resp.status_code == 200:
+                desc = resp.json()["choices"][0]["message"]["content"]
+                logger.info(f"🖼️ Visual Scan Success: {desc[:50]}...")
+                return desc
+            else:
+                logger.error(f"🖼️ Visual Scan Failed: {resp.status_code}")
+                return ""
+    except Exception as e:
+        logger.error(f"🖼️ Visual Scan Error: {e}")
+        return ""
+    finally:
+        await hotswap_manager.restore_hot_state("vox-vision-reader")
+
 @app.post("/api/ingest-actor")
 async def ingest_actor(data: ActorMetadata, force_refresh: bool = False):
     """Ingest an actor and forge their voice seed.
     
-    Set force_refresh=true to bypass the seed cache and regenerate even if a
-    seed file already exists on disk. Required after a cache purge.
+    If no seed exists, it triggers a visual scan via vox-vision-reader
+    to inform the vocal profile generation.
     """
     existing_seeds = list(VOICE_SEEDS_DIR.glob(f"{data.actorId}_seed_*.wav"))
+    
+    visual_desc = ""
+    
+    if (not existing_seeds) or force_refresh:
+        # Perform Visual Analysis ONLY if we are creating a new seed
+        logger.info(f"[INGEST] No seed found for {data.name}. Triggering visual analysis...")
+        visual_desc = await get_visual_description(data.artPath)
+
     if existing_seeds and not force_refresh:
         logger.info(f"[INGEST] Cache hit for {data.actorId} ({data.name}), returning cached seed.")
         return {"status": "cached", "seeds": [s.name for s in existing_seeds]}
@@ -561,14 +612,14 @@ async def ingest_actor(data: ActorMetadata, force_refresh: bool = False):
             stale.unlink(missing_ok=True)
             stale.with_suffix(".txt").unlink(missing_ok=True)
 
-    profile_data = await generate_vocal_profile(data)
+    profile_data = await generate_vocal_profile(data, visual_desc)
     profile_desc = profile_data.get("description", "A clear, neutral speaking voice.")
     gender = profile_data.get("gender", "male").lower().strip()
     if gender not in ["male", "female"]:
         gender = "male"
 
     path = await forge_voice_seed(data.actorId, profile_desc, gender)
-    return {"status": "created", "path": path} if path else {"status": "error"}
+    return {"status": "created", "path": path, "visual_description": visual_desc} if path else {"status": "error"}
 
 class CachePurgeRequest(BaseModel):
     actor_ids: Optional[List[str]] = Field(
