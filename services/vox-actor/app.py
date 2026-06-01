@@ -359,7 +359,7 @@ def text_to_speech(
         # 2. Base TTS synthesis + source SE selection
         # ------------------------------------------------------------------
         t_start = time.time()
-        if is_british and melo_tts_en is not None:
+        if is_british and melo_tts_en is not None and emotion == "default":
             logger.info(f"MeloTTS V2 EN-BR synthesis: '{text[:60]}'")
             melo_tts_en.tts_to_file(text, melo_enbr_spk_id, src_path, speed=speed)
             source_se = source_se_enbr  # pre-loaded HIP tensor
