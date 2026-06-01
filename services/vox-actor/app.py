@@ -13,6 +13,7 @@ Performance optimisations:
 """
 
 import os
+os.environ["MIOPEN_FIND_MODE"] = "2"
 import shutil
 import torch
 import tempfile
