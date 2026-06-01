@@ -252,8 +252,58 @@ class DialogueEndRequest(BaseModel):
     npcName: str
     transcript: str
 
+class BattlemapScanRequest(BaseModel):
+    imagePath: str
+    sceneId: str
+
 # --- Storage ---
 error_buffer: List[dict] = []
+
+@app.post("/api/scan-battlemap")
+async def scan_battlemap(req: BattlemapScanRequest):
+    """Triggers vox-vision to analyze a battlemap for walls, doors, and lights."""
+    logger.info(f"🗺️ Battlemap Scan requested for Scene: {req.sceneId}")
+    
+    full_path = FOUNDRY_DATA_DIR / req.imagePath
+    if not full_path.exists():
+        logger.error(f"🗺️ Battlemap Scan: File not found at {full_path}")
+        # Try without leading slash if absolute fails
+        if req.imagePath.startswith("/"):
+            full_path = FOUNDRY_DATA_DIR / req.imagePath.lstrip("/")
+            
+    if not full_path.exists():
+        raise HTTPException(status_code=404, detail=f"Battlemap image not found at {req.imagePath}")
+
+    try:
+        await hotswap_manager.swap_to("vox-vision")
+        
+        # Prepare the image payload for vox-vision
+        import base64
+        with open(full_path, "rb") as f:
+            img_b64 = base64.b64encode(f.read()).decode('utf-8')
+            
+        payload = {
+            "image": img_b64,
+            "scene_id": req.sceneId,
+            "tasks": ["walls", "doors", "lights", "ambient_sounds"]
+        }
+        
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            # Assuming vox-vision has an endpoint /analyze
+            resp = await client.post(f"{VISION_ENGINE_URL}/analyze", json=payload)
+            if resp.status_code == 200:
+                analysis_data = resp.json()
+                logger.info(f"🗺️ Battlemap Scan Complete for {req.sceneId}")
+                return {"status": "success", "data": analysis_data}
+            else:
+                logger.error(f"🗺️ Battlemap Scan Failed: {resp.status_code}")
+                return {"status": "error", "message": f"Vision engine returned {resp.status_code}"}
+                
+    except Exception as e:
+        logger.error(f"🗺️ Battlemap Scan Error: {e}")
+        return {"status": "error", "message": str(e)}
+    finally:
+        await hotswap_manager.restore_hot_state("vox-vision")
 
 # --- Voice Generation Engines (Modular Factory Pattern) ---
 
