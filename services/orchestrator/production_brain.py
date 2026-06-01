@@ -49,8 +49,84 @@ TTS_DESIGNER_URL = os.getenv("TTS_DESIGNER_URL", "http://vox-designer:5010")
 TTS_ACTOR_URL = os.getenv("TTS_ACTOR_URL", "http://vox-actor:5020")
 TTS_MONSTER_URL = os.getenv("TTS_MONSTER_URL", "http://vox-monster-fish:7860")
 TTS_FALLBACK_URL = os.getenv("TTS_FALLBACK_URL", "http://vox-audio-generation-music:8000")
+VISION_READER_URL = os.getenv("VISION_READER_URL", "http://vox-vision-reader:8000")
+VISION_ENGINE_URL = os.getenv("VISION_ENGINE_URL", "http://vox-vision:7860")
+IMAGE_GEN_URL = os.getenv("IMAGE_GEN_URL", "http://vox-vision-gen:8003")
 FOUNDRY_API_URL = os.getenv("FOUNDRY_API_URL", "http://foundry-vtt:30000/api")
 FOUNDRY_API_KEY = os.getenv("FOUNDRY_API_KEY", "")
+
+# Local paths for vision scanning (mapped volumes)
+FOUNDRY_DATA_DIR = Path("/foundry_data")
+
+# --- Vision Service Manager (Hot-Swap) ---
+
+class VisionHotSwapManager:
+    """Manages the mutual exclusivity of heavy vision containers to optimize VRAM."""
+    def __init__(self):
+        try:
+            self.client = docker.from_env()
+            logger.info("🐳 Container Manager: Docker/Podman socket connected.")
+        except Exception as e:
+            logger.error(f"❌ Container Manager: Failed to connect to socket: {e}")
+            self.client = None
+        
+        self.lock = asyncio.Lock()
+        self.hot_container = "vox-vision-gen"
+        self.ondemand_containers = ["vox-vision-reader", "vox-vision"]
+
+    async def swap_to(self, target_container: str):
+        """Evicts the hot container and starts the target on-demand container."""
+        if not self.client:
+            logger.warning(f"⚠️ Container Manager: Bypass swap to {target_container} (No client)")
+            return
+            
+        async with self.lock:
+            try:
+                logger.info(f"🔄 Swapping: Evicting {self.hot_container} -> Loading {target_container}")
+                
+                # 1. Stop the hot generator to free ~5.5GB VRAM
+                try:
+                    gen = self.client.containers.get(self.hot_container)
+                    if gen.status == "running":
+                        gen.stop(timeout=2)
+                        logger.info(f"🛑 Paused {self.hot_container}")
+                except Exception as ex:
+                    logger.warning(f"Failed to stop {self.hot_container}: {ex}")
+                
+                # 2. Start the requested analytical service
+                target = self.client.containers.get(target_container)
+                target.start()
+                
+                # 3. Wait for service to be ready (healthcheck fallback)
+                await asyncio.sleep(3.0) 
+                logger.info(f"🚀 Started {target_container}")
+                
+            except Exception as e:
+                logger.error(f"❌ Swap-To Failed: {e}")
+
+    async def restore_hot_state(self, current_container: str):
+        """Stops the on-demand container and restores the default hot generator."""
+        if not self.client: return
+            
+        async with self.lock:
+            try:
+                logger.info(f"🔄 Restoring: Stopping {current_container} -> Warming {self.hot_container}")
+                
+                # 1. Stop the on-demand task
+                try:
+                    current = self.client.containers.get(current_container)
+                    current.stop(timeout=2)
+                except Exception: pass
+                
+                # 2. Re-warm the generator
+                gen = self.client.containers.get(self.hot_container)
+                gen.start()
+                logger.info(f"🔥 {self.hot_container} is back online.")
+                
+            except Exception as e:
+                logger.error(f"❌ Restore Failed: {e}")
+
+hotswap_manager = VisionHotSwapManager()
 
 # Cache for Voice Seeds
 VOICE_SEEDS_DIR = Path("./voice_seeds")
