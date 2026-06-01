@@ -45,11 +45,25 @@ if _rocm_available:
 # ---------------------------------------------------------------------------
 try:
     from openvoice import se_extractor
-    from openvoice.api import BaseSpeakerTTS, ToneColorConverter
-    logger.info("OpenVoice library loaded successfully.")
+    from openvoice.api import BaseSpeakerTTS, ToneColorConverter, OpenVoiceBaseClass
+    
+    # Monkeypatch ToneColorConverter.__init__ to support enable_watermark=False without TypeError
+    def _patched_init(self, *args, **kwargs):
+        enable_watermark = kwargs.pop('enable_watermark', True)
+        OpenVoiceBaseClass.__init__(self, *args, **kwargs)
+        if enable_watermark:
+            import wavmark
+            self.watermark_model = wavmark.load_model().to(self.device)
+        else:
+            self.watermark_model = None
+        self.version = getattr(self.hps, '_version_', "v1")
+    
+    ToneColorConverter.__init__ = _patched_init
+    logger.info("OpenVoice library loaded and ToneColorConverter patched successfully.")
 except ImportError as err:
     logger.error(f"OpenVoice library not found: {err}")
     raise err
+
 
 # ---------------------------------------------------------------------------
 # Checkpoint paths
