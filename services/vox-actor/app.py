@@ -305,7 +305,7 @@ def map_emotion(tag: str) -> str:
 
 
 @app.post("/api/tts")
-async def text_to_speech(
+def text_to_speech(
     text:            str         = Form(...),
     reference_audio: UploadFile  = File(...),
     prompt_text:     str         = Form(default="A clear speaking voice."),
@@ -344,7 +344,7 @@ async def text_to_speech(
         # 1. Save uploaded reference audio (may be ignored if seed SE cached)
         # ------------------------------------------------------------------
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as ref_tmp:
-            ref_tmp.write(await reference_audio.read())
+            ref_tmp.write(reference_audio.file.read())
             ref_path = ref_tmp.name
 
         # Intermediate and output temp files
