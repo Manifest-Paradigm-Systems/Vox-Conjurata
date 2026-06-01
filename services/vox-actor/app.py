@@ -357,6 +357,7 @@ def text_to_speech(
         # ------------------------------------------------------------------
         # 2. Base TTS synthesis + source SE selection
         # ------------------------------------------------------------------
+        t_start = time.time()
         if is_british and melo_tts_en is not None:
             logger.info(f"MeloTTS V2 EN-BR synthesis: '{text[:60]}'")
             melo_tts_en.tts_to_file(text, melo_enbr_spk_id, src_path, speed=speed)
@@ -365,6 +366,7 @@ def text_to_speech(
             logger.info(f"V1 base TTS: emotion={emotion} speed={speed}")
             base_speaker_tts.tts(text, src_path, speaker=emotion, language="English", speed=speed)
             source_se = source_se_default if emotion == "default" else source_se_style
+        t_base = time.time() - t_start
 
         # ------------------------------------------------------------------
         # 3. Target speaker SE — use pre-cached Jarvis SE when available
@@ -398,10 +400,12 @@ def text_to_speech(
                 se_path = os.path.join(tmp_se_dir, audio_name, "se.pth")
                 os.makedirs(os.path.dirname(se_path), exist_ok=True)
                 target_se = tone_color_converter.extract_se([ref_path], se_save_path=se_path)
+        t_se = time.time() - t_start - t_base
 
         # ------------------------------------------------------------------
         # 4. Tone colour conversion
         # ------------------------------------------------------------------
+        t_conv_start = time.time()
         logger.info("Converting tone colour...")
         tone_color_converter.convert(
             audio_src_path=src_path,
@@ -410,8 +414,12 @@ def text_to_speech(
             output_path=output_path,
             message="@MyShell",
         )
+        t_conv = time.time() - t_conv_start
 
-        logger.info(f"Audio conversion successful → {output_path}")
+        logger.info(
+            f"Audio synthesis profiling: Total={time.time() - t_start:.4f}s "
+            f"| BaseTTS={t_base:.4f}s | SE={t_se:.4f}s | Conv={t_conv:.4f}s"
+        )
         return FileResponse(output_path, media_type="audio/wav")
 
     except Exception as exc:
