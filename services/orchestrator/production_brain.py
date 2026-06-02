@@ -442,8 +442,8 @@ async def scan_battlemap(req: BattlemapScanRequest):
             "temperature": 0.1,
         }
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.post(f"{VISION_READER_URL}/v1/chat/completions", json=vision_payload)
+        async with httpx.AsyncClient(timeout=300.0) as vision_client:
+            resp = await vision_client.post(f"{VISION_READER_URL}/v1/chat/completions", json=vision_payload)
             if resp.status_code != 200:
                 logger.error(f"🗺️ Battlemap Scan: Vision reader returned {resp.status_code}")
                 return {"status": "error", "message": f"Vision reader returned {resp.status_code}"}
