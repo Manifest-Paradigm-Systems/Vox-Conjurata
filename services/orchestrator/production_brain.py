@@ -623,9 +623,22 @@ async def get_visual_description(image_path_relative: str) -> str:
         await hotswap_manager.swap_to("vox-vision-reader")
         
         # Prepare the image payload for llama-cpp-python vision endpoint
+        # MiniCPM-V doesn't support WebP, so convert to PNG if needed
         import base64
-        with open(full_path, "rb") as image_file:
-            base64_image = base64.b64encode(image_file.read()).decode('utf-8')
+        import io
+        raw_bytes = full_path.read_bytes()
+        imghdr_lower = full_path.suffix.lower()
+        if imghdr_lower in (".webp",):
+            try:
+                from PIL import Image as _PIL
+                pil_img = _PIL.open(full_path)
+                buf = io.BytesIO()
+                pil_img.convert("RGB").save(buf, format="PNG")
+                raw_bytes = buf.getvalue()
+                logger.info(f"🖼️ Converted {full_path.suffix} → PNG for vision reader")
+            except ImportError:
+                logger.warning("🖼️ PIL not available, sending raw WebP (may fail)")
+        base64_image = base64.b64encode(raw_bytes).decode('utf-8')
             
         payload = {
             "messages": [
