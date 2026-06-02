@@ -93,31 +93,6 @@ services:
     - vox-net
     restart: unless-stopped
 
-  vox-vision:
-    build:
-      context: ./services/vox-vision
-    container_name: vox-vision
-    profiles: ["ondemand"]
-    ports:
-    - 7860:7860
-    devices:
-    - /dev/kfd:/dev/kfd
-    - /dev/dri:/dev/dri
-    group_add:
-    - "39"
-    - "105"
-    security_opt:
-    - seccomp=unconfined
-    environment:
-    - HSA_OVERRIDE_GFX_VERSION=12.0.1
-    - CUDA_VISIBLE_DEVICES=""
-    - VRAM_LIMIT=5.50GB
-    - QUANTIZATION=nf4
-    command: ["python", "main.py", "--pin-shared-memory"]
-    networks:
-    - vox-net
-    restart: unless-stopped
-
   vox-llm-core:
     container_name: vox-llm-core
     build:
