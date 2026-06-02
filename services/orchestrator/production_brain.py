@@ -303,15 +303,15 @@ async def scan_battlemap(req: BattlemapScanRequest):
     try:
         # vox-vision-reader (MiniCPM-V) is the image-understanding service.
         await hotswap_manager.swap_to("vox-vision-reader")
+        reader_restored = False
 
         # Encode the battlemap as a data URI for the OpenAI-style vision API.
-        import base64
         with open(full_path, "rb") as f:
             img_b64 = base64.b64encode(f.read()).decode('utf-8')
         data_uri = f"data:image/png;base64,{img_b64}"
 
         # MiniCPM-V via llama-cpp-python speaks the OpenAI chat-completions API.
-        payload = {
+        vision_payload = {
             "messages": [
                 {
                     "role": "user",
@@ -319,10 +319,28 @@ async def scan_battlemap(req: BattlemapScanRequest):
                         {
                             "type": "text",
                             "text": (
-                                "Analyze this tabletop battlemap. Identify walls, doors, "
-                                "lights, and likely ambient sounds. Respond ONLY with a JSON "
-                                "object: {\"walls\": [...], \"doors\": [...], "
-                                "\"lights\": [...], \"ambient_sounds\": [...]}."
+                                "Analyze this tabletop battlemap image. "
+                                "Identify walls (including any door walls), lights, and sound-emitting objects.\n\n"
+                                "Respond ONLY with a valid JSON object. Use EXACTLY these keys:\n"
+                                "{\n"
+                                '  "image": {"width": <pixel_width>},\n'
+                                '  "walls": [{"c": [x0, y0, x1, y1], "door": 0|1}],\n'
+                                '  "lights": [{"x": fx, "y": fy, "dim": 1-10, "bright": 1-5, '
+                                '"color": "#hex", "animation": "torch"|"pulse"|null}],\n'
+                                '  "sound_sources": [{"x": fx, "y": fy, "radius_units": 1-20, '
+                                '"sfx_description": "<vivid 5-15 word ambient sound description>", '
+                                '"duration_seconds": 2-10}]\n'
+                                "}\n\n"
+                                "IMPORTANT:\n"
+                                "- All coords (c, x, y) MUST be NORMALIZED 0.0-1.0 (fraction of image width/height).\n"
+                                "- Set door=1 for walls that are doors, door=0 for ordinary walls.\n"
+                                "- For lights, dim > bright; choose a sensible hex color.\n"
+                                "- For each sound source, write a vivid sfx_description that "
+                                "could be fed to an audio generation model (e.g. 'crackling "
+                                "campfire, dry logs popping').\n"
+                                "- radius_units is relative loudness 1-20.\n"
+                                "- duration_seconds is the ideal clip length 2-10.\n"
+                                "- If no walls/lights/sounds exist, use empty arrays."
                             ),
                         },
                         {"type": "image_url", "image_url": {"url": data_uri}},
@@ -333,20 +351,59 @@ async def scan_battlemap(req: BattlemapScanRequest):
         }
 
         async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.post(f"{VISION_READER_URL}/v1/chat/completions", json=payload)
-            if resp.status_code == 200:
-                analysis_data = resp.json()
-                logger.info(f"🗺️ Battlemap Scan Complete for {req.sceneId}")
-                return {"status": "success", "data": analysis_data}
-            else:
-                logger.error(f"🗺️ Battlemap Scan Failed: {resp.status_code}")
+            resp = await client.post(f"{VISION_READER_URL}/v1/chat/completions", json=vision_payload)
+            if resp.status_code != 200:
+                logger.error(f"🗺️ Battlemap Scan: Vision reader returned {resp.status_code}")
                 return {"status": "error", "message": f"Vision reader returned {resp.status_code}"}
+
+            analysis_data = resp.json()
+            raw_text = (
+                analysis_data.get("choices", [{}])[0]
+                .get("message", {})
+                .get("content", "")
+            )
+
+        # --- Robust JSON extraction ---
+        contract = _extract_scan_contract(raw_text, req.sceneId)
+
+        # Unload the vision reader BEFORE SFX generation to free VRAM
+        await hotswap_manager.restore_hot_state("vox-vision-reader")
+        reader_restored = True
+
+        # --- Sequential SFX generation for each sound source ---
+        sound_entries = []
+        if contract.get("sound_sources"):
+            async with httpx.AsyncClient(timeout=300.0) as sfx_client:
+                for idx, src in enumerate(contract["sound_sources"]):
+                    dur = max(1.0, min(12.0, float(src.get("duration_seconds", 5.0))))
+                    desc = src.get("sfx_description", "Ambient background")
+                    logger.info(f"🔊 Generating SFX {idx+1}/{len(contract['sound_sources'])}: {desc[:60]}...")
+                    try:
+                        r = await sfx_client.post(
+                            f"{TTS_SFX_URL}/generate",
+                            json={"prompt": desc, "duration_seconds": dur},
+                        )
+                        if r.status_code == 200:
+                            fname = f"scan-{req.sceneId}-{idx}.wav"
+                            (SFX_DIR / fname).write_bytes(r.content)
+                            src["audio_path"] = f"audio/sfx/{fname}"
+                            sound_entries.append(src)
+                            logger.info(f"   ✅ Saved {fname}")
+                        else:
+                            logger.warning(f"   ⚠️ SFX gen returned {r.status_code}")
+                    except Exception as e:
+                        logger.error(f"   ❌ SFX gen failed: {e}")
+            contract["sound_sources"] = sound_entries
+
+        logger.info(f"🗺️ Battlemap Scan Complete for {req.sceneId}")
+        return {"status": "success", "data": contract}
 
     except Exception as e:
         logger.error(f"🗺️ Battlemap Scan Error: {e}")
         return {"status": "error", "message": str(e)}
     finally:
-        await hotswap_manager.restore_hot_state("vox-vision-reader")
+        if not reader_restored:
+            await hotswap_manager.restore_hot_state("vox-vision-reader")
 
 # --- Voice Generation Engines (Modular Factory Pattern) ---
 
