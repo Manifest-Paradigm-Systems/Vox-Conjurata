@@ -38,10 +38,12 @@ RUN pip3 install --no-cache-dir \
     "pyworld" \
     "rich" \
     "scipy" \
+    "sentencepiece" \
     "tensorboard" \
     "tensorboardx" \
     "tokenizers" \
-    "transformers"
+    "transformers" \
+    "openai-whisper"
 # Note: deepspeed (training), grpcio interoperability (training), and
 # whisper/gradio are intentionally skipped — not needed for inference.
 
