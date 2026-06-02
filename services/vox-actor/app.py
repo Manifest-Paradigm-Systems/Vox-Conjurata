@@ -14,6 +14,12 @@ import os
 os.environ["MIOPEN_FIND_MODE"] = "2"
 
 import sys
+# Add CosyVoice package path (installed at build time from GitHub)
+_cosyvoice_dir = os.getenv("COSYVOICE_PACKAGE_DIR", "/app/CosyVoice")
+if _cosyvoice_dir not in sys.path:
+    sys.path.insert(0, _cosyvoice_dir)
+    sys.path.insert(0, os.path.join(_cosyvoice_dir, "third_party", "Matcha-TTS"))
+
 import torch
 import tempfile
 import logging
