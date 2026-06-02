@@ -16,15 +16,42 @@ RUN apt-get update && apt-get install -y \
     git curl ffmpeg libsndfile1 espeak-ng \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Install CosyVoice from official GitHub (includes third_party/Matcha-TTS)
+# 2. Install inference-only Python deps (skip training-only packages)
+RUN pip3 install --no-cache-dir grpcio  # prebuild binary to avoid compile from source
+RUN pip3 install --no-cache-dir \
+    "conformer" \
+    "diffusers" \
+    "hydra-core" \
+    "HyperPyYAML" \
+    "inflect" \
+    "librosa" \
+    "lightning" \
+    "matplotlib" \
+    "modelscope" \
+    "numpy" \
+    "omegaconf" \
+    "onnx" \
+    "onnxruntime" \
+    "protobuf" \
+    "pyarrow" \
+    "pydantic" \
+    "pyworld" \
+    "rich" \
+    "scipy" \
+    "tensorboard" \
+    "tensorboardx" \
+    "tokenizers" \
+    "transformers"
+# Note: deepspeed (training), grpcio interoperability (training), and
+# whisper/gradio are intentionally skipped — not needed for inference.
+
+# 3. Install CosyVoice from GitHub (clone for third_party/Matcha-TTS dependency)
 RUN git clone https://github.com/FunAudioLLM/CosyVoice.git /app/CosyVoice
 WORKDIR /app/CosyVoice
-RUN pip3 install --no-cache-dir -r requirements.txt
-# Install CosyVoice package itself (no setup.py, use pip install .)
 RUN pip3 install --no-cache-dir -e .
 
-# 3. Install server dependencies
-RUN pip3 install --no-cache-dir fastapi uvicorn[standard] python-multipart pydantic torchaudio soundfile
+# 4. Install server dependencies
+RUN pip3 install --no-cache-dir fastapi uvicorn[standard] python-multipart torchaudio soundfile
 
 # 4. Pre-download models? Done at runtime on first load via snapshot_download.
 # The shared /models volume will cache them across restarts.
