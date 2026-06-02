@@ -5,3 +5,4 @@ pydantic
 python-multipart
 edge-tts
 docker
+pillow
