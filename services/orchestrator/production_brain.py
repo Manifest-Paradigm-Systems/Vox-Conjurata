@@ -104,7 +104,8 @@ class VisionHotSwapManager:
                     await asyncio.sleep(3.0)
                     try:
                         async with _httpx.AsyncClient(timeout=5.0) as _hc:
-                            _r = await _hc.get(f"http://{target_container}:8000/health")
+                            # Try /v1/models (llama-cpp-python exposes this)
+                            _r = await _hc.get(f"http://{target_container}:8000/v1/models")
                             if _r.status_code == 200:
                                 logger.info(f"🚀 Started {target_container} (ready after ~{3*(attempt+1)}s)")
                                 break
