@@ -653,11 +653,11 @@ async def get_visual_description(image_path_relative: str) -> str:
             "max_tokens": 300
         }
         
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=180.0) as client:
             resp = await client.post(f"{VISION_READER_URL}/v1/chat/completions", json=payload)
             if resp.status_code == 200:
                 desc = resp.json()["choices"][0]["message"]["content"]
-                logger.info(f"🖼️ Visual Scan Success: {desc[:50]}...")
+                logger.info(f"🖼️ Visual Scan Success: {desc[:100]}...")
                 return desc
             else:
                 logger.error(f"🖼️ Visual Scan Failed: {resp.status_code}")
