@@ -16,35 +16,14 @@ RUN apt-get update && apt-get install -y \
     git curl ffmpeg libsndfile1 espeak-ng \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Install inference-only Python deps (skip training-only packages)
-RUN pip3 install --no-cache-dir grpcio  # prebuild binary to avoid compile from source
-RUN pip3 install --no-cache-dir \
-    "conformer" \
-    "diffusers" \
-    "hydra-core" \
-    "HyperPyYAML" \
-    "inflect" \
-    "librosa" \
-    "lightning" \
-    "matplotlib" \
-    "modelscope" \
-    "numpy" \
-    "omegaconf" \
-    "onnx" \
-    "onnxruntime" \
-    "protobuf" \
-    "pyarrow" \
-    "pydantic" \
-    "pyworld" \
-    "rich" \
-    "scipy" \
-    "sentencepiece" \
-    "tensorboard" \
-    "tensorboardx" \
-    "tokenizers" \
-    "transformers" \
-    "huggingface-hub" \
-    "openai-whisper"
+# 2. Install inference-only Python deps (pre-build grpcio binary)
+RUN pip3 install --no-cache-dir grpcio
+# Install CosyVoice requirements.txt (skip deepspeed — training only)
+RUN pip3 install --no-cache-dir -r /app/CosyVoice/requirements.txt || \
+    (grep -vE "deepspeed|whisper|gradio" /app/CosyVoice/requirements.txt > /tmp/cv-req.txt && \
+     pip3 install --no-cache-dir -r /tmp/cv-req.txt)
+# Ensure key inference deps are present
+RUN pip3 install --no-cache-dir "huggingface-hub" "openai-whisper"
 # Note: deepspeed (training), grpcio interoperability (training), and
 # whisper/gradio are intentionally skipped — not needed for inference.
 
