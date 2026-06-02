@@ -50,7 +50,6 @@ TTS_ACTOR_URL = os.getenv("TTS_ACTOR_URL", "http://vox-actor:5020")
 TTS_MONSTER_URL = os.getenv("TTS_MONSTER_URL", "http://vox-monster-fish:7860")
 TTS_FALLBACK_URL = os.getenv("TTS_FALLBACK_URL", "http://vox-audio-generation-music:8000")
 VISION_READER_URL = os.getenv("VISION_READER_URL", "http://vox-vision-reader:8000")
-VISION_ENGINE_URL = os.getenv("VISION_ENGINE_URL", "http://vox-vision:7860")
 IMAGE_GEN_URL = os.getenv("IMAGE_GEN_URL", "http://vox-vision-gen:8003")
 FOUNDRY_API_URL = os.getenv("FOUNDRY_API_URL", "http://foundry-vtt:30000/api")
 FOUNDRY_API_KEY = os.getenv("FOUNDRY_API_KEY", "")
@@ -303,35 +302,52 @@ async def scan_battlemap(req: BattlemapScanRequest):
         raise HTTPException(status_code=404, detail=f"Battlemap image not found at {req.imagePath}")
 
     try:
-        await hotswap_manager.swap_to("vox-vision")
-        
-        # Prepare the image payload for vox-vision
+        # vox-vision-reader (MiniCPM-V) is the image-understanding service.
+        await hotswap_manager.swap_to("vox-vision-reader")
+
+        # Encode the battlemap as a data URI for the OpenAI-style vision API.
         import base64
         with open(full_path, "rb") as f:
             img_b64 = base64.b64encode(f.read()).decode('utf-8')
-            
+        data_uri = f"data:image/png;base64,{img_b64}"
+
+        # MiniCPM-V via llama-cpp-python speaks the OpenAI chat-completions API.
         payload = {
-            "image": img_b64,
-            "scene_id": req.sceneId,
-            "tasks": ["walls", "doors", "lights", "ambient_sounds"]
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": (
+                                "Analyze this tabletop battlemap. Identify walls, doors, "
+                                "lights, and likely ambient sounds. Respond ONLY with a JSON "
+                                "object: {\"walls\": [...], \"doors\": [...], "
+                                "\"lights\": [...], \"ambient_sounds\": [...]}."
+                            ),
+                        },
+                        {"type": "image_url", "image_url": {"url": data_uri}},
+                    ],
+                }
+            ],
+            "temperature": 0.1,
         }
-        
+
         async with httpx.AsyncClient(timeout=120.0) as client:
-            # Assuming vox-vision has an endpoint /analyze
-            resp = await client.post(f"{VISION_ENGINE_URL}/analyze", json=payload)
+            resp = await client.post(f"{VISION_READER_URL}/v1/chat/completions", json=payload)
             if resp.status_code == 200:
                 analysis_data = resp.json()
                 logger.info(f"🗺️ Battlemap Scan Complete for {req.sceneId}")
                 return {"status": "success", "data": analysis_data}
             else:
                 logger.error(f"🗺️ Battlemap Scan Failed: {resp.status_code}")
-                return {"status": "error", "message": f"Vision engine returned {resp.status_code}"}
-                
+                return {"status": "error", "message": f"Vision reader returned {resp.status_code}"}
+
     except Exception as e:
         logger.error(f"🗺️ Battlemap Scan Error: {e}")
         return {"status": "error", "message": str(e)}
     finally:
-        await hotswap_manager.restore_hot_state("vox-vision")
+        await hotswap_manager.restore_hot_state("vox-vision-reader")
 
 # --- Voice Generation Engines (Modular Factory Pattern) ---
 
