@@ -19,6 +19,7 @@ modelscope
 
 # Audio I/O (used by app.py)
 soundfile
+numpy<2.0.0
 
 # Logging
 loguru
