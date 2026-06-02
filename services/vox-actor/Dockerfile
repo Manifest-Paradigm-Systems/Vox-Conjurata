@@ -1,6 +1,5 @@
 # vox-actor (CosyVoice 3 TTS Service)
-# Uses rocm/dev-ubuntu-22.04 (same clean base as vox-designer) instead of
-# rocm/pytorch:latest which ships a conflicting CUDA PyTorch build.
+# Optimized for AMD ROCm / RDNA3 (gfx1201)
 FROM docker.io/rocm/pytorch:latest
 
 # Architecture parameters for RDNA3/RDNA4
@@ -35,13 +34,13 @@ RUN grep -vE "deepspeed|whisper|gradio|extra-index-url|grpcio" /app/CosyVoice/re
     pip3 install --no-cache-dir -r /tmp/cv-req.txt && \
     pip3 install --no-cache-dir "huggingface-hub" "openai-whisper" "transformers<4.48"
 
-# 5. Install server dependencies
-RUN pip3 install --no-cache-dir fastapi uvicorn[standard] python-multipart soundfile
+# 5. Install server dependencies from requirements.txt
+COPY requirements.txt .
+RUN pip3 install --no-cache-dir -r requirements.txt
 
 # 6. Pre-download models? Done at runtime on first load via snapshot_download.
 # The shared /models volume will cache them across restarts.
 
-WORKDIR /app
 COPY app.py /app/app.py
 
 EXPOSE 5020
