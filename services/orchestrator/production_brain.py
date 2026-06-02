@@ -98,14 +98,23 @@ class VisionHotSwapManager:
                 target.start()
                 
                 # 3. Wait for service to be ready (retry healthcheck loop)
-                # MiniCPM-V on ROCm can take 10-60s to load model into VRAM
+                # MiniCPM-V on ROCm can take 10-60s to load model into VRAM.
+                # Each on-demand service exposes a different port + ready route:
+                #   vox-vision-reader -> :8000/v1/models (llama-cpp-python)
+                #   vox-vision        -> :7860/          (SDXL FastAPI root)
+                _health_probes = {
+                    "vox-vision-reader": "http://vox-vision-reader:8000/v1/models",
+                    "vox-vision": "http://vox-vision:7860/",
+                }
+                _health_url = _health_probes.get(
+                    target_container, f"http://{target_container}:8000/v1/models"
+                )
                 import httpx as _httpx
                 for attempt in range(20):
                     await asyncio.sleep(3.0)
                     try:
                         async with _httpx.AsyncClient(timeout=5.0) as _hc:
-                            # Try /v1/models (llama-cpp-python exposes this)
-                            _r = await _hc.get(f"http://{target_container}:8000/v1/models")
+                            _r = await _hc.get(_health_url)
                             if _r.status_code == 200:
                                 logger.info(f"🚀 Started {target_container} (ready after ~{3*(attempt+1)}s)")
                                 break
