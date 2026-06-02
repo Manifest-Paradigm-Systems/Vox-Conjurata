@@ -1010,15 +1010,28 @@ async def voice_conversion(request: Request):
                 logger.error(f"🚨 [PIPELINE-CRITICAL] {engine_name} failed for {actor_id}. Edge-TTS suppressed — returning empty response.")
 
             if res_content:
-                # Detect audio format using magic bytes
-                mime_type = "audio/wav"
+                # Transcode WAV → Opus OGG for ~90% smaller streaming to Foundry
+                # (Seed .wav files used for voice cloning are NOT affected — this is
+                # only runtime TTS output returned to the Foundry game client.)
                 if res_content.startswith(b"RIFF"):
-                    mime_type = "audio/wav"
-                elif res_content.startswith(b"\x1a\x45\xdf\xa3"):
-                    mime_type = "audio/webm"
-                elif res_content.startswith(b"ID3") or res_content.startswith(b"\xff\xfb") or res_content.startswith(b"\xff\xf3") or res_content.startswith(b"\xff\xf2"):
-                    mime_type = "audio/mpeg"
-                
+                    try:
+                        proc = subprocess.run(
+                            ["ffmpeg", "-i", "pipe:0", "-c:a", "libopus",
+                             "-b:a", "64k", "-f", "ogg", "pipe:1"],
+                            input=res_content, capture_output=True, timeout=30,
+                        )
+                        if proc.returncode == 0:
+                            res_content = proc.stdout
+                        else:
+                            logger.warning(f"Opus transcode failed (ffmpeg rc={proc.returncode}), sending raw WAV")
+                    except Exception as ex:
+                        logger.warning(f"Opus transcode error: {ex}, sending raw WAV")
+
+                mime_type = "audio/ogg"
+                if not res_content.startswith(b"OggS"):
+                    # Fallback: something went wrong with transcode, detect original
+                    mime_type = "audio/wav" if res_content.startswith(b"RIFF") else "audio/webm"
+
                 audio_base64 = base64.b64encode(res_content).decode('utf-8')
                 audio_data = f"data:{mime_type};base64,{audio_base64}"
 
