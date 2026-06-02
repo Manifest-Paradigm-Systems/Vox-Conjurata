@@ -385,15 +385,16 @@ const scannedScenes = new Set();
 
 async function scanActiveSceneBattlemap() {
     if (!game.user.isGM || !canvas.ready || !canvas.scene) return;
-    
+
     const sceneId = canvas.scene.id;
     const bgImage = canvas.scene.background?.src;
-    
-    if (!bgImage || scannedScenes.has(sceneId)) return;
-    
+
+    // Persistent flag survives page reload — prevents duplicate placement
+    if (!bgImage || scannedScenes.has(sceneId) || canvas.scene.getFlag("vox-conjurata", "scanned")) return;
+
     console.log(`🗺️ Vox-Conjurata: New scene detected (${canvas.scene.name}). Triggering spatial analysis...`);
     scannedScenes.add(sceneId);
-    
+
     try {
         const response = await fetch("/api/scan-battlemap", {
             method: "POST",
@@ -404,12 +405,120 @@ async function scanActiveSceneBattlemap() {
         if (data.status === "success") {
             console.log("🗺️ Vox-Conjurata: Spatial analysis complete. Data received:", data.data);
             ui.notifications.info(`🗺️ Vox-Conjurata: Spatial analysis complete for ${canvas.scene.name}.`);
-            // Logic to draw walls/doors/lights would go here, 
-            // potentially calling a Foundry macro or internal API.
+
+            // Place walls, lights, and ambient sounds from the scan contract
+            await placeScanEmbedded(data.data);
         }
     } catch (err) {
         console.error("❌ Vox-Conjurata: Failed to trigger battlemap scan:", err);
     }
+}
+
+/**
+ * Convert a normalized coordinate (0-1) to scene pixel position using
+ * the current canvas scene dimensions.
+ */
+function scanNormToPx(nx, ny) {
+    const dim = canvas.scene.dimensions;
+    return {
+        x: nx * dim.sceneWidth + dim.sceneX,
+        y: ny * dim.sceneHeight + dim.sceneY,
+    };
+}
+
+/**
+ * Place walls, lights, and ambient sounds parsed from the scan contract
+ * onto the current scene as embedded documents.
+ */
+async function placeScanEmbedded(contract) {
+    if (!contract) return;
+
+    const scene = canvas.scene;
+    const { walls = [], lights = [], sound_sources = [] } = contract;
+
+    // --- 1. Walls (including doors) ---
+    const wallDocs = walls
+        .filter(w => Array.isArray(w.c) && w.c.length === 4)
+        .map(w => {
+            const p0 = scanNormToPx(w.c[0], w.c[1]);
+            const p1 = scanNormToPx(w.c[2], w.c[3]);
+            return {
+                c: [Math.round(p0.x), Math.round(p0.y), Math.round(p1.x), Math.round(p1.y)],
+                move: 20, sight: 20, sound: 20, light: 20,
+                dir: 0,
+                door: Math.min(2, Math.max(0, parseInt(w.door, 10) || 0)),
+                ds: Math.min(2, Math.max(0, parseInt(w.ds, 10) || 0)),
+            };
+        });
+
+    if (wallDocs.length) {
+        await scene.createEmbeddedDocuments("Wall", wallDocs);
+        console.log(`🗺️  Placed ${wallDocs.length} walls`);
+    }
+
+    // --- 2. Lights ---
+    const lightDocs = lights
+        .filter(l => l.x !== undefined && l.y !== undefined)
+        .map(l => {
+            const pos = scanNormToPx(l.x, l.y);
+            const animType = l.animation || null;
+            return {
+                x: Math.round(pos.x),
+                y: Math.round(pos.y),
+                elevation: 0,
+                walls: true,
+                vision: false,
+                config: {
+                    dim: Math.max(0, parseFloat(l.dim) || 6),
+                    bright: Math.max(0, parseFloat(l.bright) || 3),
+                    color: String(l.color || "#ffaa55"),
+                    alpha: 0.5,
+                    luminosity: 0.5,
+                    animation: {
+                        type: animType,
+                        speed: 5,
+                        intensity: 5,
+                    },
+                },
+            };
+        });
+
+    if (lightDocs.length) {
+        await scene.createEmbeddedDocuments("AmbientLight", lightDocs);
+        console.log(`🗺️  Placed ${lightDocs.length} lights`);
+    }
+
+    // --- 3. Ambient sounds ---
+    const soundDocs = sound_sources
+        .filter(s => s.x !== undefined && s.y !== undefined && s.audio_path)
+        .map(s => {
+            const pos = scanNormToPx(s.x, s.y);
+            return {
+                x: Math.round(pos.x),
+                y: Math.round(pos.y),
+                elevation: 0,
+                radius: Math.max(0, parseFloat(s.radius_units) || 8),
+                path: String(s.audio_path),
+                volume: 0.5,
+                repeat: true,
+                walls: true,
+                easing: true,
+                darkness: { min: 0, max: 1 },
+                effects: {
+                    base: { type: "", intensity: 5 },
+                    muffled: { type: "", intensity: 5 },
+                },
+            };
+        });
+
+    if (soundDocs.length) {
+        await scene.createEmbeddedDocuments("AmbientSound", soundDocs);
+        console.log(`🗺️  Placed ${soundDocs.length} ambient sounds`);
+    }
+
+    // Mark scene as scanned so a page reload doesn't re-place duplicates
+    await scene.setFlag("vox-conjurata", "scanned", true);
+    console.log(`🗺️  Battlemap auto-population complete for "${scene.name}"`);
 }
 
 async function scanActiveSceneTokens() {
