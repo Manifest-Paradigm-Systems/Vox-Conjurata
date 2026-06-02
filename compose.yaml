@@ -245,10 +245,8 @@ services:
     - CUDA_VISIBLE_DEVICES=0
     # ── MIOpen / PyTorch optimizations: bypass slow convolution shape tuning ──
     - MIOPEN_FIND_MODE=2
-    # ── CosyVoice model location (shared model_storage volume) ───────────
-    - COSYVOICE_MODEL_DIR=/models/CosyVoice-300M
-    # ── Jarvis seed voice (pre-extracted at startup, held in HIP VRAM) ───
-    - JARVIS_SEED_PATH=/models/jarvis_assets/1_Jarvis_seed_(Vocals).wav
+    # ── CosyVoice 3 model location (shared model_storage volume) ─────────
+    - COSYVOICE_MODEL_DIR=/models/Fun-CosyVoice3-0.5B
     volumes:
     - model_storage:/models:z
     networks:
