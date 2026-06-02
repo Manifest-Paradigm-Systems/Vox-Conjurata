@@ -39,6 +39,7 @@ services:
     - ./services/orchestrator/voice_seeds:/app/voice_seeds:Z
     - /sys:/sys:ro
     - /home/EvokeStudio/manifest-paradigm/foundry/data/Data:/foundry_data:ro,z
+    - /home/EvokeStudio/manifest-paradigm/foundry/data/Data/audio/sfx:/sfx_out:rw,z
     - /run/user/1000/podman/podman.sock:/var/run/docker.sock
     networks:
     - vox-net
