@@ -97,10 +97,21 @@ class VisionHotSwapManager:
                 target = self.client.containers.get(target_container)
                 target.start()
                 
-                # 3. Wait for service to be ready (healthcheck fallback)
-                # MiniCPM-V on ROCm can take 10-30s to load model into VRAM
-                await asyncio.sleep(15.0)
-                logger.info(f"🚀 Started {target_container}")
+                # 3. Wait for service to be ready (retry healthcheck loop)
+                # MiniCPM-V on ROCm can take 10-60s to load model into VRAM
+                import httpx as _httpx
+                for attempt in range(20):
+                    await asyncio.sleep(3.0)
+                    try:
+                        async with _httpx.AsyncClient(timeout=5.0) as _hc:
+                            _r = await _hc.get(f"http://{target_container}:8000/health")
+                            if _r.status_code == 200:
+                                logger.info(f"🚀 Started {target_container} (ready after ~{3*(attempt+1)}s)")
+                                break
+                    except Exception:
+                        continue
+                else:
+                    logger.warning(f"⚠️ {target_container} started but healthcheck never returned 200")
                 
             except Exception as e:
                 logger.error(f"❌ Swap-To Failed: {e}")
