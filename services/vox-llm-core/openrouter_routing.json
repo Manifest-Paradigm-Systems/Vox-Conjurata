@@ -1,5 +1,5 @@
 {
-  "openrouter_base_url": "https://openrouter.ai/api/v1",
+  "openrouter_base_url": "https://openrouter.ai/api",
   "models": {
     "EVA-UNIT-01/EVA-Qwen2.5-7B-v0.1": {
       "strategy": "latency",
