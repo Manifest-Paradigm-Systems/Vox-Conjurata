@@ -22,8 +22,9 @@ RUN git clone --recurse-submodules https://github.com/FunAudioLLM/CosyVoice.git 
 ENV PYTHONPATH="/app/CosyVoice:/app/CosyVoice/third_party/Matcha-TTS:$PYTHONPATH"
 
 # 3. Install inference deps (skip deepspeed/gradio/whisper — training/UI only)
+# Also strip CUDA index URLs to prevent overriding our ROCm PyTorch.
 RUN pip3 install --no-cache-dir grpcio && \
-    grep -vE "deepspeed|whisper|gradio" /app/CosyVoice/requirements.txt > /tmp/cv-req.txt && \
+    grep -vE "deepspeed|whisper|gradio|extra-index-url" /app/CosyVoice/requirements.txt > /tmp/cv-req.txt && \
     pip3 install --no-cache-dir -r /tmp/cv-req.txt && \
     pip3 install --no-cache-dir "huggingface-hub" "openai-whisper"
 
