@@ -14,9 +14,11 @@ services:
     build:
       context: ./services/orchestrator
     container_name: vox-conjurata-orchestrator
-    # Map container-root to host UID 1000 so the bind-mounted rootless podman
-    # socket (owned by 1000) is accessible — required by VisionHotSwapManager.
-    userns: keep-id
+    # The rootless podman socket (mounted below) is blocked by SELinux labeling,
+    # not Unix perms — its ACL already grants root rw. Disable the SELinux label
+    # so VisionHotSwapManager can reach the socket to start/stop vision containers.
+    security_opt:
+    - label=disable
     ports:
     - 8080:8080
     environment:
