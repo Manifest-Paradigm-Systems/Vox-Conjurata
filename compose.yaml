@@ -123,35 +123,9 @@ services:
     build:
       context: ./services/vox-llm-core
     ports:
-    - 11435:8080  # host 11434 is reserved for the standalone ollama container
-    volumes:
-    - model_storage:/models:z
-    devices:
-    - /dev/kfd:/dev/kfd
-    - /dev/dri:/dev/dri
-    group_add:
-    - "39"
-    - "105"
-    ipc: host
-    security_opt:
-    - seccomp=unconfined
+    - 11435:8080
     environment:
-    - HSA_OVERRIDE_GFX_VERSION=12.0.1
-    - PYTORCH_ROCM_ARCH=gfx1201
-    - HIP_PLATFORM=amd
-    - ROCR_VISIBLE_DEVICES=0
-    - HIP_VISIBLE_DEVICES=0
-    - CUDA_VISIBLE_DEVICES=0
-    command: >
-      --host 0.0.0.0 --port 8080
-      -m /models/bartowski/EVA-Qwen2.5-7B-v0.1-GGUF/EVA-Qwen2.5-7B-v0.1-Q4_K_M.gguf
-      -c 16000
-      --cache-type-k q8_0
-      --cache-type-v q8_0
-      --flash-attn on
-      -ngl 99
-      --keep -1
-      --n-predict 150
+    - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
     networks:
     - vox-net
     restart: unless-stopped
