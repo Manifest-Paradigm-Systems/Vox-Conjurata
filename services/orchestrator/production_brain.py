@@ -476,8 +476,18 @@ async def scan_battlemap(req: BattlemapScanRequest):
                             json={"prompt": desc, "duration_seconds": dur},
                         )
                         if r.status_code == 200:
-                            fname = f"scan-{req.sceneId}-{idx}.wav"
-                            (SFX_DIR / fname).write_bytes(r.content)
+                            # Transcode WAV → Opus OGG for ~90% smaller files
+                            import subprocess as _sp
+                            proc = _sp.run(
+                                ["ffmpeg", "-i", "pipe:0", "-c:a", "libopus",
+                                 "-b:a", "64k", "-f", "ogg", "pipe:1"],
+                                input=r.content, capture_output=True, timeout=30,
+                            )
+                            if proc.returncode != 0:
+                                logger.warning(f"   ⚠️ ffmpeg transcoding failed: {proc.stderr.decode(errors='replace')[:200]}")
+                                continue
+                            fname = f"scan-{req.sceneId}-{idx}.ogg"
+                            (SFX_DIR / fname).write_bytes(proc.stdout)
                             src["audio_path"] = f"audio/sfx/{fname}"
                             sound_entries.append(src)
                             logger.info(f"   ✅ Saved {fname}")
