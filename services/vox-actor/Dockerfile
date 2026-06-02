@@ -48,10 +48,13 @@ RUN pip3 install --no-cache-dir \
 # Note: deepspeed (training), grpcio interoperability (training), and
 # whisper/gradio are intentionally skipped — not needed for inference.
 
-# 3. Install CosyVoice from GitHub (source-only, no pip package — use PYTHONPATH)
+# 3. Install CosyVoice from GitHub (clone for third_party/Matcha-TTS dependency)
 RUN git clone https://github.com/FunAudioLLM/CosyVoice.git /app/CosyVoice
-ENV PYTHONPATH="/app/CosyVoice/third_party/Matcha-TTS:$PYTHONPATH"
-ENV COSYVOICE_PACKAGE_DIR=/app/CosyVoice
+# Install Matcha-TTS (needed by CosyVoice flow matching)
+WORKDIR /app/CosyVoice/third_party/Matcha-TTS
+RUN pip3 install --no-cache-dir -e .
+WORKDIR /app/CosyVoice
+ENV PYTHONPATH="/app/CosyVoice:$PYTHONPATH"
 
 # 4. Install server dependencies
 RUN pip3 install --no-cache-dir fastapi uvicorn[standard] python-multipart torchaudio soundfile
