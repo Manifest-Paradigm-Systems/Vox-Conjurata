@@ -282,6 +282,98 @@ class BattlemapScanRequest(BaseModel):
     imagePath: str
     sceneId: str
 
+
+# --- Helpers for battlemap scanning ---
+
+def _extract_scan_contract(raw_text: str, scene_id: str) -> dict:
+    """Parse the vision model's free-text response into a structured contract.
+
+    Returns a dict with keys ``image``, ``walls``, ``lights``, ``sound_sources``.
+    On any parse failure returns an empty contract — the caller always gets
+    something valid, never throws.
+    """
+    contract: dict = {
+        "image": {},
+        "walls": [],
+        "lights": [],
+        "sound_sources": [],
+    }
+
+    if not raw_text:
+        logger.warning(f"🗺️ Scan [{scene_id}]: Empty response from vision reader")
+        return contract
+
+    # Strip markdown fences if present
+    text = re.sub(r"^```(?:json)?\s*\n?", "", raw_text, flags=re.IGNORECASE)
+    text = re.sub(r"\n?```\s*$", "", text)
+
+    # Extract the first JSON object
+    m = re.search(r"\{.*\}", text, re.DOTALL)
+    if not m:
+        logger.warning(f"🗺️ Scan [{scene_id}]: No JSON object found; raw={raw_text[:300]}")
+        return contract
+
+    try:
+        parsed: dict = json.loads(m.group())
+    except json.JSONDecodeError as exc:
+        logger.warning(f"🗺️ Scan [{scene_id}]: JSON parse error {exc}; raw={raw_text[:300]}")
+        return contract
+
+    # --- image ---
+    contract["image"] = {"width": int(parsed.get("image", {}).get("width", 1024))}
+
+    # --- walls ---
+    for w in parsed.get("walls", []):
+        c = w.get("c", [])
+        if not isinstance(c, list) or len(c) != 4:
+            continue
+        try:
+            c_clean = [float(v) for v in c]
+        except (TypeError, ValueError):
+            continue
+        if any(v < 0.0 or v > 1.0 for v in c_clean):
+            continue
+        contract["walls"].append({
+            "c": c_clean,
+            "door": int(w.get("door", 0)),
+            "ds": int(w.get("ds", 0)),
+        })
+
+    # --- lights ---
+    for li in parsed.get("lights", []):
+        try:
+            contract["lights"].append({
+                "x": min(1.0, max(0.0, float(li["x"]))),
+                "y": min(1.0, max(0.0, float(li["y"]))),
+                "dim": float(li.get("dim", 6)),
+                "bright": float(li.get("bright", 3)),
+                "color": str(li.get("color", "#ffaa55")),
+                "animation": li.get("animation") or None,
+            })
+        except (TypeError, ValueError, KeyError):
+            continue
+
+    # --- sound sources ---
+    for s in parsed.get("sound_sources", []):
+        try:
+            contract["sound_sources"].append({
+                "x": min(1.0, max(0.0, float(s["x"]))),
+                "y": min(1.0, max(0.0, float(s["y"]))),
+                "radius_units": float(s.get("radius_units", 8)),
+                "sfx_description": str(s.get("sfx_description", "Ambient background")),
+                "duration_seconds": float(s.get("duration_seconds", 5.0)),
+            })
+        except (TypeError, ValueError, KeyError):
+            continue
+
+    logger.info(
+        f"🗺️ Scan [{scene_id}]: parsed "
+        f"{len(contract['walls'])} walls, "
+        f"{len(contract['lights'])} lights, "
+        f"{len(contract['sound_sources'])} sound sources"
+    )
+    return contract
+
 # --- Storage ---
 error_buffer: List[dict] = []
 
