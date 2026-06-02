@@ -14,6 +14,7 @@ import re
 import wave
 import io
 from pathlib import Path
+import subprocess
 import docker
 
 # --- vox-conjurata Orchestrator Service ---
