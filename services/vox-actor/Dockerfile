@@ -1,7 +1,7 @@
 # vox-actor (CosyVoice 3 TTS Service)
 # Uses rocm/dev-ubuntu-22.04 (same clean base as vox-designer) instead of
 # rocm/pytorch:latest which ships a conflicting CUDA PyTorch build.
-FROM docker.io/rocm/dev-ubuntu-22.04:latest
+FROM docker.io/rocm/pytorch:latest
 
 # Architecture parameters for RDNA3/RDNA4
 ENV HSA_OVERRIDE_GFX_VERSION=12.0.1
@@ -15,12 +15,13 @@ RUN groupadd -r render || true && groupadd -r video || true
 
 # 1. SYSTEM DEPS
 RUN apt-get update && apt-get install -y \
-    python3 python3-pip git curl ffmpeg libsndfile1 espeak-ng \
+    git curl ffmpeg libsndfile1 espeak-ng \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. ROCm PyTorch — install before CosyVoice deps so the GPU stack is ready
+# 2. Replace the base image's CUDA PyTorch with the ROCm variant.
+#    The rocm/pytorch image ships ROCm 7.2, so we must match that index.
 RUN pip3 install --no-cache-dir --force-reinstall \
-    --index-url https://download.pytorch.org/whl/rocm6.0/ \
+    --index-url https://download.pytorch.org/whl/rocm7.2/ \
     torch torchvision torchaudio
 
 # 3. Install CosyVoice from GitHub (clone for third_party/Matcha-TTS dependency)
@@ -29,7 +30,6 @@ RUN git clone --recurse-submodules https://github.com/FunAudioLLM/CosyVoice.git 
 ENV PYTHONPATH="/app/CosyVoice:/app/CosyVoice/third_party/Matcha-TTS:$PYTHONPATH"
 
 # 4. Install inference deps (skip deepspeed/gradio/whisper/grpcio — training only)
-# Pin transformers to <4.48 — later versions require PyTorch >=2.5
 RUN grep -vE "deepspeed|whisper|gradio|extra-index-url|grpcio" /app/CosyVoice/requirements.txt > /tmp/cv-req.txt && \
     sed -i '/^transformers/d' /tmp/cv-req.txt && \
     pip3 install --no-cache-dir -r /tmp/cv-req.txt && \
