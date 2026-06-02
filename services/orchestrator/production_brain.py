@@ -115,6 +115,12 @@ class VisionHotSwapManager:
                 
             except Exception as e:
                 logger.error(f"❌ Swap-To Failed: {e}")
+                # Try DNS refresh: query the container to flush stale DNS
+                import socket as _socket
+                try:
+                    _socket.getaddrinfo(target_container, 8000)
+                except Exception:
+                    pass
 
     async def restore_hot_state(self, current_container: str):
         """Stops the on-demand container and restores the default hot generator."""
