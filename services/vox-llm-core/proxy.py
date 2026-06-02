@@ -42,6 +42,13 @@ OPENROUTER_BASE = routing_config["openrouter_base_url"]
 MODEL_ROUTES: dict[str, dict[str, str]] = routing_config["models"]
 DEFAULT_ROUTE: dict[str, str] = routing_config["default"]
 
+# Map a route's "strategy" to an OpenRouter provider-sort preference.
+# https://openrouter.ai/docs/features/provider-routing
+_STRATEGY_PROVIDER_SORT: dict[str, str] = {
+    "cost": "price",        # cheapest provider first
+    "latency": "throughput",  # highest-throughput provider first
+}
+
 # ---------------------------------------------------------------------------
 # FastAPI app
 # ---------------------------------------------------------------------------
@@ -117,6 +124,14 @@ async def _proxy_request(
     # Build the OpenRouter payload — override model, keep everything else
     payload = {k: v for k, v in body.items() if k != "model"}
     payload["model"] = target_model
+
+    # Enforce the route's strategy via OpenRouter provider preferences.
+    # "cost" -> cheapest provider first; "latency" -> highest throughput.
+    # A caller-supplied "provider" block always wins and is left untouched.
+    if "provider" not in payload:
+        provider_sort = _STRATEGY_PROVIDER_SORT.get(route.get("strategy", ""))
+        if provider_sort is not None:
+            payload["provider"] = {"sort": provider_sort}
 
     # Convert /v1/completions style requests to chat format (OpenRouter
     # deprecated the raw completions endpoint).
