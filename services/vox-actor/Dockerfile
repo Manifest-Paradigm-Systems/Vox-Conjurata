@@ -16,21 +16,16 @@ RUN apt-get update && apt-get install -y \
     git curl ffmpeg libsndfile1 espeak-ng \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Install inference-only Python deps (pre-build grpcio binary)
-RUN pip3 install --no-cache-dir grpcio
-# Install CosyVoice requirements.txt (skip deepspeed — training only)
-RUN pip3 install --no-cache-dir -r /app/CosyVoice/requirements.txt || \
-    (grep -vE "deepspeed|whisper|gradio" /app/CosyVoice/requirements.txt > /tmp/cv-req.txt && \
-     pip3 install --no-cache-dir -r /tmp/cv-req.txt)
-# Ensure key inference deps are present
-RUN pip3 install --no-cache-dir "huggingface-hub" "openai-whisper"
-# Note: deepspeed (training), grpcio interoperability (training), and
-# whisper/gradio are intentionally skipped — not needed for inference.
-
-# 3. Install CosyVoice from GitHub (clone for third_party/Matcha-TTS dependency)
+# 2. Install CosyVoice from GitHub (clone for third_party/Matcha-TTS dependency)
 RUN git clone --recurse-submodules https://github.com/FunAudioLLM/CosyVoice.git /app/CosyVoice
-# Matcha-TTS is used via sys.path (not pip-install) — same pattern as CosyVoice example.py.
+# Matcha-TTS is used via sys.path (not pip-install)
 ENV PYTHONPATH="/app/CosyVoice:/app/CosyVoice/third_party/Matcha-TTS:$PYTHONPATH"
+
+# 3. Install inference deps (skip deepspeed/gradio/whisper — training/UI only)
+RUN pip3 install --no-cache-dir grpcio && \
+    grep -vE "deepspeed|whisper|gradio" /app/CosyVoice/requirements.txt > /tmp/cv-req.txt && \
+    pip3 install --no-cache-dir -r /tmp/cv-req.txt && \
+    pip3 install --no-cache-dir "huggingface-hub" "openai-whisper"
 
 # 4. Install server dependencies
 RUN pip3 install --no-cache-dir fastapi uvicorn[standard] python-multipart torchaudio soundfile
