@@ -14,6 +14,9 @@ services:
     build:
       context: ./services/orchestrator
     container_name: vox-conjurata-orchestrator
+    # Map container-root to host UID 1000 so the bind-mounted rootless podman
+    # socket (owned by 1000) is accessible — required by VisionHotSwapManager.
+    userns: keep-id
     ports:
     - 8080:8080
     environment:
