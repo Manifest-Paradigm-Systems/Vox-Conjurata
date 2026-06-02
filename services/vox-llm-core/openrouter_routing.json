@@ -16,6 +16,10 @@
     "coding-cheap": {
       "strategy": "cost",
       "model": "deepseek/deepseek-v4-flash"
+    },
+    "coding-pro": {
+      "strategy": "cost",
+      "model": "deepseek/deepseek-v4-pro"
     }
   },
   "default": {
