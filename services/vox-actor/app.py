@@ -10,15 +10,16 @@ Performance optimisations:
   - Reference audio saved as tempfile, passed to CosyVoice inference_zero_shot.
 """
 
+import sys
 import os
 os.environ["MIOPEN_FIND_MODE"] = "2"
 
-import sys
-# Add CosyVoice package path (installed at build time from GitHub)
+# Add CosyVoice package path (cloned at build time from GitHub)
 _cosyvoice_dir = os.getenv("COSYVOICE_PACKAGE_DIR", "/app/CosyVoice")
-if _cosyvoice_dir not in sys.path:
-    sys.path.insert(0, _cosyvoice_dir)
-    sys.path.insert(0, os.path.join(_cosyvoice_dir, "third_party", "Matcha-TTS"))
+_matcha_dir = os.path.join(_cosyvoice_dir, "third_party", "Matcha-TTS")
+for _p in [_cosyvoice_dir, _matcha_dir]:
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 import torch
 import tempfile
