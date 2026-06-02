@@ -15,7 +15,7 @@
     },
     "coding-cheap": {
       "strategy": "cost",
-      "model": "deepseek/deepseek-chat"
+      "model": "deepseek/deepseek-v4-flash"
     }
   },
   "default": {
