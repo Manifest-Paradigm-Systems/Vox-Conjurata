@@ -21,12 +21,10 @@ _generator: tuple | None = None  # lazy-loaded (model, tokenizer)
 
 
 def _load_model():
-    """Lazy-load Parler-TTS Large on first request; stays resident until evicted."""
     global _generator
     if _generator is not None:
         return _generator
-
-    logger.info(f"Loading Parler-TTS model {MODEL_ID} (device={_device})...")
+    logger.info(f"Loading Parler-TTS {MODEL_ID} (device={_device})...")
     model = ParlerTTSForConditionalGeneration.from_pretrained(MODEL_ID).to(_device)
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
     _generator = (model, tokenizer)
@@ -35,7 +33,6 @@ def _load_model():
 
 
 def _evict_model():
-    """Unload the model from VRAM after generation (JIT pattern)."""
     global _generator
     if _generator is None:
         return
@@ -58,51 +55,47 @@ async def root():
 
 @app.post("/generate")
 async def generate_seed(payload: dict):
-    text = payload.get("text", "")
-    if not text:
+    # The "text" field is an acoustic description (e.g. "a raspy old knight")
+    # Parler-TTS needs both: a text to speak, and a description of the voice.
+    acoustic_desc = payload.get("text", "")
+    if not acoustic_desc:
         raise HTTPException(status_code=400, detail="No acoustic description provided.")
 
-    logger.info(f"Generating voice seed with Parler-TTS: '{text[:80]}...'")
+    # Also accept a custom prompt text; default to a simple test phrase
+    prompt_text = payload.get("prompt_text", "Hello, I am a character in this world.")
+
+    logger.info(f"Parler-TTS: desc='{acoustic_desc[:60]}...'  prompt='{prompt_text[:60]}...'")
 
     model, tokenizer = _load_model()
 
-    # Build a default description prompt — the acoustic description IS the prompt
-    # Parler-TTS: model generates speech matching the text description
-    input_ids = tokenizer(text, return_tensors="pt").to(_device)
-    # The model also needs a prompt describing the speaker/location/style
-    # Default to a clear speaking voice
-    description = payload.get("description", text)
-
-    gen_kwargs = {
-        "input_ids": input_ids.input_ids,
-        "attention_mask": input_ids.attention_mask,
-        "max_new_tokens": 256,
-        "do_sample": True,
-        "temperature": 1.0,
-        "top_k": 50,
-        "top_p": 0.9,
-    }
-
-    with torch.no_grad():
-        generation = model.generate(**gen_kwargs)
-
-    # Decode to audio array
-    audio_arr = generation.cpu().numpy().squeeze()
-
-    # Write to temp WAV file
-    fd, output_path = tempfile.mkstemp(suffix=".wav")
-    os.close(fd)
     try:
-        scipy.io.wavfile.write(output_path, model.config.sampling_rate, audio_arr)
-        logger.info(f"Parler-TTS generation complete ({len(audio_arr)} samples @ {model.config.sampling_rate} Hz)")
+        # Parler-TTS: input_ids = text to speak, prompt_input_ids = voice description
+        input_ids = tokenizer(prompt_text, return_tensors="pt").to(_device)
+        prompt_ids = tokenizer(acoustic_desc, return_tensors="pt").to(_device)
+
+        with torch.no_grad():
+            generation = model.generate(
+                input_ids=input_ids.input_ids,
+                prompt_input_ids=prompt_ids.input_ids,
+                do_sample=True,
+                temperature=1.0,
+                top_k=50,
+                top_p=0.9,
+                max_new_tokens=512,
+            )
+            audio_arr = generation.cpu().numpy().squeeze()
+
+        sample_rate = model.config.sampling_rate
+        fd, output_path = tempfile.mkstemp(suffix=".wav")
+        os.close(fd)
+        scipy.io.wavfile.write(output_path, sample_rate, audio_arr)
+        logger.info(f"Parler-TTS done ({len(audio_arr)} samples @ {sample_rate} Hz)")
         return FileResponse(output_path, media_type="audio/wav")
+
     except Exception as e:
         logger.error(f"Parler-TTS error: {e}")
-        if os.path.exists(output_path):
-            os.remove(output_path)
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        # JIT eviction: free VRAM after each generation
         _evict_model()
 
 
