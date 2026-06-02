@@ -53,9 +53,11 @@ VISION_READER_URL = os.getenv("VISION_READER_URL", "http://vox-vision-reader:800
 IMAGE_GEN_URL = os.getenv("IMAGE_GEN_URL", "http://vox-vision-gen:8003")
 FOUNDRY_API_URL = os.getenv("FOUNDRY_API_URL", "http://foundry-vtt:30000/api")
 FOUNDRY_API_KEY = os.getenv("FOUNDRY_API_KEY", "")
+TTS_SFX_URL = os.getenv("TTS_SFX_URL", "http://vox-audio-generation-sfx:8001")
 
 # Local paths for vision scanning (mapped volumes)
 FOUNDRY_DATA_DIR = Path("/foundry_data")
+SFX_DIR = Path("/sfx_out")
 
 # --- Vision Service Manager (Hot-Swap) ---
 
