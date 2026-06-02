@@ -211,8 +211,8 @@ services:
     - HSA_OVERRIDE_GFX_VERSION=12.0.1
     - CUDA_VISIBLE_DEVICES=""
     - QUANTIZATION=int8
-    - VRAM_LIMIT=1.20GB
-    command: ["python3", "app.py", "--keep_alive", "0"]
+    - VRAM_LIMIT=2.50GB
+    command: ["python3", "app.py"]
     networks:
     - vox-net
     restart: unless-stopped
