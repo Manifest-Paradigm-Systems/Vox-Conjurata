@@ -1,0 +1,25 @@
+{
+  "openrouter_base_url": "https://openrouter.ai/api/v1",
+  "models": {
+    "EVA-UNIT-01/EVA-Qwen2.5-7B-v0.1": {
+      "strategy": "latency",
+      "model": "anthropic/claude-3.5-haiku"
+    },
+    "vox-roleplay": {
+      "strategy": "latency",
+      "model": "anthropic/claude-3.5-haiku"
+    },
+    "cheapest": {
+      "strategy": "cost",
+      "model": "deepseek/deepseek-chat"
+    },
+    "coding-cheap": {
+      "strategy": "cost",
+      "model": "deepseek/deepseek-chat"
+    }
+  },
+  "default": {
+    "strategy": "latency",
+    "model": "openai/gpt-4o-mini"
+  }
+}
