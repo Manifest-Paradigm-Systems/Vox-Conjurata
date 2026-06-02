@@ -3,11 +3,11 @@
   "models": {
     "EVA-UNIT-01/EVA-Qwen2.5-7B-v0.1": {
       "strategy": "latency",
-      "model": "anthropic/claude-3.5-haiku"
+      "model": "sao10k/l3.1-euryale-70b"
     },
     "vox-roleplay": {
       "strategy": "latency",
-      "model": "anthropic/claude-3.5-haiku"
+      "model": "sao10k/l3.1-euryale-70b"
     },
     "cheapest": {
       "strategy": "cost",
@@ -20,6 +20,6 @@
   },
   "default": {
     "strategy": "latency",
-    "model": "openai/gpt-4o-mini"
+    "model": "sao10k/l3.1-euryale-70b"
   }
 }
