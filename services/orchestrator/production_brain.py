@@ -98,7 +98,8 @@ class VisionHotSwapManager:
                 target.start()
                 
                 # 3. Wait for service to be ready (healthcheck fallback)
-                await asyncio.sleep(3.0) 
+                # MiniCPM-V on ROCm can take 10-30s to load model into VRAM
+                await asyncio.sleep(15.0)
                 logger.info(f"🚀 Started {target_container}")
                 
             except Exception as e:
