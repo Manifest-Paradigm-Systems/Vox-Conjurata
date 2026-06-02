@@ -71,7 +71,7 @@ class VisionHotSwapManager:
         
         self.lock = asyncio.Lock()
         self.hot_container = "vox-vision-gen"
-        self.ondemand_containers = ["vox-vision-reader", "vox-vision"]
+        self.ondemand_containers = ["vox-vision-reader"]
 
     async def swap_to(self, target_container: str):
         """Evicts the hot container and starts the target on-demand container."""
@@ -98,12 +98,9 @@ class VisionHotSwapManager:
                 
                 # 3. Wait for service to be ready (retry healthcheck loop)
                 # MiniCPM-V on ROCm can take 10-60s to load model into VRAM.
-                # Each on-demand service exposes a different port + ready route:
                 #   vox-vision-reader -> :8000/v1/models (llama-cpp-python)
-                #   vox-vision        -> :7860/          (SDXL FastAPI root)
                 _health_probes = {
                     "vox-vision-reader": "http://vox-vision-reader:8000/v1/models",
-                    "vox-vision": "http://vox-vision:7860/",
                 }
                 _health_url = _health_probes.get(
                     target_container, f"http://{target_container}:8000/v1/models"
@@ -288,7 +285,7 @@ error_buffer: List[dict] = []
 
 @app.post("/api/scan-battlemap")
 async def scan_battlemap(req: BattlemapScanRequest):
-    """Triggers vox-vision to analyze a battlemap for walls, doors, and lights."""
+    """Triggers vox-vision-reader to analyze a battlemap for walls, doors, and lights."""
     logger.info(f"🗺️ Battlemap Scan requested for Scene: {req.sceneId}")
     
     full_path = FOUNDRY_DATA_DIR / req.imagePath
