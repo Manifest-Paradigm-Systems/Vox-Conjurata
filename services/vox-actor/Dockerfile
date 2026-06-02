@@ -28,8 +28,14 @@ RUN grep -vE "deepspeed|whisper|gradio|extra-index-url|grpcio" /app/CosyVoice/re
     pip3 install --no-cache-dir -r /tmp/cv-req.txt && \
     pip3 install --no-cache-dir "huggingface-hub" "openai-whisper" "transformers<4.48"
 
-# 4. Install server dependencies
-RUN pip3 install --no-cache-dir fastapi uvicorn[standard] python-multipart torchaudio soundfile
+# 4. Replace CUDA PyTorch with ROCm PyTorch (the base rocm/pytorch image ships
+#    a CUDA build by default — we need the ROCm variant for actual GPU inference)
+RUN pip3 install --no-cache-dir --force-reinstall \
+    --index-url https://download.pytorch.org/whl/rocm6.0/ \
+    torch torchvision torchaudio
+
+# 5. Install server dependencies
+RUN pip3 install --no-cache-dir fastapi uvicorn[standard] python-multipart soundfile
 
 # 4. Pre-download models? Done at runtime on first load via snapshot_download.
 # The shared /models volume will cache them across restarts.
