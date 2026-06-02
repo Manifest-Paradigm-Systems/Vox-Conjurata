@@ -646,7 +646,7 @@ async def get_visual_description(image_path_relative: str) -> str:
                     "role": "user",
                     "content": [
                         {"type": "text", "text": "Describe the physical appearance of this creature or person in detail. Focus on race, species, age, gender, and distinguishing features like raspiness or vocal potential indicators."},
-                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+                        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{base64_image}"}}
                     ]
                 }
             ],
