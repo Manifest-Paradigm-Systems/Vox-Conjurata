@@ -43,6 +43,7 @@ RUN pip3 install --no-cache-dir \
     "tensorboardx" \
     "tokenizers" \
     "transformers" \
+    "huggingface-hub" \
     "openai-whisper"
 # Note: deepspeed (training), grpcio interoperability (training), and
 # whisper/gradio are intentionally skipped — not needed for inference.

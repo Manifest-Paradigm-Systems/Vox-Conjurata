@@ -61,6 +61,18 @@ def _load_model():
     if _cosyvoice is not None:
         return _cosyvoice
 
+    # Ensure model directory exists — download from HuggingFace if needed
+    if not os.path.isdir(MODEL_DIR):
+        logger.info(f"Downloading CosyVoice 3 model from HuggingFace to {MODEL_DIR}...")
+        from huggingface_hub import snapshot_download
+        os.makedirs(MODEL_DIR, exist_ok=True)
+        snapshot_download(
+            "FunAudioLLM/Fun-CosyVoice3-0.5B-2512",
+            local_dir=MODEL_DIR,
+            local_dir_use_symlinks=False,
+        )
+        logger.info("CosyVoice 3 model downloaded.")
+
     logger.info(f"Loading CosyVoice 3 from {MODEL_DIR}...")
     from cosyvoice.cli.cosyvoice import AutoModel
 
