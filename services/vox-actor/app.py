@@ -62,7 +62,6 @@ def _load_model():
         return _cosyvoice
 
     logger.info(f"Loading CosyVoice 3 from {MODEL_DIR}...")
-    sys.path.insert(0, "/app/CosyVoice/third_party/Matcha-TTS")
     from cosyvoice.cli.cosyvoice import AutoModel
 
     _cosyvoice = AutoModel(
