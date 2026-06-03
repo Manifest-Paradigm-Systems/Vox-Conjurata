@@ -275,15 +275,18 @@ Hooks.once("ready", () => {
             if (typeof stopRecording === 'function') stopRecording();
         }
     });
+});
 
-    // Create a button in the scene controls to open the panel
-    const control = ui.controls.controls.find(c => c.name === "token");
-    if (control) {
-        control.tools.push({
+// Create a button in the scene controls to open the panel
+Hooks.on("getSceneControlButtons", (controls) => {
+    const tokenControl = controls.find(c => c.name === "token");
+    if (tokenControl) {
+        tokenControl.tools.push({
             name: "vox-panel",
             title: "Vox Live Panel",
             icon: "fas fa-microphone-lines",
             button: true,
+            visible: game.user.isGM,
             onClick: () => globalThis.voxLivePanel.render(true)
         });
     }
