@@ -88,11 +88,6 @@ class VisionHotSwapManager:
         # logger.info(f"🔄 Restoring: Stopping {current_container} -> Warming {self.hot_container}")
         return
 
-                logger.info(f"🔥 {self.hot_container} is back online.")
-                
-            except Exception as e:
-                logger.error(f"❌ Restore Failed: {e}")
-
 hotswap_manager = VisionHotSwapManager()
 
 # Cache for Voice Seeds
