@@ -534,8 +534,22 @@ class SpeechPipelineFactory:
         self.fishspeech = FishSpeechEngine()
 
     def get_engine(self, is_monster: bool, stats: dict, config: dict, vram_triggered: bool) -> SpeechEngine:
-        # CosyVoice 3 is the only engine fast enough for 2s latency.
-        # We use it for everything, but Fish Speech is kept for manual overrides.
+        """Route to the best engine for this speaker.
+
+        Config-driven routing with monster/narrator awareness:
+        - Fish Speech handles monsters and beastly characters for textured voices.
+        - CosyVoice 3 handles humanoids and narrators for clean, fast speech.
+        - The ``tier_routing`` dict in voice_routing_config.json can override
+          any of these defaults via ``humanoid_engine`` / ``monster_engine`` keys.
+        """
+        tier = config.get("tier_routing", {})
+        if is_monster:
+            target = tier.get("monster_engine", "fishspeech")
+        else:
+            target = tier.get("humanoid_engine", "cosyvoice")
+
+        if target == "fishspeech":
+            return self.fishspeech
         return self.cosyvoice
 
 pipeline_factory = SpeechPipelineFactory()
