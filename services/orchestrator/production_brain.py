@@ -63,6 +63,197 @@ VOICE_SEEDS_DIR = Path("./voice_seeds")
 VOICE_SEEDS_DIR.mkdir(exist_ok=True)
 
 CONFIG_PATH = Path("./settings/voice_routing_config.json")
+VOICE_REGISTRY_PATH = Path("./settings/voice_registry.json")
+PALETTE_DIR = VOICE_SEEDS_DIR / "_palette"
+
+# ---------------------------------------------------------------------------
+# Voice Registry — persists character_id → seed mappings across restarts
+# ---------------------------------------------------------------------------
+
+def load_voice_registry() -> dict:
+    if VOICE_REGISTRY_PATH.exists():
+        try:
+            with open(VOICE_REGISTRY_PATH, "r") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"Failed to read voice registry: {e}")
+    return {}
+
+
+def save_voice_registry(registry: dict) -> None:
+    VOICE_REGISTRY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(VOICE_REGISTRY_PATH, "w") as f:
+        json.dump(registry, f, indent=2)
+
+
+def register_character_voice(
+    actor_id: str,
+    engine: str,
+    seed_path: str,
+    voice_prompt: str = "",
+    is_archetype: bool = False,
+    archetype_key: str = "",
+) -> None:
+    """Record a character's voice seed in the persistent registry."""
+    registry = load_voice_registry()
+    registry[actor_id] = {
+        "engine": engine,
+        "seed_path": seed_path,
+        "voice_prompt": voice_prompt,
+        "is_archetype": is_archetype,
+        "archetype_key": archetype_key,
+        "created_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+    }
+    save_voice_registry(registry)
+    logger.info(f"[REGISTRY] {actor_id} → {seed_path} (engine={engine}, archetype={is_archetype})")
+
+
+def resolve_seed_path(actor_id: str) -> str:
+    """Return the seed WAV path for a character, checking registry first.
+
+    Falls back to filesystem glob if the character is not in the registry.
+    """
+    registry = load_voice_registry()
+    entry = registry.get(actor_id)
+    if entry:
+        seed_path = entry.get("seed_path", "")
+        full = VOICE_SEEDS_DIR / seed_path
+        if full.exists():
+            return str(full)
+        logger.warning(f"[REGISTRY] Stale entry for {actor_id}: {seed_path} not found")
+
+    # Fallback: filesystem glob
+    seeds = list(VOICE_SEEDS_DIR.glob(f"{actor_id}_seed_*.wav"))
+    if seeds:
+        return str(seeds[0])
+    return ""
+
+
+# ---------------------------------------------------------------------------
+# Archetype Palette — generates base voice seeds via Fish Speech on first use
+# ---------------------------------------------------------------------------
+
+PALETTE_DEFINITIONS: dict[str, str] = {
+    # Humanoids — accented archetypes
+    "human_male_british":     "[British accent, deep male, clear, composed] Hello, I am a character in this world, and this is my unique voice.",
+    "human_female_british":   "[British accent, bright female, warm, clear, composed] Hello, I am a character in this world, and this is my unique voice.",
+    "dwarf_male_scottish":    "[Scottish accent, gruff male, deep, rugged, hearty, miner's voice] Hello, I am a character in this world, and this is my unique voice.",
+    "dwarf_female_scottish":  "[Scottish accent, gruff female, warm, hearty, deep, miner's wife] Hello, I am a character in this world, and this is my unique voice.",
+    "halfling_male_irish":    "[Irish accent, cheerful male, light tenor, nimble, folk melody] Hello, I am a character in this world, and this is my unique voice.",
+    "halfling_female_irish":  "[Irish accent, bright female, light soprano, playful, folk melody] Hello, I am a character in this world, and this is my unique voice.",
+    "barbarian_male_german":   "[German accent, deep male, harsh, guttural consonants, powerful, warrior] Hello, I am a character in this world, and this is my unique voice.",
+    "barbarian_female_german": "[German accent, strong female, harsh consonants, warrior, deep, powerful] Hello, I am a character in this world, and this is my unique voice.",
+    "elder_male_british":      "[British accent, old man, raspy, wise, low pitch, slow, deliberate] Hello, I am a character in this world, and this is my unique voice.",
+    "elder_female_british":    "[British accent, old woman, raspy, warm, low pitch, slow, deliberate] Hello, I am a character in this world, and this is my unique voice.",
+    # Monsters
+    "monster_beast":   "[guttural growl, deep, resonant, beastly, low rumble] Hello, I am a character in this world, and this is my unique voice.",
+    "monster_undead":  "[hollow, raspy, death rattle, whisper, echo] Hello, I am a character in this world, and this is my unique voice.",
+    "monster_dragon":  "[deep rumble, ancient, commanding, echoing, immense] Hello, I am a character in this world, and this is my unique voice.",
+    "monster_demon":   "[demonic, distorted, multi-layered voice, infernal growl, low] Hello, I am a character in this world, and this is my unique voice.",
+    "monster_goblin":  "[high pitched, nasally, screechy, chittering, rapid] Hello, I am a character in this world, and this is my unique voice.",
+}
+
+
+def resolve_archetype(actor_data: "ActorMetadata", vocal_profile: dict) -> str:
+    """Map character traits to the closest palette archetype key."""
+    stats = actor_data.stats or {}
+    race = stats.get("race", "").lower().strip()
+    gender = vocal_profile.get("gender", "male").lower().strip()
+    description = vocal_profile.get("description", "").lower()
+    name_lore = (actor_data.name + " " + actor_data.lore).lower()
+    is_elder = any(w in description or w in name_lore
+                   for w in ["elder", "old ", "ancient", "aged", "venerable", "wizened"])
+
+    if actor_data.isMonster:
+        # Categorise by keywords in name/lore/race
+        monster_text = name_lore + " " + race
+        if any(w in monster_text for w in ["dragon", "wyrm", "drake", "wyvern"]):
+            return "monster_dragon"
+        if any(w in monster_text for w in
+               ["skeleton", "zombie", "lich", "ghost", "spectre", "wraith", "banshee",
+                "vampire", "revenant", "undead", "necromancer"]):
+            return "monster_undead"
+        if any(w in monster_text for w in
+               ["demon", "devil", "fiend", "abyssal", "infernal", "pit lord"]):
+            return "monster_demon"
+        if any(w in monster_text for w in
+               ["goblin", "kobold", "gremlin", "imp", "sprite"]):
+            return "monster_goblin"
+        return "monster_beast"
+
+    # Humanoid — match race + gender + age
+    if "dwarf" in race or "dwarven" in race:
+        return f"dwarf_{gender}_scottish"
+    if "halfling" in race or "hobbit" in race:
+        return f"halfling_{gender}_irish"
+    if "barbarian" in race or "barbarian" in name_lore:
+        return f"barbarian_{gender}_german"
+
+    if is_elder:
+        return f"elder_{gender}_british"
+
+    return f"human_{gender}_british"
+
+
+async def ensure_palette_seed(archetype_key: str) -> str:
+    """Ensure a palette archetype seed exists — generate via Fish Speech if missing.
+
+    Returns the absolute path to the palette seed WAV.
+    """
+    palette_path = PALETTE_DIR / f"{archetype_key}.wav"
+    if palette_path.exists():
+        return str(palette_path)
+
+    prompt = PALETTE_DEFINITIONS.get(archetype_key)
+    if not prompt:
+        logger.error(f"[PALETTE] Unknown archetype key: {archetype_key}")
+        return ""
+
+    PALETTE_DIR.mkdir(parents=True, exist_ok=True)
+    logger.info(f"[PALETTE] Generating new archetype seed: {archetype_key}")
+
+    async with httpx.AsyncClient(timeout=180.0) as client:
+        try:
+            payload = {"text": prompt, "references": [], "format": "wav"}
+            resp = await client.post(f"{TTS_MONSTER_URL}/v1/tts", json=payload)
+            if resp.status_code == 200:
+                palette_path.write_bytes(resp.content)
+                # Also write companion transcript
+                transcript_path = palette_path.with_suffix(".txt")
+                transcript_path.write_text(
+                    "Hello, I am a character in this world, and this is my unique voice."
+                )
+                logger.info(f"[PALETTE] Created {archetype_key} → {palette_path.name}")
+                return str(palette_path)
+            else:
+                logger.error(f"[PALETTE] Fish Speech returned {resp.status_code} for {archetype_key}")
+                return ""
+        except Exception as e:
+            logger.error(f"[PALETTE] Fish Speech error for {archetype_key}: {e}")
+            return ""
+
+
+def is_named_character(actor_data: "ActorMetadata") -> bool:
+    """Determine if a character is a 'named' entity deserving a unique seed.
+
+    Returns False for generic tokens like 'Human Guard', 'Skeleton', etc.
+    Returns True for proper names like 'Garrick the Rogue', 'Aldric'.
+    """
+    name = (actor_data.name or "").strip()
+    if not name or name.lower() in ("unknown", "unnamed", "narrator", ""):
+        return False
+    # Generic patterns: single common noun, "Race Class" template
+    generic_patterns = [
+        r"^(guard|soldier|peasant|villager|merchant|thug|bandit|citizen|commoner)$",
+        r"^(human|elf|dwarf|halfling|orc|goblin|kobold)\s+(guard|soldier|peasant|thug|bandit|commoner|archer|mage)$",
+        r"^(skeleton|zombie|ghoul|ghost|rat|bat|spider|slime|ooze)$",
+        r"^(townsfolk|townsperson|city guard|castle guard)$",
+    ]
+    for pat in generic_patterns:
+        if re.match(pat, name, re.IGNORECASE):
+            return False
+    # Has a proper name (capitalised, not purely descriptive)
+    return True
 
 # --- Helper Functions ---
 
