@@ -17,11 +17,9 @@ RUN apt-get update && apt-get install -y \
     git curl ffmpeg libsndfile1 espeak-ng \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Replace the base image's CUDA PyTorch with the ROCm variant.
-#    The rocm/pytorch image ships ROCm 7.2, so we must match that index.
-RUN pip3 install --no-cache-dir --force-reinstall \
-    --index-url https://download.pytorch.org/whl/rocm7.2/ \
-    torch torchvision torchaudio
+# 2. Pin numpy < 2.0.0 immediately to avoid compatibility issues with onnxruntime
+#    We do this before any other pip installs.
+RUN pip3 install --no-cache-dir "numpy<2.0.0"
 
 # 3. Install CosyVoice from GitHub (clone for third_party/Matcha-TTS dependency)
 RUN git clone --recurse-submodules https://github.com/FunAudioLLM/CosyVoice.git /app/CosyVoice
@@ -29,6 +27,8 @@ RUN git clone --recurse-submodules https://github.com/FunAudioLLM/CosyVoice.git 
 ENV PYTHONPATH="/app/CosyVoice:/app/CosyVoice/third_party/Matcha-TTS:$PYTHONPATH"
 
 # 4. Install inference deps (skip deepspeed/gradio/whisper/grpcio — training only)
+#    We use --no-deps for CosyVoice requirements to avoid accidental downgrades of the
+#    base ROCm PyTorch or upgrades of pinned numpy.
 RUN grep -vE "deepspeed|whisper|gradio|extra-index-url|grpcio" /app/CosyVoice/requirements.txt > /tmp/cv-req.txt && \
     sed -i '/^transformers/d' /tmp/cv-req.txt && \
     pip3 install --no-cache-dir -r /tmp/cv-req.txt && \
