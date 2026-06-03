@@ -25,7 +25,6 @@ services:
     - OLLAMA_URL=http://vox-llm-core:8080
     - VISION_READER_URL=http://vox-vision-reader:8000
     - STT_URL=http://vox-voice:5000
-    - TTS_DESIGNER_URL=http://vox-designer:5010
     - TTS_ACTOR_URL=http://vox-actor:5020
     - TTS_MONSTER_URL=http://vox-monster-fish:7860
     - TTS_MUSIC_URL=http://vox-audio-generation-music:8000
