@@ -299,8 +299,29 @@ async function handleVoxCommand(command, param) {
             });
         });
     }
+    else if (command === "help") {
+        ChatMessage.create({
+            speaker: { alias: "Vox Help" },
+            content: `<div style="font-family: sans-serif; font-size: 0.85rem; background: #1a1a1a; color: #ffffff; padding: 12px; border-radius: 6px; border-left: 4px solid #00ff00;">
+                <h3 style="margin-top: 0; color: #00ff00; border-bottom: 1px solid #333; padding-bottom: 5px;">🎙️ VOX Terminal Commands</h3>
+                <p style="margin-bottom: 10px; font-style: italic; font-size: 0.75rem;">Commands target the <strong>hovered</strong> or <strong>selected</strong> token.</p>
+                <ul style="list-style: none; padding-left: 0;">
+                    <li style="margin-bottom: 8px;"><strong>/vox forge</strong><br/><span style="font-size: 0.75rem; color: #aaa;">Re-roll character voice using automatic AI analysis.</span></li>
+                    <li style="margin-bottom: 8px;"><strong>/vox voice [desc]</strong><br/><span style="font-size: 0.75rem; color: #aaa;">Manually define the voice. <em>Ex: /vox voice "A raspy dwarf"</em></span></li>
+                    <li style="margin-bottom: 8px;"><strong>/vox status</strong><br/><span style="font-size: 0.75rem; color: #aaa;">Show VRAM usage and service health.</span></li>
+                </ul>
+                <h4 style="margin-bottom: 5px; color: #00ff00;">Hotkeys (PTT)</h4>
+                <ul style="list-style: none; padding-left: 0; font-size: 0.75rem;">
+                    <li><strong>[Y]</strong> : Narrator Mic</li>
+                    <li><strong>[H]</strong> : Puppeteer Mic (targets NPC)</li>
+                    <li><strong>[I]</strong> : Character Mic (targets PC/selected)</li>
+                </ul>
+            </div>`,
+            whisper: ChatMessage.getWhisperRecipients("GM")
+        });
+    }
     else {
-        ui.notifications.info("Available commands: /vox forge, /vox voice [desc], /vox status");
+        ui.notifications.info("Available commands: /vox forge, /vox voice [desc], /vox status, /vox help");
     }
 }
 
