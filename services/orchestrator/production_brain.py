@@ -9,6 +9,7 @@ import asyncio
 import json
 import urllib.parse
 import base64
+import time
 import edge_tts
 import re
 import wave
