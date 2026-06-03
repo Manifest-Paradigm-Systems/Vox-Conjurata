@@ -60,36 +60,6 @@ W_OKADA_URL = os.getenv("W_OKADA_URL", "http://127.0.0.1:18888")
 FOUNDRY_DATA_DIR = Path("/foundry_data")
 SFX_DIR = Path("/sfx_out")
 
-# --- Vision Service Manager (Hot-Swap) ---
-
-class VisionHotSwapManager:
-    """Manages the mutual exclusivity of heavy vision containers to optimize VRAM."""
-    def __init__(self):
-        try:
-            self.client = docker.from_env()
-            logger.info("🐳 Container Manager: Docker/Podman socket connected.")
-        except Exception as e:
-            logger.error(f"❌ Container Manager: Failed to connect to socket: {e}")
-            self.client = None
-        
-        self.lock = asyncio.Lock()
-        self.hot_container = "vox-vision-gen"
-        self.ondemand_containers = ["vox-vision-reader"]
-
-    async def swap_to(self, target_container: str):
-        """Evicts the hot container and starts the target on-demand container."""
-        # --- BYPASS: Both vision services are now running 'hot' simultaneously ---
-        # logger.info(f"🔄 Swapping: Evicting {self.hot_container} -> Loading {target_container}")
-        return
-
-    async def restore_hot_state(self, current_container: str):
-        """Stops the on-demand container and restores the default hot generator."""
-        # --- BYPASS: Both vision services are now running 'hot' simultaneously ---
-        # logger.info(f"🔄 Restoring: Stopping {current_container} -> Warming {self.hot_container}")
-        return
-
-hotswap_manager = VisionHotSwapManager()
-
 # Cache for Voice Seeds
 VOICE_SEEDS_DIR = Path("./voice_seeds")
 VOICE_SEEDS_DIR.mkdir(exist_ok=True)
