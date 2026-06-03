@@ -520,9 +520,8 @@ class CosyVoiceEngine(SpeechEngine):
         seed_path = seeds[0] if seeds else None
         
         if not seed_path:
-            logger.info(f"[VOICE-ROUTING] No seed found for {actor_id}. Forging new seed...")
-            seed_path = VOICE_SEEDS_DIR / f"{actor_id}_seed_male.wav"
-            await forge_voice_seed(actor_id, f"A clear speaking voice for {actor_id}.", "male")
+            logger.warning(f"[VOICE-ROUTING] No seed found for {actor_id}. Falling back to narrator.")
+            seed_path = VOICE_SEEDS_DIR / "narrator_seed_male.wav"
         
         if seed_path and seed_path.exists():
             logger.info(f"[VOICE-ROUTING] Using voice seed: {seed_path.name}")
