@@ -184,9 +184,6 @@ function resolveActiveToken(isGM) {
 // ==========================================
 // 3. KEYBINDING REGISTRATION (INIT)
 // ==========================================
-// ==========================================
-// 3. KEYBINDING REGISTRATION (INIT)
-// ==========================================
 function registerKeybindings() {
     if (globalThis.voxKeybindingsRegistered) return;
     console.log("🎙️ Vox-Conjurata: Registering settings and keybindings.");
@@ -294,6 +291,8 @@ globalThis.startRecording = startRecording;
 globalThis.stopRecording = stopRecording;
 globalThis.statusMessage = statusMessage;
 globalThis.playAudio = playAudio;
+globalThis.resolveActiveToken = resolveActiveToken;
+globalThis.resolveIsMonster = resolveIsMonster;
 
 // Register on init
 Hooks.once("init", () => {
