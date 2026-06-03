@@ -300,7 +300,7 @@ async function processAndSendAudio() {
             const { transcription, audio_data, engine, voxType } = data;
             if (audio_data) playAudio(audio_data, 1.0);
             
-            const msgStyle = (typeof CONST !== 'undefined') ? (CONST.CHAT_MESSAGE_STYLES?.IC || CONST.CHAT_MESSAGE_TYPES?.IC || "ic") : "ic";
+            const msgStyle = "ic";
             const message = await ChatMessage.create({ 
                 content: transcription, type: msgStyle, style: msgStyle,
                 speaker: { actor: activeActorId === 'narrator' ? null : activeActorId, alias: activeSpeakerName },
