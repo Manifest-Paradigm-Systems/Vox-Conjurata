@@ -2,7 +2,7 @@
 
 - **Compute Boundaries**: ALL CORE INFERENCE MODELS (Text, HD Vision, Audio, Image Generation) MUST BE GPU RESIDENT. No CPU-bound execution paths are permitted. `MiniCPM-V 2.6` is the primary vision handler. `SDXL` and `Stable Audio 3 Music` operate as JIT services, loading/evicting dynamically to conserve VRAM.
 - **Vision Protocol**: `MiniCPM-V 2.6` remains permanently resident in GPU space for OCR and layout parsing. `SDXL` operates dynamically under a Just-In-Time (JIT) protocol, loading on-demand and immediately evicting itself after image generation to reclaim VRAM.
-- **JIT Audio Protocol**: `Parler-TTS` (Voice Prototyping) and `Stable Audio 3 Music` operate as Just-In-Time services. They load on-demand (1.20 GB and 1.80 GB VRAM bursts respectively) and are immediately evicted after execution to reclaim VRAM.
+- **JIT Audio Protocol**: `CosyVoice 3` (Voice Seeds, Humanoids) and `Fish Speech` (Monsters) generate character-unique voice seeds that are cached and reused across TTS sessions. `Stable Audio 3 Music` operates as a Just-In-Time service, loading on-demand (1.80 GB VRAM burst) and immediately evicting after execution to reclaim VRAM.
 - **GPU Resident Engines**: The GM Brain (`EVA-Qwen`), HD Vision (`MiniCPM-V 2.6`), Voice Suite (`CosyVoice`, `Fish Speech`), and `Stable Audio 3 SFX` are strictly resident in GPU VRAM. `SDXL` and `Stable Audio 3 Music` are dynamically managed via JIT.
 - **VRAM Headroom**: Baseline load is optimized, recovering ~7.30 GB of VRAM when JIT services (SDXL and Stable Audio 3 Music) are idle. A 5.5GB+ buffer is reserved for OS and VTT canvas rendering on our 32GB hardware.
 - **PTT Priority**: Live speech/vocal conversions take absolute priority over background rendering.
