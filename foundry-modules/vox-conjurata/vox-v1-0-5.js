@@ -5,25 +5,21 @@
 console.log("🚀 Vox-Conjurata: Script evaluation started.");
 
 // ==========================================
-// 0. TERMINAL ENGINE (PF2E COMPATIBLE INTERCEPT)
+// 0. TERMINAL MONKEYPATCH (BLOCK PF2E ERRORS)
 // ==========================================
-Hooks.on("chatMessage", (chatLog, message, chatData) => {
-    const cleanMsg = message.trim();
-    if (cleanMsg.toLowerCase().startsWith("/vox")) {
-        console.log(`🎙️ Vox-Conjurata: Intercepting terminal command: ${cleanMsg}`);
-        
-        // Immediate processing
-        const parts = cleanMsg.split(/\s+/);
-        const command = parts[1] ? parts[1].toLowerCase() : "help";
-        const param = parts.slice(2).join(" ");
-        
-        // Execute command
-        handleVoxCommand(command, param);
-        
-        // RETURN FALSE: This tells Foundry and PF2e to STOP processing the message
-        // This is what prevents the "not a valid command" error.
-        return false; 
-    }
+Hooks.once("init", () => {
+    const originalProcessMessage = ChatLog.prototype.processMessage;
+    ChatLog.prototype.processMessage = function(message) {
+        if (message.trim().toLowerCase().startsWith("/vox")) {
+            console.log(`🎙️ Vox-Conjurata Terminal: Blocking PF2e parser for: ${message}`);
+            const parts = message.trim().split(/\s+/);
+            const command = parts[1] ? parts[1].toLowerCase() : "help";
+            const param = parts.slice(2).join(" ");
+            handleVoxCommand(command, param);
+            return; // STOP HERE - Do not call originalProcessMessage
+        }
+        return originalProcessMessage.call(this, message);
+    };
 });
 
 async function handleVoxCommand(command, param) {
@@ -31,24 +27,21 @@ async function handleVoxCommand(command, param) {
     const activeToken = resolveActiveToken(true);
     
     if (command === "forge" || command === "voice") {
-        if (!activeToken) {
-            ui.notifications.warn("⚠️ Vox Terminal: Select or hover over a token first!");
-            return;
-        }
-        const description = command === "voice" ? param : "";
-        statusMessage(`VOX TERMINAL: Manually forging seed for ${activeToken.actor.name}...`, true);
+        if (!activeToken) { ui.notifications.warn("⚠️ Vox Terminal: Select/hover a token!"); return; }
+        const desc = command === "voice" ? param : "";
+        statusMessage(`VOX TERMINAL: Re-forging voice for ${activeToken.actor.name}...`, true);
         const actorData = {
             actorId: activeToken.actor.id, name: activeToken.actor.name,
             lore: activeToken.actor.system.details?.biography?.value || "",
             artPath: activeToken.actor.img, isMonster: resolveIsMonster(activeToken.actor),
-            customDescription: description
+            customDescription: desc
         };
         try {
-            const response = await fetch(globalThis.voxState.ingestEndpoint + "?force_refresh=true", {
+            const resp = await fetch("/api/ingest-actor?force_refresh=true", {
                 method: "POST", headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(actorData)
             });
-            const data = await response.json();
+            const data = await resp.json();
             if (data.status === "created") {
                 statusMessage(`✅ VOX TERMINAL: Voice forged for ${activeToken.actor.name}!`, false);
                 ui.notifications.info(`🎙️ Vox: Voice seed created for ${activeToken.actor.name}`);
@@ -58,58 +51,51 @@ async function handleVoxCommand(command, param) {
     else if (command === "status") {
         fetch("/api/status").then(r => r.json()).then(data => {
             ChatMessage.create({
-                speaker: { alias: "Vox System Console" },
-                content: `<div style="font-family: monospace; background: #1a1a1a; color: #00ff00; padding: 10px; border-radius: 5px; border: 1px solid #333;">
-                    <strong>SYSTEM TELEMETRY</strong><br/>
-                    ---------------------<br/>
-                    VRAM: ${data.vram_used_gb?.toFixed(2) || "???"} / ${data.vram_total_gb?.toFixed(2) || "32"} GB<br/>
-                    VISION: HOT (STANDBY)
+                speaker: { alias: "Vox Console" },
+                content: `<div style="font-family: monospace; background: #000; color: #0f0; padding: 8px; border: 1px solid #333;">
+                    <strong>VOX STATUS</strong><br/>
+                    VRAM: ${data.vram_used_gb?.toFixed(1)}GB / 32GB<br/>
+                    ENGINES: COSYVOICE, FISH<br/>
+                    VISION: HOT
                 </div>`,
-                whisper: ChatMessage.getWhisperRecipients("GM")
+                whisper: [game.user.id]
             });
         });
     }
     else {
-        // help menu
         ChatMessage.create({
             speaker: { alias: "Vox Help" },
-            content: `<div style="background: #1a1a1a; color: #fff; padding: 10px; border-radius: 5px; border-left: 4px solid #00ff00;">
-                <h3 style="color: #00ff00; margin-top: 0;">🎙️ VOX Terminal</h3>
-                <strong>/vox forge</strong> - Re-roll voice<br/>
-                <strong>/vox voice [desc]</strong> - Manual voice desc<br/>
-                <strong>/vox status</strong> - System health
+            content: `<div style="background: #111; color: #fff; padding: 10px; border-left: 4px solid #0f0;">
+                <h3 style="color: #0f0; margin: 0 0 10px 0;">🎙️ VOX COMMANDS</h3>
+                <strong>/vox forge</strong> - AI auto-voice<br/>
+                <strong>/vox voice [desc]</strong> - Manual voice<br/>
+                <strong>/vox status</strong> - System stats
             </div>`,
-            whisper: ChatMessage.getWhisperRecipients("GM")
+            whisper: [game.user.id]
         });
     }
 }
 
 // ==========================================
-// 1. TELEMETRY BRIDGE & SELF-HEALING
+// 1. TELEMETRY BRIDGE
 // ==========================================
 (function() {
     try {
         const ORCHESTRATOR_URL = "/api/v1/diagnostics/logs";
         const shipLog = async (data) => {
-            try {
-                const payload = typeof data === 'string' ? { type: "info", message: data } : data;
-                await fetch(ORCHESTRATOR_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-            } catch (e) {}
-        };
-        window.onerror = (message, source, lineno, colno, error) => {
-            shipLog({ type: "exception", message: message, source: source, lineno: lineno, error: error?.stack || "No stack trace" });
+            try { await fetch(ORCHESTRATOR_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(typeof data === 'string' ? { type: "info", message: data } : data) }); } catch (e) {}
         };
         const originalConsoleError = console.error;
         console.error = (...args) => {
-            try { shipLog({ type: "console-error", message: args.join(' '), source: "console.error override" }); } catch (err) {}
+            try { shipLog({ type: "error", message: args.join(' ') }); } catch (err) {}
             originalConsoleError.apply(console, args);
         };
         console.log("📡 Vox-Conjurata: Telemetry Bridge Active.");
-    } catch (e) { console.warn("⚠️ Vox-Conjurata: Telemetry Bridge fail.", e); }
+    } catch (e) {}
 })();
 
 // ==========================================
-// 2. GLOBAL STATE & CONFIGURATION
+// 2. CORE LOGIC
 // ==========================================
 globalThis.voxState = globalThis.voxState || { 
     narratorActive: false, puppetActive: false, playerActive: false,
@@ -121,52 +107,39 @@ globalThis.voxState = globalThis.voxState || {
 function resolveIsMonster(actor) {
     if (!actor) return false;
     if (actor.type === "character") return false;
-    const strictMonsterKeywords = ["dragon", "skeleton", "zombie", "undead", "fiend", "demon", "devil", "beast", "monster", "aberration", "xulgath", "zulgath", "goblin", "kobold", "orc", "troll", "ogre", "bugbear", "ghoul", "lich"];
-    const nameLower = actor.name?.toLowerCase() ?? "";
-    if (strictMonsterKeywords.some(kw => nameLower.includes(kw))) return true;
-    if (actor.type === "npc") {
-        const creatureType = actor.system?.details?.type?.value?.toLowerCase() ?? "";
-        return creatureType !== "humanoid";
-    }
-    return false;
+    const monsterKeywords = ["dragon", "skeleton", "zombie", "undead", "fiend", "demon", "devil", "beast", "monster", "aberration", "xulgath", "zulgath", "goblin", "kobold", "orc", "troll", "ogre", "bugbear", "ghoul", "lich"];
+    const name = actor.name?.toLowerCase() ?? "";
+    if (monsterKeywords.some(kw => name.includes(kw))) return true;
+    return actor.type === "npc" && actor.system?.details?.type?.value?.toLowerCase() !== "humanoid";
 }
 
 function resolveActiveToken(isGM) {
     if (typeof canvas === 'undefined' || !canvas.tokens) return null;
-    const hoveredToken = canvas.tokens.placeables?.find(t => t.hover);
-    if (hoveredToken && hoveredToken.actor) {
-        if (isGM || hoveredToken.actor.isOwner) return hoveredToken;
-    }
-    const controlledToken = canvas.tokens.controlled?.[0];
-    return (controlledToken && controlledToken.actor) ? controlledToken : null;
+    const hovered = canvas.tokens.placeables?.find(t => t.hover);
+    if (hovered?.actor && (isGM || hovered.actor.isOwner)) return hovered;
+    const controlled = canvas.tokens.controlled?.[0];
+    return controlled?.actor ? controlled : null;
 }
 
-// ==========================================
-// 2b. AUDIO INITIALIZATION
-// ==========================================
 (async function initAudio() {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+    if (!navigator.mediaDevices?.getUserMedia) return;
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        try { globalThis.voxState.mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm; codecs=opus" }); } 
-        catch (e) { globalThis.voxState.mediaRecorder = new MediaRecorder(stream); }
-        globalThis.voxState.mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) globalThis.voxState.audioChunks.push(e.data); };
-        globalThis.voxState.mediaRecorder.onstop = async () => { await processAndSendAudio(); };
-        console.log("🎙️ Vox-Conjurata: Hardware microphone pipeline ready.");
+        const recorder = new MediaRecorder(stream);
+        globalThis.voxState.mediaRecorder = recorder;
+        recorder.ondataavailable = (e) => { if (e.data.size > 0) globalThis.voxState.audioChunks.push(e.data); };
+        recorder.onstop = async () => { await processAndSendAudio(); };
+        console.log("🎙️ Vox-Conjurata: Mic pipeline hot.");
     } catch (err) { console.error("❌ Vox Audio Fail:", err); }
 })();
 
-// ==========================================
-// 3. KEYBINDING & KEYBOARD ENGINE
-// ==========================================
 function registerKeybindings() {
     if (globalThis.voxKeybindingsRegistered) return;
     globalThis.voxKeybindingsRegistered = true;
-    console.log("🎙️ Vox-Conjurata: Registering settings and keybindings.");
-    game.settings.register("vox-conjurata", "narratorVoice", { name: "Vox: Narrator Voice Profile", scope: "world", config: true, type: String, default: "en-US-ChristopherNeural" });
+    console.log("🎙️ Vox-Conjurata: Registering PTT Hotkeys.");
     game.keybindings.register("vox-conjurata", "narratorPTT", { name: "Vox: Narrator PTT [Y]", editable: [{ key: "KeyY" }], onDown: () => {}, onUp: () => {} });
-    game.keybindings.register("vox-conjurata", "puppeteerPTT", { name: "Vox: Puppeteer PTT [H]", editable: [{ key: "KeyH" }], onDown: () => {}, onUp: () => {} });
-    game.keybindings.register("vox-conjurata", "playerPTT", { name: "Vox: Character PTT [I]", editable: [{ key: "KeyI" }], onDown: () => {}, onUp: () => {} });
+    game.keybindings.register("vox-confake-h", "puppeteerPTT", { name: "Vox: Puppet PTT [H]", editable: [{ key: "KeyH" }], onDown: () => {}, onUp: () => {} });
+    game.keybindings.register("vox-confake-i", "playerPTT", { name: "Vox: Char PTT [I]", editable: [{ key: "KeyI" }], onDown: () => {}, onUp: () => {} });
 }
 
 (function() {
@@ -185,14 +158,14 @@ function registerKeybindings() {
                 startRecording("vox-conjurata-gm-narrate-mic"); statusMessage("Narrator Mic [Y]: OPEN", true);
             } 
             else if (code === "KeyH" && game.user.isGM) {
-                const selectedToken = resolveActiveToken(true);
-                if (!selectedToken) { ui.notifications.warn("❌ Puppeteer: Select/hover NPC!"); activeKeys.delete(code); return; }
-                globalThis.voxState.puppetActive = true; globalThis.voxState.activeSpeakerName = selectedToken.actor.name; globalThis.voxState.activeActorId = selectedToken.actor.id; globalThis.voxState.activeIsMonster = !!resolveIsMonster(selectedToken.actor);
+                const token = resolveActiveToken(true);
+                if (!token) { ui.notifications.warn("❌ Puppeteer: Select/hover NPC!"); activeKeys.delete(code); return; }
+                globalThis.voxState.puppetActive = true; globalThis.voxState.activeSpeakerName = token.actor.name; globalThis.voxState.activeActorId = token.actor.id; globalThis.voxState.activeIsMonster = !!resolveIsMonster(token.actor);
                 startRecording("vox-conjurata-gm-puppet-mic"); statusMessage(`Puppeteer [H] (${globalThis.voxState.activeSpeakerName}): OPEN`, true);
             }
             else if (code === "KeyI") {
-                const selectedToken = resolveActiveToken(false); const speakerActor = selectedToken?.actor || game.user.character;
-                globalThis.voxState.playerActive = true; globalThis.voxState.activeSpeakerName = speakerActor?.name || game.user.name; globalThis.voxState.activeActorId = speakerActor?.id || game.user.id; globalThis.voxState.activeIsMonster = !!resolveIsMonster(speakerActor);
+                const token = resolveActiveToken(false); const actor = token?.actor || game.user.character;
+                globalThis.voxState.playerActive = true; globalThis.voxState.activeSpeakerName = actor?.name || game.user.name; globalThis.voxState.activeActorId = actor?.id || game.user.id; globalThis.voxState.activeIsMonster = !!resolveIsMonster(actor);
                 startRecording("vox-conjurata-player-mic"); statusMessage(`Character Mic [I] (${globalThis.voxState.activeSpeakerName}): OPEN`, true);
             }
         }
@@ -209,9 +182,6 @@ function registerKeybindings() {
     });
 })();
 
-// ==========================================
-// 4. MODULE LIFECYCLE
-// ==========================================
 const ingestedActors = new Set();
 async function scanActiveSceneTokens() {
     if (!game.user.isGM || !canvas.ready) return;
@@ -229,36 +199,18 @@ async function scanActiveSceneTokens() {
         catch (e) {}
     }
 }
-async function onReady() { if (globalThis.voxReadyExecuted) return; globalThis.voxReadyExecuted = true; if (game.user.isGM) await scanActiveSceneTokens(); }
-if (typeof game !== 'undefined' && game.ready) onReady();
-else Hooks.once("ready", onReady);
-Hooks.on("canvasReady", async () => { if (game.user.isGM) await scanActiveSceneTokens(); });
 
-// ==========================================
-// 5. CHAT SKINNING & PIPELINE
-// ==========================================
-Hooks.on("renderChatMessageHTML", (message, html, data) => {
-    const voxType = message.getFlag("vox-conjurata", "type");
-    if (!voxType) return;
-    const jHtml = $(html); const content = jHtml.find(".message-content"); const originalContent = content.html();
-    if (voxType === "narration") {
-        jHtml.addClass("vox-conjurata-card vox-conjurata-narration");
-        jHtml.empty().append(`<div class="narration-header"><i class="fas fa-book-open gold-icon"></i><span class="narration-title">SCENE DESCRIPTION</span></div><div class="message-content">${originalContent}</div>`);
-    } else {
-        const actor = message.speaker.actor ? game.actors.get(message.speaker.actor) : null;
-        const actorName = actor?.name || message.speaker.alias || "Entity";
-        const actorImg = actor?.img || "icons/svg/mystery-man.svg";
-        const audioUrl = message.getFlag("vox-conjurata", "audioUrl");
-        jHtml.addClass(`vox-conjurata-card vox-conjurata-${voxType}`);
-        const audioHtml = audioUrl ? `<div class="vox-conjurata-audio-container"><button class="vox-conjurata-audio-play-btn"><i class="fas fa-volume-high"></i> Play Generated Voice</button></div>` : "";
-        jHtml.empty().append(`<div class="puppet-layout"><img class="puppet-avatar" src="${actorImg}"/><div class="puppet-body"><header class="message-header"><span class="sender">${actorName}</span><span class="${voxType}-tag">${voxType.toUpperCase()}</span></header><div class="message-content">${originalContent}</div>${audioHtml}</div></div>`);
-        if (audioUrl) jHtml.find(".vox-conjurata-audio-play-btn").on("click", () => { playAudio(audioUrl, 1.0); });
-    }
-});
+async function onReady() {
+    if (globalThis.voxReadyExecuted) return; globalThis.voxReadyExecuted = true;
+    if (game.user.isGM) await scanActiveSceneTokens();
+}
+
+if (typeof game !== 'undefined' && game.ready) onReady(); else Hooks.once("ready", onReady);
+Hooks.on("canvasReady", async () => { if (game.user.isGM) await scanActiveSceneTokens(); });
 
 function playAudio(audioUrl, volume = 1.0) {
     if (!audioUrl) return;
-    try { const audio = new Audio(audioUrl); audio.volume = volume; audio.play(); } catch (err) {}
+    const a = new Audio(audioUrl); a.volume = volume; a.play().catch(() => {});
 }
 
 function startRecording(micType) {
@@ -271,25 +223,25 @@ function startRecording(micType) {
 function stopRecording() { if (globalThis.voxState.mediaRecorder?.state === "recording") globalThis.voxState.mediaRecorder.stop(); }
 
 function statusMessage(text, isOpen) {
-    const recipients = game.user.isGM ? ChatMessage.getWhisperRecipients("GM") : [];
+    const recipients = game.user.isGM ? [game.user.id] : [];
     ChatMessage.create({
         speaker: { alias: "Vox Core" },
-        content: `<div style="display: flex; align-items: center; gap: 8px;"><span>${isOpen ? '🎙️' : '🤫'}</span><div><strong>${text}</strong></div></div>`,
-        whisper: recipients.length > 0 ? recipients.map(u => u.id) : []
+        content: `<div style="display: flex; align-items: center; gap: 8px;"><span>${isOpen ? '🎙️' : '🤫'}</span><strong>${text}</strong></div>`,
+        whisper: recipients
     });
 }
 
 async function processAndSendAudio() {
     const chunks = globalThis.voxState.audioChunks; if (chunks.length === 0) return;
-    const audioBlob = new Blob(chunks, { type: "audio/webm" });
+    const blob = new Blob(chunks, { type: "audio/webm" });
     const { activeMicType, activeActorId, activeSpeakerName, activeIsMonster } = globalThis.voxState;
-    const formData = new FormData(); formData.append("audio_blob", audioBlob, "voice_capture.webm");
+    const formData = new FormData(); formData.append("audio_blob", blob, "v.webm");
     formData.append("metadata", JSON.stringify({ activeSpeakerName, actorId: activeActorId, micType: activeMicType, isMonster: activeIsMonster, userId: game.user.id }));
     try {
-        const response = await fetch(globalThis.voxState.voiceConversionEndpoint, { method: "POST", body: formData });
-        const data = await response.json();
-        if (data.status === "success") {
-            const { transcription, audio_data, engine, voxType } = data;
+        const r = await fetch(globalThis.voxState.voiceConversionEndpoint, { method: "POST", body: formData });
+        const d = await r.json();
+        if (d.status === "success") {
+            const { transcription, audio_data, engine, voxType } = d;
             if (audio_data) playAudio(audio_data, 1.0);
             const message = await ChatMessage.create({ 
                 content: transcription, style: 2, type: 2,
@@ -302,10 +254,9 @@ async function processAndSendAudio() {
                 if (token && typeof canvas.bubbles?.say === 'function') canvas.bubbles.say(token, transcription);
             }
         }
-    } catch (err) { console.error("❌ Vox-Conjurata Pipeline fail:", err); }
+    } catch (err) { console.error("❌ Vox Pipeline fail:", err); }
 }
 
 globalThis.startRecording = startRecording; globalThis.stopRecording = stopRecording; globalThis.statusMessage = statusMessage; globalThis.playAudio = playAudio; globalThis.resolveActiveToken = resolveActiveToken; globalThis.resolveIsMonster = resolveIsMonster;
 
-if (typeof game !== 'undefined' && game.keybindings) registerKeybindings();
-else Hooks.once("init", registerKeybindings);
+if (typeof game !== 'undefined' && game.keybindings) registerKeybindings(); else Hooks.once("init", registerKeybindings);
