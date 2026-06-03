@@ -294,6 +294,10 @@ async def voice_design(
             f"instruct='{instruct_text[:80]}...' ref={len(ref_bytes)} bytes"
         )
 
+        # CosyVoice 3 Instruct requires <|endofprompt|> in the instruction text
+        if "<|endofprompt|>" not in instruct_text:
+            instruct_text = f"{instruct_text}<|endofprompt|>This is a voice design sample."
+
         result = _run_instruct2(model, text, instruct_text, ref_path)
 
         if result is None or "tts_speech" not in result:
