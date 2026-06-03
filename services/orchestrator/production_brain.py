@@ -984,8 +984,7 @@ async def voice_conversion(request: Request):
             logger.info(f"[PERF] TTS Generation took {time.time() - gen_start:.2f}s")
 
             if res_content is None:
-                # Edge-TTS SUPPRESSED: do not fall back to cloud TTS.
-                logger.error(f"🚨 [PIPELINE-CRITICAL] {engine_name} failed for {actor_id}. Edge-TTS suppressed — returning empty response.")
+                logger.error(f"🚨 [PIPELINE-CRITICAL] {engine_name} failed for {actor_id} — returning empty response.")
 
             if res_content:
                 transcode_start = time.time()
