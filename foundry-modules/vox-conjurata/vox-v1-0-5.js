@@ -16,6 +16,8 @@ async function handleVoxCommand(command, param) {
     if (command === "forge" || command === "voice") {
         if (!token) { ui.notifications.warn("⚠️ Vox Terminal: Select or hover a token!"); return; }
         const desc = command === "voice" ? param : "";
+        
+        updateIngestionProgress(0, 1, token.actor.name);
         statusMessage(`VOX TERMINAL: Re-forging voice for ${token.actor.name}...`, true);
         
         try {
@@ -30,10 +32,16 @@ async function handleVoxCommand(command, param) {
             });
             const data = await resp.json();
             if (data.status === "created") {
+                updateIngestionProgress(1, 1, token.actor.name);
                 statusMessage(`✅ VOX TERMINAL: Voice forged for ${token.actor.name}!`, false);
                 ui.notifications.info(`🎙️ Vox: Voice seed created for ${token.actor.name}`);
+            } else {
+                updateIngestionProgress(1, 1, "Failed");
             }
-        } catch (e) { statusMessage("❌ VOX TERMINAL: Forge failed.", false); }
+        } catch (e) { 
+            updateIngestionProgress(1, 1, "Error");
+            statusMessage("❌ VOX TERMINAL: Forge failed.", false); 
+        }
     }
     else if (command === "status") {
         fetch("/api/status").then(r => r.json()).then(data => {
