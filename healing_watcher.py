@@ -73,16 +73,32 @@ def check_container_logs() -> tuple[bool, str]:
     return False, ""
 
 def trigger_emergency_shutdown(reason: str, vram_gb: float):
-    print(f"\n🚨 [SELF-HEALING DEAMON] EMERGENCY DETECTED: {reason}")
+    """Stop only GPU-resident containers to free VRAM.
+
+    Non-GPU services (cloudflared, Caddy, foundry-vtt, vox-llm-core) are
+    left running — killing them doesn't free VRAM and interrupts unrelated
+    infrastructure.
+    """
+    gpu_containers = [
+        "vox-vision-gen",
+        "vox-vision-reader",
+        "vox-actor",
+        "vox-designer",
+        "vox-voice",
+        "vox-monster-fish",
+        "vox-audio-generation-music",
+        "vox-audio-generation-sfx",
+    ]
+    print(f"\n🚨 [SELF-HEALING DAEMON] EMERGENCY DETECTED: {reason}")
     print(f"Current VRAM Usage: {vram_gb:.2f} GB / 32.00 GB")
-    
+
     # Save the incident details to cache
     incident_data = {
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         "reason": reason,
         "vram_used_gb": vram_gb,
     }
-    
+
     try:
         os.makedirs(os.path.dirname(INCIDENT_LOG_PATH), exist_ok=True)
         with open(INCIDENT_LOG_PATH, "w") as f:
@@ -90,11 +106,16 @@ def trigger_emergency_shutdown(reason: str, vram_gb: float):
         print(f"📝 Incident logged successfully to {INCIDENT_LOG_PATH}")
     except Exception as e:
         print(f"Could not save incident log: {e}")
-    
-    # Force stop the container stack to release all memory and prevent a hard lockup
-    print("🧹 Shutting down container stack to protect system integrity...")
-    subprocess.run("podman compose down", shell=True, cwd="/var/home/EvokeStudio/vox-conjurata")
-    print("✅ Emergency shutdown complete. Stack is stopped and VRAM has been purged.")
+
+    # Stop only GPU containers to release all VRAM without killing
+    # unrelated infrastructure (tunnel, proxy, foundry).
+    print("🧹 Stopping GPU container stack to protect system integrity...")
+    for container in gpu_containers:
+        subprocess.run(
+            ["podman", "stop", container],
+            capture_output=True, text=True,
+        )
+    print("✅ Emergency shutdown complete. GPU containers stopped and VRAM purged.")
 
 def main():
     print("🧠 [SELF-HEALING WATCHER] Active. Monitoring VRAM, GPU state, and container logs...")
