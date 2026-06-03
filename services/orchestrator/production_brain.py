@@ -632,17 +632,33 @@ async def generate_vocal_profile(actor_data: ActorMetadata, visual_description: 
                 "description": fallback_desc
             }
 
-async def forge_voice_seed(actor_id: str, acoustic_description: str, gender: str = "male") -> str:
-    """Calls Parler-TTS (vox-designer) to create a unique 10s voice print."""
+async def forge_voice_seed(actor_id: str, acoustic_description: str, gender: str = "male", is_monster: bool = False) -> str:
+    """Creates a unique 10s voice print. Uses Fish Speech for monsters to get beastly textures."""
     seed_path = VOICE_SEEDS_DIR / f"{actor_id}_seed_{gender}.wav"
     text_path = VOICE_SEEDS_DIR / f"{actor_id}_seed_{gender}.txt"
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    
+    async with httpx.AsyncClient(timeout=180.0) as client:
         try:
-            response = await client.post(f"{TTS_DESIGNER_URL}/generate", json={"text": acoustic_description})
+            if is_monster:
+                logger.info(f"[VOICE-SEED] Using Fish Speech for monster seed: {actor_id}")
+                # Fish Speech needs a reference even for seeds, we use the narrator
+                narrator_wav = VOICE_SEEDS_DIR / "narrator_seed_male.wav"
+                narrator_b64 = base64.b64encode(narrator_wav.read_bytes()).decode("utf-8") if narrator_wav.exists() else ""
+                
+                payload = {
+                    "text": acoustic_description,
+                    "references": [{"audio": narrator_b64, "text": "A clear speaking voice."}] if narrator_b64 else [],
+                    "format": "wav"
+                }
+                response = await client.post(f"{TTS_MONSTER_URL}/v1/tts", json=payload)
+            else:
+                logger.info(f"[VOICE-SEED] Using Parler-TTS for humanoid seed: {actor_id}")
+                response = await client.post(f"{TTS_DESIGNER_URL}/generate", json={"text": acoustic_description})
+
             if response.status_code == 200:
                 with open(seed_path, "wb") as f: f.write(response.content)
                 with open(text_path, "w") as f: f.write(acoustic_description)
-                logger.info(f"[VOICE-SEED] Forged seed and saved transcript for {actor_id}")
+                logger.info(f"[VOICE-SEED] Forged { 'monster' if is_monster else 'humanoid' } seed for {actor_id}")
                 return str(seed_path)
             return ""
         except Exception as e:
