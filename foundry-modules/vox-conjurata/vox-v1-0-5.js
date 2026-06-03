@@ -296,13 +296,13 @@ async function processAndSendAudio() {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
         
-        if (data.status === "success") {
             const { transcription, audio_data, engine, voxType } = data;
             if (audio_data) playAudio(audio_data, 1.0);
             
-            const msgStyle = "ic";
+            // Foundry V12 / PF2e 8.x strictly requires numeric style for ChatMessage
             const message = await ChatMessage.create({ 
-                content: transcription, type: msgStyle, style: msgStyle,
+                content: transcription,
+                style: 2, // 2 is In-Character (IC)
                 speaker: { actor: activeActorId === 'narrator' ? null : activeActorId, alias: activeSpeakerName },
                 flags: { "vox-conjurata": { type: voxType, audioUrl: audio_data, engine: engine } } 
             });

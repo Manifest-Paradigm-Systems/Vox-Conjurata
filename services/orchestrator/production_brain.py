@@ -210,6 +210,7 @@ class DialogueEnrichment(BaseModel):
     vocal_delivery_prompt: str
     instruct_text: str 
     monster_text: str
+    emotion_tag: str = "neutral"
 
 class DialogueEndRequest(BaseModel):
     npcName: str

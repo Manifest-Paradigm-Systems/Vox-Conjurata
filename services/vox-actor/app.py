@@ -204,15 +204,21 @@ async def text_to_speech(
             f.write(ref_bytes)
 
         # If no prompt_text provided, use a fixed default
+        # But we strongly prefer the character-specific transcript for better cloning.
         if not prompt_text.strip():
             prompt_text = "You are a helpful assistant.<|endofprompt|>This is a voice sample for character speech."
         elif "<|endofprompt|>" not in prompt_text:
-            # CosyVoice 3 requires this token to separate prompt from instruction/context
-            prompt_text = f"You are a helpful assistant.<|endofprompt|>{prompt_text}"
+            # If the user sent an emotion (e.g. "angry") but no prompt context,
+            # incorporate it into the instruction.
+            if emotion and emotion != "default":
+                prompt_text = f"Deliver the following speech with a {emotion} tone.<|endofprompt|>{prompt_text}"
+            else:
+                # Use the raw character transcript to anchor the zero-shot cloning.
+                prompt_text = f"Deliver in the speaker's natural voice.<|endofprompt|>{prompt_text}"
 
         logger.info(
             f"CosyVoice 3 generating: text='{text[:60]}...' "
-            f"prompt='{prompt_text[:60]}...' ref={len(ref_bytes)} bytes"
+            f"prompt='{prompt_text[:60]}...' emotion='{emotion}' ref={len(ref_bytes)} bytes"
         )
 
         # Run inference (returns generator of dicts)
