@@ -73,8 +73,8 @@ def test_missing_tier_routing_defaults_to_fishspeech(factory):
 
 def test_cosyvoice_strips_all_bracket_tags():
     result = standardize_speech_text("[angry] You dare enter? (shouting)", "cosyvoice", "Neutral")
-    # Should strip [angry] and (shouting), prepend "Neutral <|endofprompt|>"
-    assert result == "Neutral <|endofprompt|> You dare enter?"
+    # Should strip [angry] and (shouting), return clean text only
+    assert result == "You dare enter?"
 
 
 def test_cosyvoice_translates_asterisk_actions():
