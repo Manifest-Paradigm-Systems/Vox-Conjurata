@@ -2,6 +2,7 @@
  * vox-conjurata: Main Foundry Module Entry Point
  * Consolidates Telemetry, Chat Skinning, and Hardware PTT Engine.
  */
+console.log("🚀 Vox-Conjurata: Script evaluation started.");
 
 // ==========================================
 // 1. TELEMETRY BRIDGE & SELF-HEALING
