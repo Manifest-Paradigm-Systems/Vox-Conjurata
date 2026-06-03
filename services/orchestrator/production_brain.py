@@ -1033,9 +1033,10 @@ async def voice_conversion(request: Request):
                 # only runtime TTS output returned to the Foundry game client.)
                 if res_content.startswith(b"RIFF"):
                     try:
+                        # Boost volume by 2.0 (approx 6dB) during transcoding
                         proc = subprocess.run(
-                            ["ffmpeg", "-i", "pipe:0", "-c:a", "libopus",
-                             "-b:a", "64k", "-f", "ogg", "pipe:1"],
+                            ["ffmpeg", "-i", "pipe:0", "-filter:a", "volume=2.0", 
+                             "-c:a", "libopus", "-b:a", "64k", "-f", "ogg", "pipe:1"],
                             input=res_content, capture_output=True, timeout=30,
                         )
                         if proc.returncode == 0:
