@@ -27,12 +27,11 @@ RUN git clone --recurse-submodules https://github.com/FunAudioLLM/CosyVoice.git 
 ENV PYTHONPATH="/app/CosyVoice:/app/CosyVoice/third_party/Matcha-TTS:$PYTHONPATH"
 
 # 4. Install inference deps (skip deepspeed/gradio/whisper/grpcio — training only)
-#    We use --no-deps for CosyVoice requirements to avoid accidental downgrades of the
-#    base ROCm PyTorch or upgrades of pinned numpy.
+#    We use --index-url for the ROCm WHL index to ensure Torch doesn't downgrade to CPU.
 RUN grep -vE "deepspeed|whisper|gradio|extra-index-url|grpcio" /app/CosyVoice/requirements.txt > /tmp/cv-req.txt && \
     sed -i '/^transformers/d' /tmp/cv-req.txt && \
-    pip3 install --no-cache-dir -r /tmp/cv-req.txt && \
-    pip3 install --no-cache-dir "huggingface-hub" "openai-whisper" "transformers<4.48"
+    pip3 install --no-cache-dir -r /tmp/cv-req.txt --index-url https://download.pytorch.org/whl/rocm7.2/ && \
+    pip3 install --no-cache-dir "huggingface-hub" "openai-whisper" "transformers<4.48" --index-url https://download.pytorch.org/whl/rocm7.2/
 
 # 5. Install server dependencies from requirements.txt
 COPY requirements.txt .
