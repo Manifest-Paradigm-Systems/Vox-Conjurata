@@ -27,7 +27,6 @@
     "compatibleCoreVersion": "13",
     "scripts": [
         "vox-v1-0-5.js",
-        "vox-interface-fix.js",
-        "vox-live-panel.js"
+        "vox-interface-fix.js"
     ]
 }

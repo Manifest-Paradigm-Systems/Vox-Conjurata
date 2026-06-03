@@ -1,6 +1,6 @@
 /**
  * vox-conjurata: Main Foundry Module Entry Point
- * Consolidates Telemetry, Chat Skinning, and Hardware PTT Engine.
+ * Consolidates Telemetry, Chat Skinning, Hardware PTT, and Live Panel.
  */
 console.log("🚀 Vox-Conjurata: Script evaluation started.");
 
@@ -66,30 +66,25 @@ async function handleVoxCommand(command, param) {
 
 // Aggressive Command Intercept
 (function() {
-    // Intercept 1: standard hook
     Hooks.on("chatMessage", (chatLog, message, chatData) => {
         if (message.trim().toLowerCase().startsWith("/vox")) {
-            console.log("🎙️ Vox: Hook intercepted command.");
             const parts = message.trim().split(/\s+/);
             handleVoxCommand(parts[1]?.toLowerCase() || "help", parts.slice(2).join(" "));
             return false;
         }
     });
 
-    // Intercept 2: Prototype Monkeypatch (PF2e override)
     Hooks.once("ready", () => {
         if (typeof ChatLog === 'undefined') return;
         const originalProcess = ChatLog.prototype.processMessage;
         ChatLog.prototype.processMessage = function(message) {
             if (message.trim().toLowerCase().startsWith("/vox")) {
-                console.log("🎙️ Vox: Prototype intercepted command.");
                 const parts = message.trim().split(/\s+/);
                 handleVoxCommand(parts[1]?.toLowerCase() || "help", parts.slice(2).join(" "));
                 return;
             }
             return originalProcess.call(this, message);
         };
-        console.log("🎙️ Vox: Terminal Engine fully armed.");
     });
 })();
 
@@ -99,18 +94,11 @@ async function handleVoxCommand(command, param) {
  * V12 / PF2e compatible message creator. 
  */
 async function createVoxChatMessage(data) {
-    // PF2e 8.x+ is extremely picky. Style MUST be a number, not a string.
-    const messageData = {
-        ...data,
-        style: 2 // IC
-    };
-    
-    // Some versions use 'type', some use 'style'. We try both separately to satisfy validation.
+    const messageData = { ...data, style: 2 };
     try {
         const message = new ChatMessage(messageData);
         return await ChatMessage.create(message.toObject());
     } catch (err) {
-        console.warn("🎙️ Vox: Standard creation failed, trying legacy fallback...");
         return await ChatMessage.create({ ...data, type: 2 });
     }
 }
@@ -167,7 +155,6 @@ function resolveActiveToken(isGM) {
         globalThis.voxState.mediaRecorder = recorder;
         recorder.ondataavailable = (e) => { if (e.data.size > 0) globalThis.voxState.audioChunks.push(e.data); };
         recorder.onstop = async () => { await processAndSendAudio(); };
-        console.log("🎙️ Vox-Conjurata: Mic ready.");
     } catch (err) { console.error("❌ Vox Audio Fail:", err); }
 })();
 
@@ -243,7 +230,11 @@ async function scanActiveSceneTokens() {
 
 async function onReady() {
     if (globalThis.voxReadyExecuted) return; globalThis.voxReadyExecuted = true;
-    if (game.user.isGM) await scanActiveSceneTokens();
+    if (game.user.isGM) {
+        await scanActiveSceneTokens();
+        // Ensure Live Panel button is added
+        if (ui.controls) ui.controls.render();
+    }
 }
 
 if (typeof game !== 'undefined' && game.ready) onReady(); else Hooks.once("ready", onReady);
@@ -297,6 +288,82 @@ async function processAndSendAudio() {
         }
     } catch (err) { console.error("❌ Vox Pipeline fail:", err); }
 }
+
+// ==========================================
+// 5. LIVE PANEL IMPLEMENTATION (CONSOLIDATED)
+// ==========================================
+
+class VoxLivePanel extends Application {
+    constructor(options = {}) {
+        super(options);
+        this.activeActorId = null;
+        this.isBypass = true;
+        this.isSyncEnabled = true;
+        this.settings = { pitch: 0, formant: 0, mix: 1.0, f0Detector: "rmvpe_onnx", chunkSize: 112, extraFrame: 4096 };
+        this.profiles = { "elminster": { modelId: 1, tran: -3 }, "goblin": { modelId: 2, tran: 7 }, "strahd": { modelId: 3, tran: 0 } };
+    }
+
+    static get defaultOptions() {
+        return mergeObject(super.defaultOptions, {
+            id: "vox-live-panel", title: "🎙️ Vox Conjurata Live Panel", width: 320, height: "auto", resizable: false, dragDrop: [{ dragSelector: ".window-header" }]
+        });
+    }
+
+    async _render(force = false, options = {}) {
+        await super._render(force, options);
+        this.element.find('.window-content').html(this._getHtml());
+        this.activateListeners(this.element);
+    }
+
+    _getHtml() {
+        const actors = game.actors.filter(a => a.type === "npc" || a.hasPlayerOwner).slice(0, 9);
+        let actorGrid = actors.map(a => `<div class="vox-actor-btn ${this.activeActorId === a.id ? 'active' : ''}" data-actor-id="${a.id}" data-actor-name="${a.name.toLowerCase()}"><img src="${a.img}"/><div class="actor-name">${a.name}</div></div>`).join("");
+        return `<div class="vox-panel-section"><div class="vox-section-title"><span>Quick-Swap Grid</span><div class="vox-sync-toggle ${this.isSyncEnabled ? 'active' : ''}"><i class="fas fa-sync"></i> SYNC</div></div><div class="vox-actor-grid">${actorGrid}</div></div>
+                <div class="vox-panel-section"><div class="vox-section-title">On-The-Fly Tweaks</div><div class="vox-slider-group"><div class="vox-slider-label"><span>Pitch Shift</span><span class="vox-slider-value">${this.settings.pitch > 0 ? '+' : ''}${this.settings.pitch}</span></div><input type="range" class="vox-slider" id="pitch-slider" min="-12" max="12" step="1" value="${this.settings.pitch}"></div></div>
+                <div class="vox-panel-section"><div class="vox-master-toggle ${this.isBypass ? '' : 'active'}" id="master-toggle"><i class="fas ${this.isBypass ? 'fa-microphone-slash' : 'fa-microphone'}"></i><span>${this.isBypass ? 'BYPASS (OOC)' : 'VOX ACTIVE (NPC)'}</span></div></div>`;
+    }
+
+    activateListeners(html) {
+        super.activateListeners(html);
+        html.find(".vox-actor-btn").click(ev => this.switchActor(ev.currentTarget.dataset.actorId, ev.currentTarget.dataset.actorName));
+        html.find(".vox-sync-toggle").click(() => { this.isSyncEnabled = !this.isSyncEnabled; this.render(); });
+        html.find("#pitch-slider").on("input", ev => { this.settings.pitch = parseInt(ev.target.value); this.updateBackend(); this.render(); });
+        html.find("#master-toggle").click(() => { this.isBypass = !this.isBypass; this.updateBackend(); this.render(); });
+    }
+
+    async switchActor(id, name) {
+        this.activeActorId = id; const p = this.profiles[name.toLowerCase()] || { modelId: 0, tran: 0 };
+        this.settings.pitch = p.tran; await this.updateBackend(p.modelId); this.render();
+    }
+
+    async updateBackend(forceId = null) {
+        if (this.isBypass) return;
+        const payload = { modelId: forceId !== null ? forceId : (this.profiles[this.activeActorId]?.modelId || 0), f0Detector: this.settings.f0Detector, tran: this.settings.pitch, chunkSize: this.settings.chunkSize, extraFrame: this.settings.extraFrame };
+        try { await fetch("/api/voice-changer/update", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }); } catch (e) {}
+    }
+}
+
+globalThis.voxLivePanel = new VoxLivePanel();
+
+Hooks.on("controlToken", (token, selected) => {
+    if (selected && globalThis.voxLivePanel.isSyncEnabled) globalThis.voxLivePanel.switchActor(token.actor.id, token.actor.name);
+});
+
+Hooks.on("getSceneControlButtons", (controls) => {
+    const tokenControl = controls.find(c => c.name === "token");
+    if (tokenControl) {
+        tokenControl.tools.push({
+            name: "vox-panel", title: "Vox Live Panel", icon: "fas fa-microphone-lines", button: true, visible: game.user.isGM, onClick: () => globalThis.voxLivePanel.render(true)
+        });
+    }
+});
+
+Hooks.once("ready", () => {
+    game.keybindings.register("vox-conjurata", "toggleVocalMask", {
+        name: "Toggle Vocal Mask", editable: [{ key: "KeyV", modifiers: [KeyboardManager.MODIFIER_KEYS.CONTROL, KeyboardManager.MODIFIER_KEYS.SHIFT] }],
+        onDown: () => { globalThis.voxLivePanel.isBypass = !globalThis.voxLivePanel.isBypass; globalThis.voxLivePanel.updateBackend(); globalThis.voxLivePanel.render(); }
+    });
+});
 
 globalThis.startRecording = startRecording; globalThis.stopRecording = stopRecording; globalThis.statusMessage = statusMessage; globalThis.playAudio = playAudio; globalThis.resolveActiveToken = resolveActiveToken; globalThis.resolveIsMonster = resolveIsMonster;
 
