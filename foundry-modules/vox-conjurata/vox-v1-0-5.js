@@ -794,9 +794,12 @@ async function processAndSendAudio() {
 
             console.log(`💬 Vox-Conjurata: Creating chat message for ${activeSpeakerName} (Type: ${voxType})`);
 
+            // Use integer 2 (IC) if CONST is not fully resolved yet
+            const msgType = (typeof CONST !== 'undefined' && CONST.CHAT_MESSAGE_TYPES) ? CONST.CHAT_MESSAGE_TYPES.IC : 2;
+
             const message = await ChatMessage.create({ 
                 content: transcription, 
-                type: CONST.CHAT_MESSAGE_TYPES.IC, // Use IC for bubbles
+                type: msgType, 
                 speaker: speakerData, 
                 flags: { 
                     "vox-conjurata": { 
