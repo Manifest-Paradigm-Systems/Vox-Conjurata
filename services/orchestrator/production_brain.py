@@ -476,7 +476,7 @@ class CosyVoiceEngine(SpeechEngine):
                         data={
                             "text": text,
                             "prompt_text": ref_text,
-                            "emotion": getattr(self, 'current_emotion', 'default')
+                            "emotion": emotion
                         },
                         files=files
                     )
@@ -495,7 +495,7 @@ class CosyVoiceEngine(SpeechEngine):
         return None
 
 class FishSpeechEngine(SpeechEngine):
-    async def generate(self, text: str, actor_id: str, client: httpx.AsyncClient) -> Optional[bytes]:
+    async def generate(self, text: str, actor_id: str, client: httpx.AsyncClient, emotion: str = "default") -> Optional[bytes]:
         seeds = list(VOICE_SEEDS_DIR.glob(f"{actor_id}_seed_*.wav"))
         seed_path = seeds[0] if seeds else None
         
@@ -956,10 +956,10 @@ async def voice_conversion(request: Request):
             logger.info(f"[VOICE-ROUTING] Dialogue text split into {len(sentences)} sentences: {sentences}")
             
             if len(sentences) <= 1:
-                res_content = await engine.generate(target_text, actor_id, client)
+                res_content = await engine.generate(target_text, actor_id, client, emotion=enriched.emotion_tag)
             else:
                 logger.info(f"[VOICE-ROUTING] Running concurrent synthesis for {len(sentences)} sentences...")
-                tasks = [engine.generate(s, actor_id, client) for s in sentences]
+                tasks = [engine.generate(s, actor_id, client, emotion=enriched.emotion_tag) for s in sentences]
                 results = await asyncio.gather(*tasks)
                 
                 # Check if all sentences failed
