@@ -898,7 +898,7 @@ async def voice_conversion(request: Request):
 
         # 1. Transcribe Audio
         stt_start = time.time()
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=300.0) as client:
             stt_resp = await client.post(
                 f"{STT_URL}/v1/audio/transcriptions",
                 files={"file": (audio_file.filename, await audio_file.read(), audio_file.content_type)},
@@ -931,7 +931,7 @@ async def voice_conversion(request: Request):
         audio_data = None
         engine_name = "Unknown"
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with httpx.AsyncClient(timeout=300.0) as client:
             target_text = enriched.monster_text if is_monster else enriched.instruct_text
 
             if isinstance(engine, FishSpeechEngine):
