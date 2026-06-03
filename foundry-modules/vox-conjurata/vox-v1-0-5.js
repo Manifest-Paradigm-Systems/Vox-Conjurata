@@ -5,9 +5,10 @@
 console.log("🚀 Vox-Conjurata: Script evaluation started.");
 
 // ==========================================
-// 0. TERMINAL ENGINE (V12 & PF2E HARDENED)
+// 0. TERMINAL ENGINE (BULLETPROOF INTERCEPT)
 // ==========================================
 
+// Global Command Handler
 async function handleVoxCommand(command, param) {
     if (!game.user.isGM) return;
     const token = resolveActiveToken(true);
@@ -53,7 +54,7 @@ async function handleVoxCommand(command, param) {
         createVoxChatMessage({
             speaker: { alias: "Vox Help" },
             content: `<div style="background: #1a1a1a; color: #fff; padding: 12px; border-left: 4px solid #00ff00; border-radius: 5px;">
-                <h3 style="color: #00ff00; margin: 0 0 10px 0;">🎙️ VOX Terminal</h3>
+                <h3 style="color: #00ff00; margin: 0 0 10px 0;">🎙️ VOX COMMANDS</h3>
                 <strong>/vox forge</strong> - AI auto-voice re-roll<br/>
                 <strong>/vox voice [desc]</strong> - Manual voice description<br/>
                 <strong>/vox status</strong> - Check system health
@@ -63,69 +64,59 @@ async function handleVoxCommand(command, param) {
     }
 }
 
-/**
- * createVoxChatMessage(data)
- * ─────────────────────────────────────────────────────────────────────────────
- * V12-compatible message creator that avoids PF2e validation errors.
- */
-async function createVoxChatMessage(data) {
-    // Determine correct V12 style
-    let style = 0; // Default OOC
-    if (typeof CONST !== 'undefined') {
-        style = CONST.CHAT_MESSAGE_STYLES?.IC ?? CONST.CHAT_MESSAGE_TYPES?.IC ?? 2;
-    }
-    
-    const messageData = {
-        ...data,
-        style: Number(style)
-    };
-    
-    // PF2e V12+ is very sensitive about the 'type' field being present but 'style' being the source of truth.
-    // We try to create it with 'style' first, then fallback.
-    try {
-        return await ChatMessage.create(messageData);
-    } catch (err) {
-        console.error("🎙️ Vox: ChatMessage creation failed, trying fallback...", err);
-        return await ChatMessage.create({ ...data, type: Number(style) });
-    }
-}
-
-// Global Intercept logic
-function applyTerminalIntercept() {
-    if (globalThis.voxInterceptActive) return;
-    globalThis.voxInterceptActive = true;
-    console.log("🎙️ Vox-Conjurata: Activating Terminal Intercept Engine...");
-
-    // 1. Hook Intercept (Foundry Standard)
+// Aggressive Command Intercept
+(function() {
+    // Intercept 1: standard hook
     Hooks.on("chatMessage", (chatLog, message, chatData) => {
         if (message.trim().toLowerCase().startsWith("/vox")) {
+            console.log("🎙️ Vox: Hook intercepted command.");
             const parts = message.trim().split(/\s+/);
             handleVoxCommand(parts[1]?.toLowerCase() || "help", parts.slice(2).join(" "));
             return false;
         }
     });
 
-    // 2. Prototype Monkeypatch (Aggressive override for systems that ignore hooks)
-    if (typeof ChatLog !== 'undefined') {
+    // Intercept 2: Prototype Monkeypatch (PF2e override)
+    Hooks.once("ready", () => {
+        if (typeof ChatLog === 'undefined') return;
         const originalProcess = ChatLog.prototype.processMessage;
         ChatLog.prototype.processMessage = function(message) {
             if (message.trim().toLowerCase().startsWith("/vox")) {
-                console.log("🎙️ Vox-Conjurata: Intercepted via Prototype Monkeypatch");
+                console.log("🎙️ Vox: Prototype intercepted command.");
                 const parts = message.trim().split(/\s+/);
                 handleVoxCommand(parts[1]?.toLowerCase() || "help", parts.slice(2).join(" "));
                 return;
             }
             return originalProcess.call(this, message);
         };
+        console.log("🎙️ Vox: Terminal Engine fully armed.");
+    });
+})();
+
+/**
+ * createVoxChatMessage(data)
+ * ─────────────────────────────────────────────────────────────────────────────
+ * V12 / PF2e compatible message creator. 
+ */
+async function createVoxChatMessage(data) {
+    // PF2e 8.x+ is extremely picky. Style MUST be a number, not a string.
+    const messageData = {
+        ...data,
+        style: 2 // IC
+    };
+    
+    // Some versions use 'type', some use 'style'. We try both separately to satisfy validation.
+    try {
+        const message = new ChatMessage(messageData);
+        return await ChatMessage.create(message.toObject());
+    } catch (err) {
+        console.warn("🎙️ Vox: Standard creation failed, trying legacy fallback...");
+        return await ChatMessage.create({ ...data, type: 2 });
     }
 }
 
-// Launch intercept immediately
-if (typeof game !== 'undefined' && game.ready) applyTerminalIntercept();
-else Hooks.once("ready", applyTerminalIntercept);
-
 // ==========================================
-// 1. TELEMETRY BRIDGE
+// 1. TELEMETRY & UTILITIES
 // ==========================================
 (function() {
     try {
@@ -141,9 +132,6 @@ else Hooks.once("ready", applyTerminalIntercept);
     } catch (e) {}
 })();
 
-// ==========================================
-// 2. CORE UTILITIES
-// ==========================================
 globalThis.voxState = globalThis.voxState || { 
     narratorActive: false, puppetActive: false, playerActive: false,
     activeSpeakerName: "", activeMicType: "", activeActorId: "", activeIsMonster: false,
@@ -169,7 +157,7 @@ function resolveActiveToken(isGM) {
 }
 
 // ==========================================
-// 3. AUDIO & RECORDING
+// 2. AUDIO & PTT ENGINE
 // ==========================================
 (async function initAudio() {
     if (!navigator.mediaDevices?.getUserMedia) return;
@@ -179,17 +167,16 @@ function resolveActiveToken(isGM) {
         globalThis.voxState.mediaRecorder = recorder;
         recorder.ondataavailable = (e) => { if (e.data.size > 0) globalThis.voxState.audioChunks.push(e.data); };
         recorder.onstop = async () => { await processAndSendAudio(); };
-        console.log("🎙️ Vox-Conjurata: Mic pipeline Hot.");
+        console.log("🎙️ Vox-Conjurata: Mic ready.");
     } catch (err) { console.error("❌ Vox Audio Fail:", err); }
 })();
 
 function registerKeybindings() {
     if (globalThis.voxKeybindingsRegistered) return;
     globalThis.voxKeybindingsRegistered = true;
-    console.log("🎙️ Vox-Conjurata: Registering PTT Hotkeys.");
     game.keybindings.register("vox-conjurata", "narratorPTT", { name: "Vox: Narrator PTT [Y]", editable: [{ key: "KeyY" }], onDown: () => {}, onUp: () => {} });
     game.keybindings.register("vox-conjurata", "puppeteerPTT", { name: "Vox: Puppet PTT [H]", editable: [{ key: "KeyH" }], onDown: () => {}, onUp: () => {} });
-    game.keybindings.register("vox-conjurata", "playerPTT", { name: "Vox: Character PTT [I]", editable: [{ key: "KeyI" }], onDown: () => {}, onUp: () => {} });
+    game.keybindings.register("vox-conjurata", "playerPTT", { name: "Vox: Char PTT [I]", editable: [{ key: "KeyI" }], onDown: () => {}, onUp: () => {} });
 }
 
 (function() {
@@ -231,7 +218,7 @@ function registerKeybindings() {
 })();
 
 // ==========================================
-// 4. MODULE LIFECYCLE
+// 3. MODULE LIFECYCLE
 // ==========================================
 const ingestedActors = new Set();
 async function scanActiveSceneTokens() {
@@ -256,7 +243,6 @@ async function scanActiveSceneTokens() {
 
 async function onReady() {
     if (globalThis.voxReadyExecuted) return; globalThis.voxReadyExecuted = true;
-    applyTerminalIntercept();
     if (game.user.isGM) await scanActiveSceneTokens();
 }
 
