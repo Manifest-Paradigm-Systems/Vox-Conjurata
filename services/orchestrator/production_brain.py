@@ -134,25 +134,25 @@ def resolve_seed_path(actor_id: str) -> str:
 # ---------------------------------------------------------------------------
 
 PALETTE_DEFINITIONS: dict[str, str] = {
-    # Humanoids — accented archetypes
-    "human_male_british":     "[British accent, deep male, clear, composed] Hello, I am a character in this world, and this is my unique voice.",
-    "human_female_british":   "[British accent, bright female, warm, clear, composed] Hello, I am a character in this world, and this is my unique voice.",
-    "elf_male_french":        "[French accent, elegant male, refined, smooth tenor, aristocratic, melodic] Hello, I am a character in this world, and this is my unique voice.",
-    "elf_female_french":      "[French accent, graceful female, silvery soprano, refined, melodic, aristocratic] Hello, I am a character in this world, and this is my unique voice.",
-    "dwarf_male_scottish":    "[Scottish accent, gruff male, deep, rugged, hearty, miner's voice] Hello, I am a character in this world, and this is my unique voice.",
-    "dwarf_female_scottish":  "[Scottish accent, gruff female, warm, hearty, deep, miner's wife] Hello, I am a character in this world, and this is my unique voice.",
-    "halfling_male_irish":    "[Irish accent, cheerful male, light tenor, nimble, folk melody] Hello, I am a character in this world, and this is my unique voice.",
-    "halfling_female_irish":  "[Irish accent, bright female, light soprano, playful, folk melody] Hello, I am a character in this world, and this is my unique voice.",
-    "barbarian_male_german":   "[German accent, deep male, harsh, guttural consonants, powerful, warrior] Hello, I am a character in this world, and this is my unique voice.",
-    "barbarian_female_german": "[German accent, strong female, harsh consonants, warrior, deep, powerful] Hello, I am a character in this world, and this is my unique voice.",
-    "elder_male_british":      "[British accent, old man, raspy, wise, low pitch, slow, deliberate] Hello, I am a character in this world, and this is my unique voice.",
-    "elder_female_british":    "[British accent, old woman, raspy, warm, low pitch, slow, deliberate] Hello, I am a character in this world, and this is my unique voice.",
-    # Monsters
-    "monster_beast":   "[guttural growl, deep, resonant, beastly, low rumble] Hello, I am a character in this world, and this is my unique voice.",
-    "monster_undead":  "[hollow, raspy, death rattle, whisper, echo] Hello, I am a character in this world, and this is my unique voice.",
-    "monster_dragon":  "[deep rumble, ancient, commanding, echoing, immense] Hello, I am a character in this world, and this is my unique voice.",
-    "monster_demon":   "[Arabic accent, demonic, distorted, multi-layered voice, infernal growl, low, ancient] Hello, I am a character in this world, and this is my unique voice.",
-    "monster_goblin":  "[high pitched, nasally, screechy, chittering, rapid] Hello, I am a character in this world, and this is my unique voice.",
+    # Humanoids — accented archetypes (approx 15 seconds of speech)
+    "human_male_british":     "[British accent, deep male, clear, composed] In the heart of the city, where the shadows linger long after the sun has set, I wait for the signal. Every stone in these ancient walls has a story to tell, but few are as dangerous as the one we are about to begin together.",
+    "human_female_british":   "[British accent, bright female, warm, clear, composed] The rolling hills of the countryside are always so peaceful this time of year. I find that a brisk walk in the morning air does wonders for the spirit, especially when there are mysteries to be solved and paths to be discovered.",
+    "elf_male_french":        "[French accent, elegant male, refined, smooth tenor, aristocratic, melodic] There is a certain grace in the way the light dances upon the forest floor. It reminds me of the ancient melodies we once sang under the silver moon, long before the world became so hurried and filled with noise.",
+    "elf_female_french":      "[French accent, graceful female, silvery soprano, refined, melodic, aristocratic] My ancestors watched these stars long before the first towers of man were ever raised. To understand the future, one must listen to the subtle whispers of the wind as it travels through the golden leaves of our eternal home.",
+    "dwarf_male_scottish":    "[Scottish accent, gruff male, deep, rugged, hearty, miner's voice] There's no' much in this world as reliable as a well-forged axe and a sturdy pair o' boots. I've spent more years under the mountain than I have above it, and I can tell ye, the deep stone never lies to those who listen.",
+    "dwarf_female_scottish":  "[Scottish accent, gruff female, warm, hearty, deep, miner's wife] Come in from the cold, then! There's a pot o' stew on the hearth and plenty o' room by the fire. We don't see many travelers in these parts, but you're welcome to share our table as long as your coin is good.",
+    "halfling_male_irish":    "[Irish accent, cheerful male, light tenor, nimble, folk melody] It's a grand day for a bit of an adventure, wouldn't you say? There's a trail just over that ridge that leads to the best little tavern in the whole of the valley, provided we don't run into any trouble along the way.",
+    "halfling_female_irish":  "[Irish accent, bright female, light soprano, playful, folk melody] If you're looking for a bit of luck, you've come to the right place! I've a pocket full of charms and a heart full of songs, and I'm more than happy to share a bit of both with a friendly face like yours.",
+    "barbarian_male_german":   "[German accent, deep male, harsh, guttural consonants, powerful, warrior] My tribe has survived the harshest winters and the bloodiest battles. We do not fear the storm, for we are the storm. Bring your weapons and your courage, and let us see who is truly worthy of the title of warrior.",
+    "barbarian_female_german": "[German accent, strong female, harsh consonants, warrior, deep, powerful] The steel in my hand is an extension of my will. I have hunted the great beasts of the frozen north and returned with their trophies. If you wish to challenge me, make sure your spirit is as sharp as your blade.",
+    "elder_male_british":      "[British accent, old man, raspy, wise, low pitch, slow, deliberate] I have seen kingdoms rise and fall like the leaves in autumn. Time has a way of smoothing the sharpest edges and revealing the truth that lies beneath. Sit with me a while, and I shall tell you what I have learned.",
+    "elder_female_british":    "[British accent, old woman, raspy, warm, low pitch, slow, deliberate] The garden is looking particularly lovely this evening, isn't it? Every flower is a memory of a day well spent, and though my bones may ache, my heart is still full of the stories that have made me who I am today.",
+    # Monsters (approx 15 seconds of textured speech)
+    "monster_beast":   "[guttural growl, deep, resonant, beastly, low rumble] The scent of fear is thick in the air. I can hear the beating of your heart from across the clearing. You are far from your home, little one, and the forest does not take kindly to intruders who walk so loudly.",
+    "monster_undead":  "[hollow, raspy, death rattle, whisper, echo] Death is not the end, but merely a change in perspective. I have walked the halls of silence for centuries, waiting for the warmth of a soul to flicker near the cold embers of my existence. Join me in the quiet.",
+    "monster_dragon":  "[deep rumble, ancient, commanding, echoing, immense] You stand before a power that predates your entire civilization. My scales are like shields and my breath is a furnace that has consumed kings and their treasures. Tell me, why should I not simply turn you to ash where you stand?",
+    "monster_demon":   "[Arabic accent, demonic, distorted, multi-layered voice, infernal growl, low, ancient] The shadows of the abyss are infinite, and I am their chosen voice. I have tasted the bitterness of a thousand betrayals and the sweetness of a soul consumed. Your petty desires are nothing to me, mortal.",
+    "monster_goblin":  "[high pitched, nasally, screechy, chittering, rapid] Look what we found! A shiny toy for the pot! Don't let it run away, no, no! We take it back to the chief, and maybe he lets us keep the boots! Yes, yes, the boots are the best part, aren't they?",
 }
 
 
