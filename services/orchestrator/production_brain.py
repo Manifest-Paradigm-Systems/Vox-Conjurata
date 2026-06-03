@@ -45,10 +45,8 @@ app.add_middleware(
 # Internal Service Routing (Container Networking)
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://vox-llm-core:8080")
 STT_URL = os.getenv("STT_URL", "http://vox-voice:5000")
-TTS_DESIGNER_URL = os.getenv("TTS_DESIGNER_URL", "http://vox-designer:5010")
 TTS_ACTOR_URL = os.getenv("TTS_ACTOR_URL", "http://vox-actor:5020")
 TTS_MONSTER_URL = os.getenv("TTS_MONSTER_URL", "http://vox-monster-fish:7860")
-TTS_FALLBACK_URL = os.getenv("TTS_FALLBACK_URL", "http://vox-audio-generation-music:8000")
 VISION_READER_URL = os.getenv("VISION_READER_URL", "http://vox-vision-reader:8000")
 IMAGE_GEN_URL = os.getenv("IMAGE_GEN_URL", "http://vox-vision-gen:8003")
 FOUNDRY_API_URL = os.getenv("FOUNDRY_API_URL", "http://foundry-vtt:30000/api")
@@ -574,13 +572,21 @@ async def generate_vocal_profile(actor_data: ActorMetadata, visual_description: 
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
             response = await client.post(f"{OLLAMA_URL}/v1/chat/completions", json=payload)
-            res = json.loads(response.json()["choices"][0]["message"]["content"])
+            if response.status_code != 200:
+                logger.error(f"Profile generation: LLM returned {response.status_code}")
+                raise RuntimeError(f"LLM returned {response.status_code}")
+            content_str = response.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+            try:
+                res = json.loads(content_str)
+            except json.JSONDecodeError as je:
+                logger.error(f"Profile generation: invalid JSON from LLM — {content_str[:200]}")
+                raise je
             return {
                 "gender": res.get("gender", "male").lower().strip(),
                 "description": res.get("description", "A clear, neutral speaking voice.")
             }
         except Exception as e:
-            logger.error(f"Profile error: {e}")
+            logger.error(f"Profile generation failed: {e}")
             desc_lower = (actor_data.name + " " + actor_data.lore).lower()
             is_female = any(w in desc_lower for w in ["female", "woman", "girl", "lady", "queen", "goddess", "mother", "sister", "wife", "she", "her", "herself"])
             gender = "female" if is_female else "male"
