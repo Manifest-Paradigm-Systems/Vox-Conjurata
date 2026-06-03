@@ -44,28 +44,6 @@ if ENGINE_TYPE != "music":
 else:
     logger.info(f"Stable Audio {ENGINE_TYPE} model configured for JIT dynamic loading.")
 
-@app.post("/v1/audio/speech")
-async def text_to_speech(payload: dict):
-    text = payload.get("text", "")
-    voice = payload.get("voice", "en-US-ChristopherNeural")
-    
-    if not text:
-        raise HTTPException(status_code=400, detail="No text provided.")
- 
-    logger.info(f"Generating speech for: '{text[:50]}...' using {voice}")
-    fd, output_path = tempfile.mkstemp(suffix=".webm")
-    os.close(fd)
- 
-    try:
-        communicate = edge_tts.Communicate(text, voice)
-        await communicate.save(output_path)
-        return FileResponse(output_path, media_type="audio/webm")
-    except Exception as e:
-        logger.error(f"TTS error: {e}")
-        if os.path.exists(output_path):
-            os.remove(output_path)
-        raise HTTPException(status_code=500, detail=str(e))
-
 @app.post("/generate")
 async def generate_ambient(request: AudioRequest):
     global pipe
