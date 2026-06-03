@@ -5,8 +5,6 @@ from pydantic import BaseModel
 import logging
 import os
 import tempfile
-import edge_tts
-import asyncio
 import torch
 import gc
 from diffusers import StableAudioPipeline
