@@ -949,6 +949,7 @@ async def purge_voice_cache(req: CachePurgeRequest = CachePurgeRequest()):
 
 @app.post("/api/voice-conversion")
 async def voice_conversion(request: Request):
+    start_time_total = time.time()
     try:
         form = await request.form()
         audio_file = form.get("audio_blob")
@@ -960,6 +961,7 @@ async def voice_conversion(request: Request):
         is_monster = meta.get("isMonster", False)
 
         # 1. Transcribe Audio
+        stt_start = time.time()
         async with httpx.AsyncClient(timeout=30.0) as client:
             stt_resp = await client.post(
                 f"{STT_URL}/v1/audio/transcriptions",
@@ -967,12 +969,15 @@ async def voice_conversion(request: Request):
                 data={"model": "tiny.en", "language": "en"}
             )
             transcription = stt_resp.json().get("text", "")
+        logger.info(f"[PERF] STT took {time.time() - stt_start:.2f}s")
 
         if not transcription.strip(): return {"status": "empty"}
 
         # 2. Enrich Text
+        enrich_start = time.time()
         role = "NPC" if mic_type == "vox-conjurata-gm-puppet-mic" else "Player"
         enriched = await enrich_and_instruct(speaker_name, role, transcription)
+        logger.info(f"[PERF] Enrichment took {time.time() - enrich_start:.2f}s")
 
         # 3. Determine VRAM Status & Route
         vram_used = get_vram_used_gb()
@@ -999,6 +1004,7 @@ async def voice_conversion(request: Request):
                 engine_name = "CosyVoice"
 
             # Opportunity 2: Split text into sentences and process concurrently, then concatenate
+            gen_start = time.time()
             sentences = split_into_sentences(target_text)
             logger.info(f"[VOICE-ROUTING] Dialogue text split into {len(sentences)} sentences: {sentences}")
             
@@ -1014,12 +1020,14 @@ async def voice_conversion(request: Request):
                     res_content = None
                 else:
                     res_content = concatenate_wavs(results)
+            logger.info(f"[PERF] TTS Generation took {time.time() - gen_start:.2f}s")
 
             if res_content is None:
                 # Edge-TTS SUPPRESSED: do not fall back to cloud TTS.
                 logger.error(f"🚨 [PIPELINE-CRITICAL] {engine_name} failed for {actor_id}. Edge-TTS suppressed — returning empty response.")
 
             if res_content:
+                transcode_start = time.time()
                 # Transcode WAV → Opus OGG for ~90% smaller streaming to Foundry
                 # (Seed .wav files used for voice cloning are NOT affected — this is
                 # only runtime TTS output returned to the Foundry game client.)
@@ -1036,6 +1044,7 @@ async def voice_conversion(request: Request):
                             logger.warning(f"Opus transcode failed (ffmpeg rc={proc.returncode}), sending raw WAV")
                     except Exception as ex:
                         logger.warning(f"Opus transcode error: {ex}, sending raw WAV")
+                logger.info(f"[PERF] Transcoding took {time.time() - transcode_start:.2f}s")
 
                 mime_type = "audio/ogg"
                 if not res_content.startswith(b"OggS"):
@@ -1045,6 +1054,7 @@ async def voice_conversion(request: Request):
                 audio_base64 = base64.b64encode(res_content).decode('utf-8')
                 audio_data = f"data:{mime_type};base64,{audio_base64}"
 
+        logger.info(f"[PERF] TOTAL Pipeline took {time.time() - start_time_total:.2f}s")
         return {
             "status": "success", "transcription": transcription, "enrichment": enriched.model_dump(),
             "voxType": "narration" if mic_type == "vox-conjurata-gm-narrate-mic" else ("puppet" if mic_type == "vox-conjurata-gm-puppet-mic" else "player"),
