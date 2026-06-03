@@ -704,10 +704,11 @@ async def enrich_and_instruct(speaker: str, role: str, text: str) -> DialogueEnr
         except Exception as e:
             logger.error(f"Instruction error: {e}")
             return DialogueEnrichment(
-                speaker=speaker, role=role, raw_text=text, 
+                speaker=speaker, role=role, raw_text=text,
                 emotional_resonance="Neutral", vocal_delivery_prompt="Standard.",
-                instruct_text=f"Neutral <|endofprompt|> {text}",
-                monster_text=f"[neutral] {text}"
+                instruct_text=standardize_speech_text(text, "cosyvoice", "Neutral"),
+                monster_text=standardize_speech_text(text, "fish-speech", "neutral"),
+                emotion_tag="neutral"
             )
 
 async def log_to_foundry(npc_name: str, summary: str) -> bool:
