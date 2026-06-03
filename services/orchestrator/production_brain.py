@@ -184,6 +184,8 @@ def resolve_archetype(actor_data: "ActorMetadata", vocal_profile: dict) -> str:
         return "monster_beast"
 
     # Humanoid — match race + gender + age
+    if "elf" in race or "elven" in race or "elvish" in race:
+        return f"elf_{gender}_french"
     if "dwarf" in race or "dwarven" in race:
         return f"dwarf_{gender}_scottish"
     if "halfling" in race or "hobbit" in race:
