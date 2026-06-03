@@ -853,7 +853,7 @@ async def forge_voice_seed(
                         f"{TTS_ACTOR_URL}/api/voice-design",
                         data={
                             "text": seed_text,
-                            "instruct_text": f"A person with the following voice: {acoustic_description}",
+                            "instruct_text": acoustic_description,
                         },
                         files={"reference_audio": (archetype_path.name, archetype_fh, "audio/wav")},
                     )
