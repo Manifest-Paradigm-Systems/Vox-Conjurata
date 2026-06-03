@@ -137,15 +137,6 @@ def get_vram_used_gb() -> float:
         pass
     return 0.0
 
-def load_routing_config() -> dict:
-    if CONFIG_PATH.exists():
-        try:
-            with open(CONFIG_PATH, "r") as f:
-                return json.load(f)
-        except Exception as e:
-            logger.error(f"Failed to read settings config file: {e}")
-    return {}
-
 # --- Models ---
 
 class DiagnosticLog(BaseModel):
