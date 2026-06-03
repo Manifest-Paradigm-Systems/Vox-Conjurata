@@ -1220,21 +1220,26 @@ async def voice_conversion(request: Request):
         # 2. Enrich Text
         enrich_start = time.time()
         role = "NPC" if mic_type == "vox-conjurata-gm-puppet-mic" else "Player"
-        enriched = await enrich_and_instruct(speaker_name, role, transcription)
+        enriched = await enrich_and_instruct(speaker_name, role, transcription, is_monster=is_monster)
         logger.info(f"[PERF] Enrichment took {time.time() - enrich_start:.2f}s")
 
-        # 3. Determine VRAM Status & Route
-        vram_used = get_vram_used_gb()
+        # 3. Determine VRAM Status, Engine, and Voice Seed
         config = load_routing_config()
         vram_threshold = config.get("system_settings", {}).get("vram_threshold_gb", 18.0)
+        vram_used = get_vram_used_gb()
         vram_triggered = vram_used > vram_threshold
 
         engine = pipeline_factory.get_engine(
             is_monster=is_monster,
             stats=meta.get("stats", {}),
             config=config,
-            vram_triggered=vram_triggered
+            vram_triggered=vram_triggered,
         )
+
+        # Check if this actor is using an archetype seed
+        registry = load_voice_registry()
+        registry_entry = registry.get(actor_id, {})
+        is_archetype = registry_entry.get("is_archetype", False)
 
         audio_data = None
         engine_name = "Unknown"
@@ -1247,16 +1252,21 @@ async def voice_conversion(request: Request):
             elif isinstance(engine, CosyVoiceEngine):
                 engine_name = "CosyVoice"
 
-            # Opportunity 2: Split text into sentences and process concurrently, then concatenate
+            # Split text into sentences and process concurrently, then concatenate
             gen_start = time.time()
             sentences = split_into_sentences(target_text)
-            logger.info(f"[VOICE-ROUTING] Dialogue text split into {len(sentences)} sentences: {sentences}")
-            
+            logger.info(f"[VOICE-ROUTING] Dialogue text split into {len(sentences)} sentences")
+
+            kwargs = {"emotion": enriched.emotion_tag}
+            if isinstance(engine, CosyVoiceEngine):
+                kwargs["is_archetype"] = is_archetype
+                kwargs["delivery_prompt"] = enriched.vocal_delivery_prompt
+
             if len(sentences) <= 1:
-                res_content = await engine.generate(target_text, actor_id, client, emotion=enriched.emotion_tag)
+                res_content = await engine.generate(target_text, actor_id, client, **kwargs)
             else:
                 logger.info(f"[VOICE-ROUTING] Running concurrent synthesis for {len(sentences)} sentences...")
-                tasks = [engine.generate(s, actor_id, client, emotion=enriched.emotion_tag) for s in sentences]
+                tasks = [engine.generate(s, actor_id, client, **kwargs) for s in sentences]
                 results = await asyncio.gather(*tasks)
                 
                 # Check if all sentences failed
