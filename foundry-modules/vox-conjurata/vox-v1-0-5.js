@@ -819,3 +819,14 @@ globalThis.processAndSendAudio = processAndSendAudio;
 globalThis.playAudio = playAudio;
 globalThis.resolveActiveToken = resolveActiveToken;
 globalThis.resolveIsMonster = resolveIsMonster;
+
+// Aggressive Registration: Handle both early and late script loading
+if (typeof game !== 'undefined' && game.keybindings) {
+    console.log("🎙️ Vox-Conjurata: Game already initialized, registering immediately.");
+    registerKeybindings();
+} else {
+    Hooks.once("init", () => {
+        console.log("🎙️ Vox-Conjurata: Init hook fired, registering keybindings.");
+        registerKeybindings();
+    });
+}
