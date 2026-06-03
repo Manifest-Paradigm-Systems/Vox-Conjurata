@@ -743,7 +743,7 @@ async def root():
 
 @app.get("/api/v1/narrators/voices")
 async def get_narrator_voices():
-    """Edge-TTS suppressed: returns empty list. Narrator voice is driven by CosyVoice seed."""
+    """Narrator voice is driven by CosyVoice seed. See /api/ingest-actor to register voices."""
     return []
 
 async def get_visual_description(image_path_relative: str) -> str:
