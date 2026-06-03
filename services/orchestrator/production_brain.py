@@ -137,6 +137,8 @@ PALETTE_DEFINITIONS: dict[str, str] = {
     # Humanoids — accented archetypes
     "human_male_british":     "[British accent, deep male, clear, composed] Hello, I am a character in this world, and this is my unique voice.",
     "human_female_british":   "[British accent, bright female, warm, clear, composed] Hello, I am a character in this world, and this is my unique voice.",
+    "elf_male_french":        "[French accent, elegant male, refined, smooth tenor, aristocratic, melodic] Hello, I am a character in this world, and this is my unique voice.",
+    "elf_female_french":      "[French accent, graceful female, silvery soprano, refined, melodic, aristocratic] Hello, I am a character in this world, and this is my unique voice.",
     "dwarf_male_scottish":    "[Scottish accent, gruff male, deep, rugged, hearty, miner's voice] Hello, I am a character in this world, and this is my unique voice.",
     "dwarf_female_scottish":  "[Scottish accent, gruff female, warm, hearty, deep, miner's wife] Hello, I am a character in this world, and this is my unique voice.",
     "halfling_male_irish":    "[Irish accent, cheerful male, light tenor, nimble, folk melody] Hello, I am a character in this world, and this is my unique voice.",
@@ -149,7 +151,7 @@ PALETTE_DEFINITIONS: dict[str, str] = {
     "monster_beast":   "[guttural growl, deep, resonant, beastly, low rumble] Hello, I am a character in this world, and this is my unique voice.",
     "monster_undead":  "[hollow, raspy, death rattle, whisper, echo] Hello, I am a character in this world, and this is my unique voice.",
     "monster_dragon":  "[deep rumble, ancient, commanding, echoing, immense] Hello, I am a character in this world, and this is my unique voice.",
-    "monster_demon":   "[demonic, distorted, multi-layered voice, infernal growl, low] Hello, I am a character in this world, and this is my unique voice.",
+    "monster_demon":   "[Arabic accent, demonic, distorted, multi-layered voice, infernal growl, low, ancient] Hello, I am a character in this world, and this is my unique voice.",
     "monster_goblin":  "[high pitched, nasally, screechy, chittering, rapid] Hello, I am a character in this world, and this is my unique voice.",
 }
 
