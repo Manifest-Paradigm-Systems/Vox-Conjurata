@@ -39,9 +39,9 @@ def run_routing_test():
     print(f"Status: {res_json['status']}")
     print(f"voxType resolved: {res_json.get('voxType')}")
     print(f"Engine selected: {res_json.get('engine')}")
-    # GM narrate routes as narration and uses Edge-TTS (Narrator default)
+    # GM narrate routes as narration and uses CosyVoice (Narrator default)
     assert res_json.get("voxType") == "narration"
-    assert res_json.get("engine") in ["CosyVoice", "Edge-TTS", "Edge-TTS (Fallback)"]
+    assert res_json.get("engine") == "CosyVoice"
     print("✅ DM Narrative Hotkey test passed!")
 
     # --- 2. 'H' Key Test (Monster / Hostile Entity) ---
@@ -67,7 +67,7 @@ def run_routing_test():
     print(f"Engine selected: {res_json.get('engine')}")
     # Monster routes to Fish Speech
     assert res_json.get("voxType") == "puppet"
-    assert res_json.get("engine") in ["Fish Speech", "Edge-TTS (Fallback)"]
+    assert res_json.get("engine") == "Fish Speech"
     print("✅ H Key Monster test passed!")
 
     # --- 3. 'I' Key Test (Character Token Voice) ---
@@ -93,7 +93,7 @@ def run_routing_test():
     print(f"Engine selected: {res_json.get('engine')}")
     # Player character routes to CosyVoice
     assert res_json.get("voxType") == "player"
-    assert res_json.get("engine") in ["CosyVoice", "Edge-TTS (Fallback)"]
+    assert res_json.get("engine") == "CosyVoice"
     print("✅ I Key Character test passed!")
 
     print("\n🎉 ALL ROUTING TESTS PASSED SUCCESSFULLY!")
