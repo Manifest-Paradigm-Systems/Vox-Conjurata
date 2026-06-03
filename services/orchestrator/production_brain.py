@@ -750,7 +750,9 @@ async def get_visual_description(image_path_relative: str) -> str:
         import io
         raw_bytes = full_path.read_bytes()
         imghdr_lower = full_path.suffix.lower()
-        if imghdr_lower in (".webp",):
+        mime_type = "image/png"
+        
+        if imghdr_lower in (".webp", ".jpg", ".jpeg"):
             try:
                 from PIL import Image as _PIL
                 pil_img = _PIL.open(full_path)
@@ -758,8 +760,15 @@ async def get_visual_description(image_path_relative: str) -> str:
                 pil_img.convert("RGB").save(buf, format="PNG")
                 raw_bytes = buf.getvalue()
                 logger.info(f"🖼️ Converted {full_path.suffix} → PNG for vision reader")
+                mime_type = "image/png"
             except ImportError:
-                logger.warning("🖼️ PIL not available, sending raw WebP (may fail)")
+                logger.warning("🖼️ PIL not available, sending raw bytes (may fail)")
+                mime_type = "image/webp" if imghdr_lower == ".webp" else "image/jpeg"
+        elif imghdr_lower == ".png":
+            mime_type = "image/png"
+        else:
+            mime_type = f"image/{imghdr_lower.replace('.', '')}"
+
         base64_image = base64.b64encode(raw_bytes).decode('utf-8')
             
         payload = {
@@ -768,7 +777,7 @@ async def get_visual_description(image_path_relative: str) -> str:
                     "role": "user",
                     "content": [
                         {"type": "text", "text": "Describe the physical appearance of this creature or person in detail. Focus on race, species, age, gender, and distinguishing features like raspiness or vocal potential indicators."},
-                        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{base64_image}"}}
+                        {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{base64_image}"}}
                     ]
                 }
             ],
@@ -969,9 +978,9 @@ async def voice_conversion(request: Request):
                 # only runtime TTS output returned to the Foundry game client.)
                 if res_content.startswith(b"RIFF"):
                     try:
-                        # Boost volume by 2.0 (approx 6dB) during transcoding
+                        # Boost volume by 3.0 (approx 9.5dB) during transcoding
                         proc = subprocess.run(
-                            ["ffmpeg", "-i", "pipe:0", "-filter:a", "volume=2.0", 
+                            ["ffmpeg", "-i", "pipe:0", "-filter:a", "volume=3.0", 
                              "-c:a", "libopus", "-b:a", "64k", "-f", "ogg", "pipe:1"],
                             input=res_content, capture_output=True, timeout=30,
                         )
