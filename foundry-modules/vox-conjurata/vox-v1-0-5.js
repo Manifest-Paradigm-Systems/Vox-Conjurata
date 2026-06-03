@@ -208,8 +208,13 @@ async function scanActiveSceneTokens() {
             stats: { race: actor.system.details?.race || "Unknown", level: actor.system.details?.level?.value || 0 },
             artPath: actor.img, isMonster: resolveIsMonster(actor)
         };
-        try { await fetch(globalThis.voxState.ingestEndpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(actorData) }); } 
-        catch (e) {}
+        try { 
+            console.log(`📦 Vox-Conjurata: Scraping metadata for ${actorData.name} (Monster: ${actorData.isMonster})...`);
+            // UI Hint for new forging
+            ui.notifications.info(`🔍 Vox: Ingesting ${actorData.name}...`);
+            await fetch(globalThis.voxState.ingestEndpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(actorData) }); 
+        } 
+        catch (e) { console.error(`❌ Vox-Conjurata: Failed to ingest ${actorData.name}`, e); }
     }
 }
 

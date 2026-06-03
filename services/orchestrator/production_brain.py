@@ -193,6 +193,7 @@ class ActorMetadata(BaseModel):
     stats: dict
     artPath: str
     isMonster: Optional[bool] = False
+    customDescription: Optional[str] = ""
 
 class DialogueEnrichment(BaseModel):
     speaker: str
@@ -843,9 +844,17 @@ async def ingest_actor(data: ActorMetadata, force_refresh: bool = False):
             stale.unlink(missing_ok=True)
             stale.with_suffix(".txt").unlink(missing_ok=True)
 
-    profile_data = await generate_vocal_profile(data, visual_desc)
-    profile_desc = profile_data.get("description", "A clear, neutral speaking voice.")
-    gender = profile_data.get("gender", "male").lower().strip()
+    # GM Override Check: If the GM provided a manual description, skip visual scan/lore logic
+    if data.customDescription:
+        logger.info(f"[INGEST] GM Override provided for {data.name}: {data.customDescription}")
+        profile_desc = data.customDescription
+        is_female = any(w in profile_desc.lower() for w in ["female", "woman", "lady", "she", "her"])
+        gender = "female" if is_female else "male"
+    else:
+        profile_data = await generate_vocal_profile(data, visual_desc)
+        profile_desc = profile_data.get("description", "A clear, neutral speaking voice.")
+        gender = profile_data.get("gender", "male").lower().strip()
+
     if gender not in ["male", "female"]:
         gender = "male"
 
