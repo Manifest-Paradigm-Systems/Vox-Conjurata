@@ -681,9 +681,15 @@ async def generate_vocal_profile(actor_data: ActorMetadata, visual_description: 
             desc_lower = (actor_data.name + " " + actor_data.lore).lower()
             is_female = any(w in desc_lower for w in ["female", "woman", "girl", "lady", "queen", "goddess", "mother", "sister", "wife", "she", "her", "herself"])
             gender = "female" if is_female else "male"
+            
+            # Better fallback description to avoid 'flat' voices
+            pitch = "high-pitched" if is_female else "low-pitched"
+            vocal_trait = "raspy" if "monster" in desc_lower or "warrior" in desc_lower else "clear"
+            fallback_desc = f"A {vocal_trait}, {pitch} {gender} voice with natural inflections and a professional tone."
+            
             return {
                 "gender": gender,
-                "description": "A clear, neutral speaking voice."
+                "description": fallback_desc
             }
 
 async def forge_voice_seed(actor_id: str, acoustic_description: str, gender: str = "male") -> str:
