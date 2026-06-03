@@ -511,23 +511,6 @@ class FishSpeechEngine(SpeechEngine):
             logger.error(f"[VOICE-ROUTING] Fish Speech inference failed: {e}")
         return None
 
-class EdgeTTSEngine(SpeechEngine):
-    def __init__(self, voice_name: str = "en-US-ChristopherNeural", rate: str = "+0%"):
-        self.voice_name = voice_name
-        self.rate = rate
-
-    async def generate(self, text: str, actor_id: str, client: httpx.AsyncClient) -> Optional[bytes]:
-        try:
-            communicate = edge_tts.Communicate(text, self.voice_name, rate=self.rate)
-            data = b""
-            async for chunk in communicate.stream():
-                if chunk["type"] == "audio":
-                    data += chunk["data"]
-            return data if len(data) > 0 else None
-        except Exception as e:
-            logger.error(f"Edge-TTS synthesis failed: {e}")
-            return None
-
 class SpeechPipelineFactory:
     def __init__(self):
         self.cosyvoice = CosyVoiceEngine()
