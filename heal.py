@@ -47,7 +47,7 @@ def select_active_model():
         return "gemini-2.5-pro"  # Fail-safe operational default
 
 ACTIVE_MODEL = select_active_model()
-print(f"🌲 Connected to Gemini Remote Cloud Engine Engine (Target: {ACTIVE_MODEL})")
+print(f"🌲 Connected to Gemini Remote Cloud Engine (Target: {ACTIVE_MODEL})")
 model = genai.GenerativeModel(ACTIVE_MODEL)
 
 def get_browser_context():
