@@ -522,6 +522,7 @@ class SpeechPipelineFactory:
         - CosyVoice 3 handles humanoids and narrators for clean, fast speech.
         - The ``tier_routing`` dict in voice_routing_config.json can override
           any of these defaults via ``humanoid_engine`` / ``monster_engine`` keys.
+        Accepts both ``fish-speech`` and ``fishspeech`` as monster engine keys.
         """
         tier = config.get("tier_routing", {})
         if is_monster:
@@ -529,7 +530,8 @@ class SpeechPipelineFactory:
         else:
             target = tier.get("humanoid_engine", "cosyvoice")
 
-        if target == "fishspeech":
+        # Normalise hyphenated config key to internal name
+        if target in ("fishspeech", "fish-speech", "fish_speech"):
             return self.fishspeech
         return self.cosyvoice
 
