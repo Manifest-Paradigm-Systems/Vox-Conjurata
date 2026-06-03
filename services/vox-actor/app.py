@@ -33,7 +33,7 @@ from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse, JSONResponse
 
 # ---------------------------------------------------------------------------
-# Monkeypatch: torchaudio.load in 2026 forces torchcodec, which is broken on ROCm
+# Monkeypatch: torchaudio in 2026 forces torchcodec, which is broken on ROCm
 # ---------------------------------------------------------------------------
 def _monkeypatch_torchaudio_load(uri, **kwargs):
     logging.info(f"Monkeypatch loading audio: {uri}")
@@ -48,8 +48,18 @@ def _monkeypatch_torchaudio_load(uri, **kwargs):
     logging.info(f"Monkeypatch loaded: {tensor.shape} @ {samplerate} Hz")
     return tensor, samplerate
 
-logging.info("Monkeypatching torchaudio.load to use soundfile (bypassing broken torchcodec)")
+def _monkeypatch_torchaudio_save(uri, tensor, sample_rate, **kwargs):
+    logging.info(f"Monkeypatch saving audio: {uri} (shape={tensor.shape})")
+    # soundfile expects [time, channels]
+    if tensor.ndim == 2:
+        data = tensor.T.cpu().numpy()
+    else:
+        data = tensor.cpu().numpy()
+    sf.write(uri, data, sample_rate)
+
+logging.info("Monkeypatching torchaudio.load/save to use soundfile (bypassing broken torchcodec)")
 torchaudio.load = _monkeypatch_torchaudio_load
+torchaudio.save = _monkeypatch_torchaudio_save
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
