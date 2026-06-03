@@ -296,34 +296,35 @@ def concatenate_wavs(wav_bytes_list: List[bytes]) -> Optional[bytes]:
 def standardize_speech_text(text: str, engine_type: str, emotion: str) -> str:
     """Apply engine-specific formatting to dialogue text.
 
-    CosyVoice: strips all bracket tags, prepends instruction prefix.
-    Fish Speech: preserves inline [tag] expressions for delivery modulation,
-    strips only metadata prefixes like \"Mood:\" / \"Emotion:\".
+    CosyVoice: returns ONLY clean dialogue. Emotion/delivery cues are passed
+    separately via the 'emotion' and 'prompt_text' params of /api/tts —
+    embedding them in the spoken text causes CosyVoice to read them aloud.
+
+    Fish Speech: preserves inline [growl]/[snarl] delivery tags within the
+    body text. Prepends a global emotion prefix. Fish Speech parses these
+    as modulation cues and does NOT speak them.
     """
     import re
 
     if engine_type == "fish-speech":
-        # Strip only metadata-prefix patterns (Mood: ..., Emotion: ..., etc.)
-        # but PRESERVE inline [growl], [snarl], [angry] delivery tags.
+        # Strip metadata-prefix patterns but PRESERVE inline delivery tags
         clean_text = re.sub(r'(?:^|\s)(?:Mood|Emotion|Sentiment|Tone|Note|Instruction|Direction):\s*',
                            '', text, flags=re.IGNORECASE)
-        # Strip parenthetical asides like (whispering) — these are stage directions
         clean_text = re.sub(r'\(.*?\)', '', clean_text)
-        # Strip *action* markers
         clean_text = re.sub(r'\*.*?\*', '', clean_text)
-        # Clean up whitespace
         clean_text = re.sub(r'\s+', ' ', clean_text).strip()
         return f"[{emotion.lower()}] {clean_text}"
 
-    # CosyVoice / default: strip ALL metadata tags
+    # CosyVoice / default: strip ALL metadata tags, return clean dialogue
     clean_text = re.sub(r'\[.*?\]|\(.*?\)|(?:^|\s)\w+:\s*', '', text).strip()
 
     if engine_type == "cosyvoice":
-        # Translate *action* into <action> (CosyVoice acoustic generation)
         clean_text = re.sub(r'\*(.*?)\*', r'<\1>', clean_text)
-        return f"{emotion.capitalize()} <|endofprompt|> {clean_text}"
+        # Return ONLY clean text — no emotion prefix or <|endofprompt|> marker.
+        # Delivery modulation is handled by the prompt_text/emotion API params.
+        return clean_text
 
-    # Fallback — strip SFX
+    # Fallback
     clean_text = re.sub(r'\*.*?\*', '', clean_text)
     return clean_text
 
