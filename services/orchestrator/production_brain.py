@@ -778,8 +778,6 @@ async def get_visual_description(image_path_relative: str) -> str:
     except Exception as e:
         logger.error(f"🖼️ Visual Scan Error: {e}")
         return ""
-    finally:
-        await hotswap_manager.restore_hot_state("vox-vision-reader")
 
 @app.post("/api/ingest-actor")
 async def ingest_actor(data: ActorMetadata, force_refresh: bool = False):
