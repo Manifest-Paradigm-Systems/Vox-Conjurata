@@ -726,8 +726,6 @@ async def get_visual_description(image_path_relative: str) -> str:
         return ""
 
     try:
-        await hotswap_manager.swap_to("vox-vision-reader")
-        
         # Prepare the image payload for llama-cpp-python vision endpoint
         # MiniCPM-V doesn't support WebP, so convert to PNG if needed
         import base64
