@@ -190,30 +190,6 @@ services:
     - vox-net
     restart: unless-stopped
 
-  vox-designer:
-    build:
-      context: ./services/vox-designer
-    container_name: vox-designer
-    ports:
-    - 5010:5010
-    devices:
-    - /dev/kfd:/dev/kfd
-    - /dev/dri:/dev/dri
-    group_add:
-    - "39"
-    - "105"
-    security_opt:
-    - seccomp=unconfined
-    environment:
-    - HSA_OVERRIDE_GFX_VERSION=12.0.1
-    - CUDA_VISIBLE_DEVICES=""
-    - QUANTIZATION=int8
-    - VRAM_LIMIT=2.50GB
-    command: ["python3", "app.py"]
-    networks:
-    - vox-net
-    restart: unless-stopped
-
   vox-actor:
     build:
       context: ./services/vox-actor
