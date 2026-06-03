@@ -178,7 +178,7 @@ async def text_to_speech(
             model.inference_zero_shot(
                 tts_text=text,
                 prompt_text=prompt_text,
-                prompt_speech_16k=ref_path,
+                prompt_wav=ref_path,
                 stream=False,
             )
         ):
