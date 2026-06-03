@@ -46,12 +46,14 @@ Hooks.on("renderChatLog", (app, html, data) => {
 
         if (isActive) {
             let micType = "vox-conjurata-player-mic";
+            const resolveToken = globalThis.resolveActiveToken || window.resolveActiveToken;
+            
             if (game.user.isGM) {
                 const isPuppeteer = pupBtn.classList.contains('active');
                 if (isPuppeteer) {
-                    const selectedToken = canvas.tokens.controlled[0];
+                    const selectedToken = typeof resolveToken === 'function' ? resolveToken(true) : (canvas.tokens.controlled[0] || null);
                     if (!selectedToken) {
-                        ui.notifications.warn("❌ Puppeteer: Select an NPC token first!");
+                        ui.notifications.warn("❌ Puppeteer: Hover over or select an NPC token first!");
                         micBtn.classList.remove('active');
                         micBtn.style.background = '';
                         micBtn.style.color = '';
@@ -76,7 +78,8 @@ Hooks.on("renderChatLog", (app, html, data) => {
                     }
                 }
             } else {
-                const speakerActor = canvas.tokens.controlled[0]?.actor || game.user.character;
+                const selectedToken = typeof resolveToken === 'function' ? resolveToken(false) : (canvas.tokens.controlled[0] || null);
+                const speakerActor = selectedToken?.actor || game.user.character;
                 globalThis.voxState.playerActive = true;
                 globalThis.voxState.activeSpeakerName = speakerActor?.name || game.user.name;
                 globalThis.voxState.activeActorId = speakerActor?.id || game.user.id;
