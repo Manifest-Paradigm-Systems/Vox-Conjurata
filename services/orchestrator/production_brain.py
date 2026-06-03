@@ -294,8 +294,6 @@ async def scan_battlemap(req: BattlemapScanRequest):
 
     try:
         # vox-vision-reader (MiniCPM-V) is the image-understanding service.
-        await hotswap_manager.swap_to("vox-vision-reader")
-        reader_restored = False
 
         # Encode the battlemap as a data URI for the OpenAI-style vision API.
         with open(full_path, "rb") as f:
