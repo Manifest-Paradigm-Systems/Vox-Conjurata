@@ -613,41 +613,67 @@ async def generate_vocal_profile(actor_data: ActorMetadata, visual_description: 
             }
 
 async def forge_voice_seed(actor_id: str, acoustic_description: str, gender: str = "male", is_monster: bool = False) -> str:
-    """Creates a unique 10s voice print. Uses Fish Speech for monsters to get beastly textures."""
+    """Creates a unique voice seed WAV for a character.
+
+    Uses Fish Speech for monsters (beastly textures) and CosyVoice 3 for
+    humanoids (clean zero-shot cloning).  The seed file is mapped to the
+    character ID and reused for all future TTS prompts via the hotkey routing
+    pipeline.
+    """
     seed_path = VOICE_SEEDS_DIR / f"{actor_id}_seed_{gender}.wav"
     text_path = VOICE_SEEDS_DIR / f"{actor_id}_seed_{gender}.txt"
-    
+    seed_text = "Hello, I am a character in this world, and this is my unique voice."
+
     async with httpx.AsyncClient(timeout=180.0) as client:
         try:
-            seed_text = "Hello, I am a character in this world, and this is my unique voice."
             if is_monster:
                 logger.info(f"[VOICE-SEED] Using Fish Speech for monster seed: {actor_id}")
                 narrator_wav = VOICE_SEEDS_DIR / "narrator_seed_male.wav"
                 narrator_b64 = base64.b64encode(narrator_wav.read_bytes()).decode("utf-8") if narrator_wav.exists() else ""
-                
+
                 payload = {
-                    "text": seed_text, # Monsters now speak the anchor phrase for their seed
+                    "text": seed_text,
                     "references": [{"audio": narrator_b64, "text": "A clear speaking voice."}] if narrator_b64 else [],
                     "format": "wav"
                 }
                 response = await client.post(f"{TTS_MONSTER_URL}/v1/tts", json=payload)
             else:
-                logger.info(f"[VOICE-SEED] Using Parler-TTS for humanoid seed: {actor_id}")
-                # We pass the acoustic_description as the STYLE, and seed_text as the DIALOGUE
-                response = await client.post(f"{TTS_DESIGNER_URL}/generate", json={
-                    "text": acoustic_description,
-                    "prompt_text": seed_text
-                })
+                logger.info(f"[VOICE-SEED] Using CosyVoice 3 for humanoid seed: {actor_id}")
+                # Use the narrator seed as reference for zero-shot voice cloning.
+                # CosyVoice 3 clones from the reference WAV and applies the acoustic
+                # description as an instruction prefix to shape delivery.
+                narrator_wav = VOICE_SEEDS_DIR / "narrator_seed_male.wav"
+                if not narrator_wav.exists():
+                    logger.error(f"[VOICE-SEED] Narrator seed missing — cannot clone for {actor_id}")
+                    return ""
+
+                f_handle = open(narrator_wav, "rb")
+                try:
+                    response = await client.post(
+                        f"{TTS_ACTOR_URL}/api/tts",
+                        data={
+                            "text": seed_text,
+                            "prompt_text": f"Deliver in a {acoustic_description} voice.<|endofprompt|>",
+                            "emotion": acoustic_description[:80],
+                        },
+                        files={"reference_audio": (narrator_wav.name, f_handle, "audio/wav")}
+                    )
+                finally:
+                    f_handle.close()
 
             if response.status_code == 200:
-                with open(seed_path, "wb") as f: f.write(response.content)
-                # CRITICAL: Save the actual SPOKEN text, not the acoustic description
-                with open(text_path, "w") as f: f.write(seed_text)
-                logger.info(f"[VOICE-SEED] Forged { 'monster' if is_monster else 'humanoid' } seed for {actor_id}")
+                with open(seed_path, "wb") as f:
+                    f.write(response.content)
+                with open(text_path, "w") as f:
+                    f.write(seed_text)
+                logger.info(f"[VOICE-SEED] Forged {'monster' if is_monster else 'humanoid'} seed for {actor_id} → {seed_path.name}")
                 return str(seed_path)
-            return ""
+            else:
+                logger.error(f"[VOICE-SEED] Seed generation failed for {actor_id}: HTTP {response.status_code}")
+                return ""
         except Exception as e:
-            logger.error(f"Seed forge error: {e}"); return ""
+            logger.error(f"Seed forge error for {actor_id}: {e}")
+            return ""
 
 async def enrich_and_instruct(speaker: str, role: str, text: str) -> DialogueEnrichment:
     """Enriches dialogue with Qwen via vLLM endpoint and formats tags for specific TTS engines."""
