@@ -7,7 +7,11 @@ console.log("🚀 Vox-Conjurata: Script evaluation started.");
 // ==========================================
 // 0. TERMINAL MONKEYPATCH (BLOCK PF2E ERRORS)
 // ==========================================
-Hooks.once("init", () => {
+function applyTerminalMonkeypatch() {
+    if (globalThis.voxTerminalMonkeypatched || typeof ChatLog === 'undefined') return;
+    globalThis.voxTerminalMonkeypatched = true;
+    console.log("🎙️ Vox-Conjurata: Applying Terminal monkeypatch...");
+    
     const originalProcessMessage = ChatLog.prototype.processMessage;
     ChatLog.prototype.processMessage = function(message) {
         if (message.trim().toLowerCase().startsWith("/vox")) {
@@ -20,7 +24,10 @@ Hooks.once("init", () => {
         }
         return originalProcessMessage.call(this, message);
     };
-});
+}
+
+if (typeof game !== 'undefined' && game.ready) applyTerminalMonkeypatch();
+else Hooks.once("ready", applyTerminalMonkeypatch);
 
 async function handleVoxCommand(command, param) {
     if (!game.user.isGM) return;
