@@ -558,9 +558,10 @@ class FishSpeechEngine(SpeechEngine):
         seeds = list(VOICE_SEEDS_DIR.glob(f"{actor_id}_seed_*.wav"))
         seed_path = seeds[0] if seeds else None
         
-        # Fish Speech 1.5 prefers a reference audio for in-context learning
         if not seed_path:
-            seed_path = VOICE_SEEDS_DIR / "narrator_seed_male.wav"
+            logger.info(f"[VOICE-ROUTING] Fish Speech: No seed found for {actor_id}. Forging new seed...")
+            seed_path = VOICE_SEEDS_DIR / f"{actor_id}_seed_male.wav"
+            await forge_voice_seed(actor_id, f"A deep, gravelly voice for character {actor_id}.", "male")
 
         try:
             # Prepare references in the format Fish Speech API expects (Base64 encoded)
