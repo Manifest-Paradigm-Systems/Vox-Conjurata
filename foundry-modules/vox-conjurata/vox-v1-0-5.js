@@ -5,18 +5,24 @@
 console.log("🚀 Vox-Conjurata: Script evaluation started.");
 
 // ==========================================
-// 0. TERMINAL ENGINE (HIGH PRIORITY INTERCEPT)
+// 0. TERMINAL ENGINE (PF2E COMPATIBLE INTERCEPT)
 // ==========================================
 Hooks.on("chatMessage", (chatLog, message, chatData) => {
     const cleanMsg = message.trim();
     if (cleanMsg.toLowerCase().startsWith("/vox")) {
-        console.log(`🎙️ Vox-Conjurata Terminal: Intercepted command: ${cleanMsg}`);
+        console.log(`🎙️ Vox-Conjurata: Intercepting terminal command: ${cleanMsg}`);
+        
+        // Immediate processing
         const parts = cleanMsg.split(/\s+/);
         const command = parts[1] ? parts[1].toLowerCase() : "help";
         const param = parts.slice(2).join(" ");
         
+        // Execute command
         handleVoxCommand(command, param);
-        return false; // Crucial: claims the command so Foundry stops processing
+        
+        // RETURN FALSE: This tells Foundry and PF2e to STOP processing the message
+        // This is what prevents the "not a valid command" error.
+        return false; 
     }
 });
 
@@ -55,6 +61,7 @@ async function handleVoxCommand(command, param) {
                 speaker: { alias: "Vox System Console" },
                 content: `<div style="font-family: monospace; background: #1a1a1a; color: #00ff00; padding: 10px; border-radius: 5px; border: 1px solid #333;">
                     <strong>SYSTEM TELEMETRY</strong><br/>
+                    ---------------------<br/>
                     VRAM: ${data.vram_used_gb?.toFixed(2) || "???"} / ${data.vram_total_gb?.toFixed(2) || "32"} GB<br/>
                     VISION: HOT (STANDBY)
                 </div>`,
@@ -63,10 +70,11 @@ async function handleVoxCommand(command, param) {
         });
     }
     else {
+        // help menu
         ChatMessage.create({
             speaker: { alias: "Vox Help" },
             content: `<div style="background: #1a1a1a; color: #fff; padding: 10px; border-radius: 5px; border-left: 4px solid #00ff00;">
-                <h3 style="color: #00ff00;">🎙️ VOX Terminal</h3>
+                <h3 style="color: #00ff00; margin-top: 0;">🎙️ VOX Terminal</h3>
                 <strong>/vox forge</strong> - Re-roll voice<br/>
                 <strong>/vox voice [desc]</strong> - Manual voice desc<br/>
                 <strong>/vox status</strong> - System health
