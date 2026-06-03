@@ -26,12 +26,11 @@ RUN git clone --recurse-submodules https://github.com/FunAudioLLM/CosyVoice.git 
 # Matcha-TTS is used via sys.path (not pip-install)
 ENV PYTHONPATH="/app/CosyVoice:/app/CosyVoice/third_party/Matcha-TTS:$PYTHONPATH"
 
-# 4. Install inference deps (skip deepspeed/gradio/whisper/grpcio — training only)
-#    We use --extra-index-url for the ROCm WHL index to ensure Torch doesn't downgrade to CPU.
-RUN grep -vE "deepspeed|whisper|gradio|extra-index-url|grpcio" /app/CosyVoice/requirements.txt > /tmp/cv-req.txt && \
+# 4. Install inference deps (skip training-only and already-installed ROCm torch)
+RUN grep -vE "deepspeed|whisper|gradio|extra-index-url|grpcio|torch|torchaudio" /app/CosyVoice/requirements.txt > /tmp/cv-req.txt && \
     sed -i '/^transformers/d' /tmp/cv-req.txt && \
-    pip3 install --no-cache-dir -r /tmp/cv-req.txt --extra-index-url https://download.pytorch.org/whl/rocm7.2/ && \
-    pip3 install --no-cache-dir "huggingface-hub" "openai-whisper" "transformers<4.48" --extra-index-url https://download.pytorch.org/whl/rocm7.2/
+    pip3 install --no-cache-dir -r /tmp/cv-req.txt && \
+    pip3 install --no-cache-dir "huggingface-hub" "openai-whisper" "transformers<4.48"
 
 # 5. Install server dependencies from requirements.txt
 COPY requirements.txt .
