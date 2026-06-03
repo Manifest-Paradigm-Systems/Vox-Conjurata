@@ -396,6 +396,7 @@ window.addEventListener("keyup", (event) => {
 // 4. MODULE LIFECYCLE (READY & SCENE SCAN)
 // ==========================================
 const scannedScenes = new Set();
+const ingestedActors = new Set();
 
 async function scanActiveSceneBattlemap() {
     if (!game.user.isGM || !canvas.ready || !canvas.scene) return;
@@ -541,6 +542,10 @@ async function scanActiveSceneTokens() {
     for (let token of canvas.tokens.placeables) {
         if (!token.actor) continue;
         const actor = token.actor;
+        
+        // Debounce ingest to prevent log spam and delays
+        if (ingestedActors.has(actor.id)) continue;
+        ingestedActors.add(actor.id);
         
         // Resolve monster status via shared authoritative helper
         const is_monster = resolveIsMonster(actor);
