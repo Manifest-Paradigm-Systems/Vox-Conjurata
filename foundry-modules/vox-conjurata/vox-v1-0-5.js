@@ -184,107 +184,122 @@ function resolveActiveToken(isGM) {
 // ==========================================
 // 3. KEYBINDING REGISTRATION (INIT)
 // ==========================================
+// ==========================================
+// 3. KEYBINDING REGISTRATION (INIT)
+// ==========================================
 function registerKeybindings() {
     if (globalThis.voxKeybindingsRegistered) return;
     console.log("🎙️ Vox-Conjurata: Registering settings and keybindings.");
     globalThis.voxKeybindingsRegistered = true;
     
-    game.settings.register("vox-conjurata", "narratorVoice", {
-        name: "Vox: Narrator Voice Profile",
-        hint: "Choose the Microsoft Neural voice profile for narration failovers.",
-        scope: "world",
-        config: true,
-        type: String,
-        default: "en-US-ChristopherNeural",
-        choices: { "en-US-ChristopherNeural": "en-US-ChristopherNeural" }
-    });
+    // Register settings
+    try {
+        game.settings.register("vox-conjurata", "narratorVoice", {
+            name: "Vox: Narrator Voice Profile",
+            hint: "Choose the Microsoft Neural voice profile for narration failovers.",
+            scope: "world",
+            config: true,
+            type: String,
+            default: "en-US-ChristopherNeural",
+            choices: { "en-US-ChristopherNeural": "en-US-ChristopherNeural" }
+        });
+    } catch (e) { console.error("🎙️ Vox-Conjurata: Failed to register settings:", e); }
 
-    // Y: Narrator PTT (GM)
-    game.keybindings.register("vox-conjurata", "narratorPTT", {
-        name: "Vox: Narrator Push-to-Talk",
-        editable: [{ key: "KeyY" }],
-        onDown: () => {
-            console.log("🎙️ Vox-Conjurata: Narrator Key Down");
-            try { playAudio("sounds/lock.wav", 0); } catch (err) {}
-            if (!game.user.isGM || globalThis.voxState.narratorActive) return;
-            globalThis.voxState.narratorActive = true;
-            globalThis.voxState.activeSpeakerName = "Narrator";
-            globalThis.voxState.activeActorId = "narrator";
-            startRecording("vox-conjurata-gm-narrate-mic");
-            statusMessage("Narrator Mic [Y]: OPEN", true);
-        },
-        onUp: () => {
-            console.log("🎙️ Vox-Conjurata: Narrator Key Up");
-            if (!game.user.isGM || !globalThis.voxState.narratorActive) return;
-            globalThis.voxState.narratorActive = false;
-            stopRecording();
-            statusMessage("Narrator Mic [Y]: CLOSED", false);
-        }
-    });
-
-    // H: Puppeteer PTT (GM)
-    game.keybindings.register("vox-conjurata", "puppeteerPTT", {
-        name: "Vox: Puppeteer Push-to-Talk",
-        editable: [{ key: "KeyH" }],
-        onDown: () => {
-            console.log("🎭 Vox-Conjurata: Puppeteer Key Down");
-            try { playAudio("sounds/lock.wav", 0); } catch (err) {}
-            if (!game.user.isGM || globalThis.voxState.puppetActive) return;
-            const selectedToken = resolveActiveToken(true);
-            if (!selectedToken) {
-                ui.notifications.warn("❌ Puppeteer: Hover over or select an NPC token first!");
-                return;
+    // Register Keybindings
+    try {
+        // Y: Narrator PTT (GM)
+        game.keybindings.register("vox-conjurata", "narratorPTT", {
+            name: "Vox: Narrator Push-to-Talk",
+            editable: [{ key: "KeyY" }],
+            onDown: () => {
+                console.log("🎙️ Vox-Conjurata: Narrator Key Down [Y]");
+                try { playAudio("sounds/lock.wav", 0.2); } catch (err) {}
+                if (!game.user.isGM || globalThis.voxState.narratorActive) return;
+                globalThis.voxState.narratorActive = true;
+                globalThis.voxState.activeSpeakerName = "Narrator";
+                globalThis.voxState.activeActorId = "narrator";
+                startRecording("vox-conjurata-gm-narrate-mic");
+                statusMessage("Narrator Mic [Y]: OPEN", true);
+            },
+            onUp: () => {
+                console.log("🎙️ Vox-Conjurata: Narrator Key Up [Y]");
+                if (!game.user.isGM || !globalThis.voxState.narratorActive) return;
+                globalThis.voxState.narratorActive = false;
+                stopRecording();
+                statusMessage("Narrator Mic [Y]: CLOSED", false);
             }
-            globalThis.voxState.puppetActive = true;
-            globalThis.voxState.activeSpeakerName = selectedToken.actor?.name || "Unknown NPC";
-            globalThis.voxState.activeActorId = selectedToken.actor?.id || "unknown";
-            globalThis.voxState.activeIsMonster = !!resolveIsMonster(selectedToken.actor);
-            startRecording("vox-conjurata-gm-puppet-mic");
-            statusMessage(`Puppeteer [H] (${globalThis.voxState.activeSpeakerName}): OPEN`, true);
-        },
-        onUp: () => {
-            console.log("🎭 Vox-Conjurata: Puppeteer Key Up");
-            if (!game.user.isGM || !globalThis.voxState.puppetActive) return;
-            globalThis.voxState.puppetActive = false;
-            stopRecording();
-            statusMessage(`Puppeteer Mic [H] (${globalThis.voxState.activeSpeakerName}): CLOSED`, false);
-        }
-    });
+        });
 
-    // I: Character PTT (All)
-    game.keybindings.register("vox-conjurata", "playerPTT", {
-        name: "Vox: Character Push-to-Talk",
-        editable: [{ key: "KeyI" }],
-        onDown: () => {
-            console.log("👤 Vox-Conjurata: Character Key Down");
-            try { playAudio("sounds/lock.wav", 0); } catch (err) {}
-            if (globalThis.voxState.playerActive) return;
-            const selectedToken = resolveActiveToken(false);
-            const speakerActor = selectedToken?.actor || game.user.character;
-            globalThis.voxState.playerActive = true;
-            globalThis.voxState.activeSpeakerName = speakerActor?.name || game.user.name;
-            globalThis.voxState.activeActorId = speakerActor?.id || game.user.id;
-            globalThis.voxState.activeIsMonster = !!resolveIsMonster(speakerActor);
-            startRecording("vox-conjurata-player-mic");
-            statusMessage(`Character Mic [I] (${globalThis.voxState.activeSpeakerName}): OPEN`, true);
-        },
-        onUp: () => {
-            console.log("👤 Vox-Conjurata: Character Key Up");
-            if (!globalThis.voxState.playerActive) return;
-            globalThis.voxState.playerActive = false;
-            stopRecording();
-            statusMessage(`Character Mic [I] (${globalThis.voxState.activeSpeakerName}): CLOSED`, false);
-        }
-    });
+        // H: Puppeteer PTT (GM)
+        game.keybindings.register("vox-conjurata", "puppeteerPTT", {
+            name: "Vox: Puppeteer Push-to-Talk",
+            editable: [{ key: "KeyH" }],
+            onDown: () => {
+                console.log("🎭 Vox-Conjurata: Puppeteer Key Down [H]");
+                try { playAudio("sounds/lock.wav", 0.2); } catch (err) {}
+                if (!game.user.isGM || globalThis.voxState.puppetActive) return;
+                const selectedToken = resolveActiveToken(true);
+                if (!selectedToken) {
+                    ui.notifications.warn("❌ Puppeteer: Hover over or select an NPC token first!");
+                    return;
+                }
+                globalThis.voxState.puppetActive = true;
+                globalThis.voxState.activeSpeakerName = selectedToken.actor?.name || "Unknown NPC";
+                globalThis.voxState.activeActorId = selectedToken.actor?.id || "unknown";
+                globalThis.voxState.activeIsMonster = !!resolveIsMonster(selectedToken.actor);
+                startRecording("vox-conjurata-gm-puppet-mic");
+                statusMessage(`Puppeteer [H] (${globalThis.voxState.activeSpeakerName}): OPEN`, true);
+            },
+            onUp: () => {
+                console.log("🎭 Vox-Conjurata: Puppeteer Key Up [H]");
+                if (!game.user.isGM || !globalThis.voxState.puppetActive) return;
+                globalThis.voxState.puppetActive = false;
+                stopRecording();
+                statusMessage(`Puppeteer Mic [H] (${globalThis.voxState.activeSpeakerName}): CLOSED`, false);
+            }
+        });
+
+        // I: Character PTT (All)
+        game.keybindings.register("vox-conjurata", "playerPTT", {
+            name: "Vox: Character Push-to-Talk",
+            editable: [{ key: "KeyI" }],
+            onDown: () => {
+                console.log("👤 Vox-Conjurata: Character Key Down [I]");
+                try { playAudio("sounds/lock.wav", 0.2); } catch (err) {}
+                if (globalThis.voxState.playerActive) return;
+                const selectedToken = resolveActiveToken(false);
+                const speakerActor = selectedToken?.actor || game.user.character;
+                globalThis.voxState.playerActive = true;
+                globalThis.voxState.activeSpeakerName = speakerActor?.name || game.user.name;
+                globalThis.voxState.activeActorId = speakerActor?.id || game.user.id;
+                globalThis.voxState.activeIsMonster = !!resolveIsMonster(speakerActor);
+                startRecording("vox-conjurata-player-mic");
+                statusMessage(`Character Mic [I] (${globalThis.voxState.activeSpeakerName}): OPEN`, true);
+            },
+            onUp: () => {
+                console.log("👤 Vox-Conjurata: Character Key Up [I]");
+                if (!globalThis.voxState.playerActive) return;
+                globalThis.voxState.playerActive = false;
+                stopRecording();
+                statusMessage(`Character Mic [I] (${globalThis.voxState.activeSpeakerName}): CLOSED`, false);
+            }
+        });
+    } catch (e) {
+        console.error("🎙️ Vox-Conjurata: Keybinding registration failed:", e);
+    }
 }
 
-if (typeof game !== 'undefined' && game.keybindings) {
+// Ensure functions are global for cross-script access
+globalThis.startRecording = startRecording;
+globalThis.stopRecording = stopRecording;
+globalThis.statusMessage = statusMessage;
+globalThis.playAudio = playAudio;
+
+// Register on init
+Hooks.once("init", () => {
     registerKeybindings();
-} else {
-    Hooks.once("init", () => {
-        registerKeybindings();
-    });
-}
+});
+
 
 // ==========================================
 // 3b. GLOBAL KEYBOARD LISTENER FALLBACKS (FAIL-SAFE)
