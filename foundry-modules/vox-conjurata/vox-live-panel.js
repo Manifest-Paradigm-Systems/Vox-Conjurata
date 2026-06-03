@@ -2,6 +2,7 @@
  * Vox Conjurata Live Panel
  * Draggable control interface for real-time voice changing.
  */
+console.log("🚀 Vox-Live-Panel: Script evaluation started.");
 
 class VoxLivePanel extends Application {
     constructor(options = {}) {
