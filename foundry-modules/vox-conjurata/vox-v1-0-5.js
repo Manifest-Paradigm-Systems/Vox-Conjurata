@@ -794,12 +794,16 @@ async function processAndSendAudio() {
 
             console.log(`💬 Vox-Conjurata: Creating chat message for ${activeSpeakerName} (Type: ${voxType})`);
 
-            // Use integer 2 (IC) if CONST is not fully resolved yet
-            const msgType = (typeof CONST !== 'undefined' && CONST.CHAT_MESSAGE_TYPES) ? CONST.CHAT_MESSAGE_TYPES.IC : 2;
+            // Foundry V12+ uses string keys for message styles. IC is usually "ic".
+            let msgStyle = "ic"; 
+            if (typeof CONST !== 'undefined') {
+                msgStyle = CONST.CHAT_MESSAGE_STYLES?.IC || CONST.CHAT_MESSAGE_TYPES?.IC || "ic";
+            }
 
             const message = await ChatMessage.create({ 
                 content: transcription, 
-                type: msgType, 
+                style: msgStyle, // V12 uses 'style' instead of 'type' in some contexts, but 'type' is still valid if string
+                type: msgStyle,
                 speaker: speakerData, 
                 flags: { 
                     "vox-conjurata": { 
@@ -812,8 +816,14 @@ async function processAndSendAudio() {
                 } 
             });
 
+            // Handle potential creation failure (e.g. validation error)
+            if (!message) {
+                console.error("❌ Vox-Conjurata: Failed to create chat message document.");
+                return;
+            }
+
             // Trigger speech bubble explicitly
-            const tokenId = message.speaker.token;
+            const tokenId = message.speaker?.token;
             if (canvas.ready && tokenId) {
                 const token = canvas.tokens.get(tokenId) || canvas.tokens.placeables.find(t => t.id === tokenId);
                 if (token) {
