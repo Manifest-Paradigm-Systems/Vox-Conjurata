@@ -64,27 +64,43 @@ async function handleVoxCommand(command, param) {
     }
 }
 
-// Aggressive Command Intercept
+// Chat Command Intercept — dual-layer for Foundry V12+ compatibility
 (function() {
+    // Layer 1: chatMessage hook (catches most invocations)
     Hooks.on("chatMessage", (chatLog, message, chatData) => {
         if (message.trim().toLowerCase().startsWith("/vox")) {
             const parts = message.trim().split(/\s+/);
             handleVoxCommand(parts[1]?.toLowerCase() || "help", parts.slice(2).join(" "));
-            return false;
+            return false;  // suppress normal chat processing
         }
     });
 
+    // Layer 2: monkey-patch the chat message submit handler (Foundry V12+)
     Hooks.once("ready", () => {
-        if (typeof ChatLog === 'undefined') return;
-        const originalProcess = ChatLog.prototype.processMessage;
-        ChatLog.prototype.processMessage = function(message) {
-            if (message.trim().toLowerCase().startsWith("/vox")) {
-                const parts = message.trim().split(/\s+/);
-                handleVoxCommand(parts[1]?.toLowerCase() || "help", parts.slice(2).join(" "));
-                return;
-            }
-            return originalProcess.call(this, message);
-        };
+        // Foundry V12+ uses ui.chat._onSubmit or similar internal handler.
+        // Patch the lowest-level message entry point we can find.
+        const chatLog = ui.chat;
+        if (!chatLog) return;
+
+        // Try Foundry V12 pattern: intercept at the form submission level
+        const form = chatLog.form;
+        if (form) {
+            const originalSubmit = form.onsubmit;
+            form.addEventListener("submit", (event) => {
+                const textarea = form.querySelector('textarea[name="message"]');
+                if (textarea) {
+                    const msg = textarea.value.trim();
+                    if (msg.toLowerCase().startsWith("/vox")) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        const parts = msg.split(/\s+/);
+                        handleVoxCommand(parts[1]?.toLowerCase() || "help", parts.slice(2).join(" "));
+                        textarea.value = '';
+                        return false;
+                    }
+                }
+            }, true);  // capture phase — fires before Foundry's handler
+        }
     });
 })();
 
