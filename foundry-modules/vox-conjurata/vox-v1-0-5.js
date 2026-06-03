@@ -232,13 +232,14 @@ Hooks.on("canvasReady", async () => { if (game.user.isGM) await scanActiveSceneT
 // 5. CHAT SKINNING & TERMINAL ENGINE
 // ==========================================
 Hooks.on("chatMessage", (chatLog, message, chatData) => {
-    if (message.startsWith("/vox ")) {
-        const args = message.slice(5).split(" ");
-        const command = args[0].toLowerCase();
-        const param = args.slice(1).join(" ");
+    const cleanMsg = message.trim();
+    if (cleanMsg.toLowerCase().startsWith("/vox")) {
+        const parts = cleanMsg.split(/\s+/);
+        const command = parts[1] ? parts[1].toLowerCase() : "help";
+        const param = parts.slice(2).join(" ");
         
         handleVoxCommand(command, param);
-        return false; // Prevent message from being sent to regular chat
+        return false; // Crucial: claims the command so Foundry stops processing
     }
 });
 
