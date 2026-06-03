@@ -1064,22 +1064,24 @@ async def get_visual_description(image_path_relative: str) -> str:
 
 @app.post("/api/ingest-actor")
 async def ingest_actor(data: ActorMetadata, force_refresh: bool = False):
-    """Ingest an actor and forge their voice seed.
-    
-    If no seed exists, it triggers a visual scan via vox-vision-reader
-    to inform the vocal profile generation.
+    """Ingest an actor and forge or register their voice seed.
+
+    - Named characters get a unique seed cloned from their archetype palette.
+    - Generic NPCs get registered to the shared archetype seed.
+    - If no seed exists, triggers a visual scan to inform vocal profiling.
     """
+    # Check existing registration
+    registry = load_voice_registry()
+    existing_entry = registry.get(data.actorId)
     existing_seeds = list(VOICE_SEEDS_DIR.glob(f"{data.actorId}_seed_*.wav"))
-    
-    visual_desc = ""
-    
-    if (not existing_seeds) or force_refresh:
-        # Perform Visual Analysis ONLY if we are creating a new seed
-        logger.info(f"[INGEST] No seed found for {data.name}. Triggering visual analysis...")
-        visual_desc = await get_visual_description(data.artPath)
+
+    if existing_entry and not force_refresh:
+        logger.info(f"[INGEST] Registry cache hit for {data.actorId} ({data.name}), returning cached seed.")
+        return {"status": "cached", "seed_path": existing_entry.get("seed_path"),
+                "engine": existing_entry.get("engine"), "is_archetype": existing_entry.get("is_archetype")}
 
     if existing_seeds and not force_refresh:
-        logger.info(f"[INGEST] Cache hit for {data.actorId} ({data.name}), returning cached seed.")
+        logger.info(f"[INGEST] Filesystem cache hit for {data.actorId} ({data.name}), returning cached seed.")
         return {"status": "cached", "seeds": [s.name for s in existing_seeds]}
 
     if existing_seeds and force_refresh:
@@ -1087,8 +1089,18 @@ async def ingest_actor(data: ActorMetadata, force_refresh: bool = False):
         for stale in existing_seeds:
             stale.unlink(missing_ok=True)
             stale.with_suffix(".txt").unlink(missing_ok=True)
+        # Also remove from registry
+        registry.pop(data.actorId, None)
+        save_voice_registry(registry)
 
-    # GM Override Check: If the GM provided a manual description, skip visual scan/lore logic
+    # Generate vocal profile
+    visual_desc = ""
+    if force_refresh or (not existing_seeds and not existing_entry):
+        logger.info(f"[INGEST] Triggering visual analysis for {data.name}...")
+        visual_desc = await get_visual_description(data.artPath)
+
+    is_named = is_named_character(data)
+
     if data.customDescription:
         logger.info(f"[INGEST] GM Override provided for {data.name}: {data.customDescription}")
         profile_desc = data.customDescription
@@ -1102,8 +1114,24 @@ async def ingest_actor(data: ActorMetadata, force_refresh: bool = False):
     if gender not in ["male", "female"]:
         gender = "male"
 
-    path = await forge_voice_seed(data.actorId, profile_desc, gender, is_monster=data.isMonster)
-    return {"status": "created", "path": path, "visual_description": visual_desc} if path else {"status": "error"}
+    archetype_key = resolve_archetype(data, profile_data if not data.customDescription else {"gender": gender, "description": profile_desc})
+
+    path = await forge_voice_seed(
+        actor_id=data.actorId,
+        acoustic_description=profile_desc,
+        gender=gender,
+        is_monster=data.isMonster,
+        is_named=is_named,
+        archetype_key=archetype_key,
+    )
+    return {
+        "status": "created" if path else "error",
+        "path": path,
+        "is_named": is_named,
+        "is_archetype": not is_named,
+        "archetype_key": archetype_key,
+        "visual_description": visual_desc,
+    }
 
 class CachePurgeRequest(BaseModel):
     actor_ids: Optional[List[str]] = Field(
