@@ -51,6 +51,14 @@ def _monkeypatch_torchaudio_load(uri, **kwargs):
 def _monkeypatch_torchaudio_save(uri, tensor, sample_rate, **kwargs):
     logging.info(f"Monkeypatch saving audio: {uri} (shape={tensor.shape})")
     # soundfile expects [time, channels]
+    # torchaudio.save expects [channels, time]
+    
+    # Squeeze out extra dimensions if any (e.g. [1, 1, time] -> [1, time])
+    if tensor.ndim > 2:
+        tensor = tensor.squeeze()
+        if tensor.ndim == 1:
+            tensor = tensor.unsqueeze(0)
+            
     if tensor.ndim == 2:
         data = tensor.T.cpu().numpy()
     else:
