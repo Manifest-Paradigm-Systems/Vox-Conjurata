@@ -843,38 +843,27 @@ async def forge_voice_seed(
 
     async with httpx.AsyncClient(timeout=180.0) as client:
         try:
-            if is_monster:
-                logger.info(f"[VOICE-SEED] Using Fish Speech for unique monster seed: {actor_id}")
-                archetype_b64 = base64.b64encode(archetype_path.read_bytes()).decode("utf-8")
-                # For Fish Speech, we rely on the reference audio (archetype) to set the style.
-                # We strip instructions from the text to prevent them from being spoken.
-                payload = {
-                    "text": seed_text,
-                    "references": [{"audio": archetype_b64, "text": seed_text}],
-                    "format": "wav",
-                }
-                response = await client.post(f"{TTS_MONSTER_URL}/v1/tts", json=payload)
-            else:
-                logger.info(f"[VOICE-SEED] Using CosyVoice 3 voice-design for unique humanoid seed: {actor_id}")
-                archetype_fh = open(archetype_path, "rb")
-                try:
-                    response = await client.post(
-                        f"{TTS_ACTOR_URL}/api/voice-design",
-                        data={
-                            "text": seed_text,
-                            "instruct_text": acoustic_description,
-                        },
-                        files={"reference_audio": (archetype_path.name, archetype_fh, "audio/wav")},
-                    )
-                finally:
-                    archetype_fh.close()
+            # We now use Fish Speech as the primary sound designer for ALL unique seeds.
+            # This ensures character voices are diverse and not just narrator clones.
+            logger.info(f"[VOICE-SEED] Using Fish Speech to forge unique seed for: {actor_id}")
+            archetype_b64 = base64.b64encode(archetype_path.read_bytes()).decode("utf-8")
+            
+            # Use the acoustic_description as the 'prompt' within the text for Fish Speech
+            # and the archetype audio as the reference speaker identity.
+            payload = {
+                "text": f"[{acoustic_description[:100]}] {seed_text}",
+                "references": [{"audio": archetype_b64, "text": seed_text}],
+                "format": "wav",
+                "normalize": True
+            }
+            response = await client.post(f"{TTS_MONSTER_URL}/v1/tts", json=payload)
 
             if response.status_code == 200:
                 seed_path.write_bytes(response.content)
                 text_path.write_text(seed_text)
                 register_character_voice(
                     actor_id=actor_id,
-                    engine="fishspeech" if is_monster else "cosyvoice",
+                    engine="fishspeech",
                     seed_path=str(seed_path.relative_to(VOICE_SEEDS_DIR)),
                     voice_prompt=acoustic_description,
                     is_archetype=False,
