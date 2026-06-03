@@ -299,7 +299,6 @@ Hooks.once("init", () => {
     registerKeybindings();
 });
 
-
 // ==========================================
 // 3b. GLOBAL KEYBOARD LISTENER FALLBACKS (FAIL-SAFE)
 // ==========================================
@@ -537,7 +536,21 @@ async function placeScanEmbedded(contract) {
 
 async function scanActiveSceneTokens() {
     if (!game.user.isGM || !canvas.ready) return;
-...
+
+    for (let token of canvas.tokens.placeables) {
+        if (!token.actor) continue;
+        const actor = token.actor;
+        
+        // Resolve monster status via shared authoritative helper
+        const is_monster = resolveIsMonster(actor);
+        
+        const actorData = {
+            actorId: actor.id, name: actor.name,
+            lore: actor.system.details?.biography?.value || actor.system.description?.value || "No bio available.",
+            stats: { race: actor.system.details?.race || "Unknown", alignment: actor.system.details?.alignment || "Neutral", level: actor.system.details?.level?.value || 0 },
+            artPath: actor.img, isMonster: is_monster
+        };
+        console.log(`📦 Vox-Conjurata: Scraping metadata for ${actorData.name} (Monster: ${is_monster})...`);
         try {
             await fetch(globalThis.voxState.ingestEndpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(actorData) });
         } catch (err) { console.error(`❌ Vox-Conjurata: Failed to ingest token metadata for ${actorData.name}:`, err); }
@@ -803,3 +816,5 @@ globalThis.stopRecording = stopRecording;
 globalThis.statusMessage = statusMessage;
 globalThis.processAndSendAudio = processAndSendAudio;
 globalThis.playAudio = playAudio;
+globalThis.resolveActiveToken = resolveActiveToken;
+globalThis.resolveIsMonster = resolveIsMonster;
