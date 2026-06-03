@@ -200,7 +200,7 @@ def resolve_archetype(actor_data: "ActorMetadata", vocal_profile: dict) -> str:
 
 
 async def ensure_palette_seed(archetype_key: str) -> str:
-    """Ensure a palette archetype seed exists — generate via CosyVoice 3 (Instruct) for textured base voices.
+    """Ensure a palette archetype seed exists — generate via Fish Speech for textured base voices.
 
     Returns the absolute path to the palette seed WAV.
     """
@@ -214,48 +214,21 @@ async def ensure_palette_seed(archetype_key: str) -> str:
         return ""
 
     PALETTE_DIR.mkdir(parents=True, exist_ok=True)
-    logger.info(f"[PALETTE] Generating new archetype seed: {archetype_key} (via CosyVoice 3 Instruct)")
+    logger.info(f"[PALETTE] Generating new archetype seed: {archetype_key} (via Fish Speech)")
 
-    # We use CosyVoice 3 in Instruct mode to generate the base archetype seed.
-    # This allows us to use text descriptions (like "[guttural growl]") to create 
-    # the initial monster-like or accented-humanoid sound.
     async with httpx.AsyncClient(timeout=180.0) as client:
         try:
-            # For the palette, we use a fixed neutral reference (the narrator) 
-            # and let the 'instruct' prompt drive the transformation.
-            narrator_wav = VOICE_SEEDS_DIR / "narrator_seed_male.wav"
-            if not narrator_wav.exists():
-                 # Create a dummy if missing or just fail gracefully
-                 logger.warning("[PALETTE] No narrator_seed_male.wav found, palette gen may be flat.")
-            
-            data = {
+            # Generate the base archetype using Fish Speech's ability to interpret style from text prompts
+            payload = {
                 "text": "Hello, I am a character in this world, and this is my unique voice.",
-                "prompt_text": "A clear speaking voice.",
-                "emotion": prompt, # Pass the detailed palette prompt here
-                "mode": "instruct2",
+                "references": [], # No reference audio; generate purely from the 'text' (which includes our [tags])
+                "format": "wav",
+                "normalize": True
             }
+            # Fish Speech handles the [tags] at the beginning of the text as style instructions
+            payload["text"] = f"{prompt} {payload['text']}"
             
-            files = {}
-            if narrator_wav.exists():
-                f_handle = open(narrator_wav, "rb")
-                files["reference_audio"] = (narrator_wav.name, f_handle, "audio/wav")
-            else:
-                # If no narrator seed, we can't really do zero-shot/instruct well in CosyVoice
-                # Fallback to Fish Speech without references (may sound like narrator)
-                payload = {"text": prompt, "references": [], "format": "wav"}
-                resp = await client.post(f"{TTS_MONSTER_URL}/v1/tts", json=payload)
-                if resp.status_code == 200:
-                    palette_path.write_bytes(resp.content)
-                    logger.info(f"[PALETTE] Created {archetype_key} via Fish Fallback")
-                    return str(palette_path)
-                return ""
-
-            try:
-                resp = await client.post(f"{TTS_ACTOR_URL}/api/tts", data=data, files=files)
-            finally:
-                if "reference_audio" in files:
-                    f_handle.close()
-
+            resp = await client.post(f"{TTS_MONSTER_URL}/v1/tts", json=payload)
             if resp.status_code == 200:
                 palette_path.write_bytes(resp.content)
                 # Also write companion transcript
@@ -266,10 +239,10 @@ async def ensure_palette_seed(archetype_key: str) -> str:
                 logger.info(f"[PALETTE] Created {archetype_key} → {palette_path.name}")
                 return str(palette_path)
             else:
-                logger.error(f"[PALETTE] CosyVoice returned {resp.status_code} for {archetype_key}")
+                logger.error(f"[PALETTE] Fish Speech returned {resp.status_code} for {archetype_key}")
                 return ""
         except Exception as e:
-            logger.error(f"[PALETTE] Generation error for {archetype_key}: {e}")
+            logger.error(f"[PALETTE] Fish Speech error for {archetype_key}: {e}")
             return ""
 
 
