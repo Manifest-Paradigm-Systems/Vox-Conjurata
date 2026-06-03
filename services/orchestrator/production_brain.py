@@ -139,28 +139,20 @@ def standardize_speech_text(text: str, engine_type: str, emotion: str) -> str:
     """Maps and formats emotional tags and sound effects to engine-specific syntax."""
     import re
     
-    # 1. Strip EXISTING tags to avoid double-processing and standardization
+    # 1. Strip ALL tags to avoid spoken descriptions (e.g. "[angry]")
     # This removes [neutral], (happy), "Mood: sad", etc.
     clean_text = re.sub(r'\[.*?\]|\(.*?\)|\w+:\s*', '', text).strip()
     
     # 2. Sound Effect Parser (*gasp* -> <gasp> for CosyVoice)
     if engine_type == "cosyvoice":
         # Translate *action* into <action>
-        clean_text = re.sub(r'\*(.*?)\*', r'<>', clean_text)
+        clean_text = re.sub(r'\*(.*?)\*', r'<\1>', clean_text)
     else:
         # Strip SFX for engines that don't support acoustic generation
         clean_text = re.sub(r'\*.*?\*', '', clean_text)
 
-    # 3. Engine-Specific Syntax Mapping
-    if engine_type == "fish-speech":
-        # Monster: strict square brackets [emotion] at start
-        return f"[{emotion.lower()}] {clean_text}"
-    elif engine_type == "cosyvoice":
-        # Humanoid: inline parentheses (emotion) at start
-        return f"({emotion.lower()}) {clean_text}"
-    else:
-        # Fallback/Edge-TTS: Just the clean text
-        return clean_text
+    # Return only the cleaned text to avoid engine 'reading' the instruction
+    return clean_text
 
 def get_vram_used_gb() -> float:
     """Reads current GPU VRAM utilization from Host Linux sysfs dynamically."""
@@ -448,11 +440,11 @@ async def scan_battlemap(req: BattlemapScanRequest):
 # --- Voice Generation Engines (Modular Factory Pattern) ---
 
 class SpeechEngine:
-    async def generate(self, text: str, actor_id: str, client: httpx.AsyncClient) -> Optional[bytes]:
+    async def generate(self, text: str, actor_id: str, client: httpx.AsyncClient, emotion: str = "default") -> Optional[bytes]:
         raise NotImplementedError()
 
 class CosyVoiceEngine(SpeechEngine):
-    async def generate(self, text: str, actor_id: str, client: httpx.AsyncClient) -> Optional[bytes]:
+    async def generate(self, text: str, actor_id: str, client: httpx.AsyncClient, emotion: str = "default") -> Optional[bytes]:
         seeds = list(VOICE_SEEDS_DIR.glob(f"{actor_id}_seed_*.wav"))
         seed_path = seeds[0] if seeds else None
         
@@ -466,6 +458,14 @@ class CosyVoiceEngine(SpeechEngine):
         if seed_path and seed_path.exists():
             logger.info(f"[VOICE-ROUTING] Using voice seed: {seed_path.name}")
             try:
+                # Character-specific prompt: the words spoken in the seed audio.
+                # Look for matching transcript
+                text_path = seed_path.with_suffix(".txt")
+                ref_text = ""
+                if text_path.exists():
+                    with open(text_path, "r") as f:
+                        ref_text = f.read().strip()
+                
                 # CosyVoice 3 requires a real reference audio for zero-shot cloning.
                 f_handle = open(seed_path, "rb")
                 files = {"reference_audio": (seed_path.name, f_handle, "audio/wav")}
@@ -473,7 +473,11 @@ class CosyVoiceEngine(SpeechEngine):
                 try:
                     resp = await client.post(
                         f"{TTS_ACTOR_URL}/api/tts",
-                        data={"text": text},
+                        data={
+                            "text": text,
+                            "prompt_text": ref_text,
+                            "emotion": getattr(self, 'current_emotion', 'default')
+                        },
                         files=files
                     )
                 finally:
@@ -677,8 +681,10 @@ async def enrich_and_instruct(speaker: str, role: str, text: str) -> DialogueEnr
                 emotional_resonance=str(res.get("emotional_resonance", emotion)),
                 vocal_delivery_prompt=res.get("vocal_delivery_prompt", f"Deliver as {emotion}."),
                 instruct_text=instruct_text,
-                monster_text=monster_text
+                monster_text=monster_text,
+                emotion_tag=emotion
             )
+
         except Exception as e:
             logger.error(f"Instruction error: {e}")
             return DialogueEnrichment(
