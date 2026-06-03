@@ -5,66 +5,109 @@
 console.log("🚀 Vox-Conjurata: Script evaluation started.");
 
 // ==========================================
+// 0. TERMINAL ENGINE (HIGH PRIORITY INTERCEPT)
+// ==========================================
+Hooks.on("chatMessage", (chatLog, message, chatData) => {
+    const cleanMsg = message.trim();
+    if (cleanMsg.toLowerCase().startsWith("/vox")) {
+        console.log(`🎙️ Vox-Conjurata Terminal: Intercepted command: ${cleanMsg}`);
+        const parts = cleanMsg.split(/\s+/);
+        const command = parts[1] ? parts[1].toLowerCase() : "help";
+        const param = parts.slice(2).join(" ");
+        
+        handleVoxCommand(command, param);
+        return false; // Crucial: claims the command so Foundry stops processing
+    }
+});
+
+async function handleVoxCommand(command, param) {
+    if (!game.user.isGM) return;
+    const activeToken = resolveActiveToken(true);
+    
+    if (command === "forge" || command === "voice") {
+        if (!activeToken) {
+            ui.notifications.warn("⚠️ Vox Terminal: Select or hover over a token first!");
+            return;
+        }
+        const description = command === "voice" ? param : "";
+        statusMessage(`VOX TERMINAL: Manually forging seed for ${activeToken.actor.name}...`, true);
+        const actorData = {
+            actorId: activeToken.actor.id, name: activeToken.actor.name,
+            lore: activeToken.actor.system.details?.biography?.value || "",
+            artPath: activeToken.actor.img, isMonster: resolveIsMonster(activeToken.actor),
+            customDescription: description
+        };
+        try {
+            const response = await fetch(globalThis.voxState.ingestEndpoint + "?force_refresh=true", {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(actorData)
+            });
+            const data = await response.json();
+            if (data.status === "created") {
+                statusMessage(`✅ VOX TERMINAL: Voice forged for ${activeToken.actor.name}!`, false);
+                ui.notifications.info(`🎙️ Vox: Voice seed created for ${activeToken.actor.name}`);
+            }
+        } catch (e) { statusMessage("❌ VOX TERMINAL: Forge failed.", false); }
+    }
+    else if (command === "status") {
+        fetch("/api/status").then(r => r.json()).then(data => {
+            ChatMessage.create({
+                speaker: { alias: "Vox System Console" },
+                content: `<div style="font-family: monospace; background: #1a1a1a; color: #00ff00; padding: 10px; border-radius: 5px; border: 1px solid #333;">
+                    <strong>SYSTEM TELEMETRY</strong><br/>
+                    VRAM: ${data.vram_used_gb?.toFixed(2) || "???"} / ${data.vram_total_gb?.toFixed(2) || "32"} GB<br/>
+                    VISION: HOT (STANDBY)
+                </div>`,
+                whisper: ChatMessage.getWhisperRecipients("GM")
+            });
+        });
+    }
+    else {
+        ChatMessage.create({
+            speaker: { alias: "Vox Help" },
+            content: `<div style="background: #1a1a1a; color: #fff; padding: 10px; border-radius: 5px; border-left: 4px solid #00ff00;">
+                <h3 style="color: #00ff00;">🎙️ VOX Terminal</h3>
+                <strong>/vox forge</strong> - Re-roll voice<br/>
+                <strong>/vox voice [desc]</strong> - Manual voice desc<br/>
+                <strong>/vox status</strong> - System health
+            </div>`,
+            whisper: ChatMessage.getWhisperRecipients("GM")
+        });
+    }
+}
+
+// ==========================================
 // 1. TELEMETRY BRIDGE & SELF-HEALING
 // ==========================================
 (function() {
     try {
         const ORCHESTRATOR_URL = "/api/v1/diagnostics/logs";
-
         const shipLog = async (data) => {
             try {
                 const payload = typeof data === 'string' ? { type: "info", message: data } : data;
-                await fetch(ORCHESTRATOR_URL, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(payload)
-                });
+                await fetch(ORCHESTRATOR_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
             } catch (e) {}
         };
-
         window.onerror = (message, source, lineno, colno, error) => {
             shipLog({ type: "exception", message: message, source: source, lineno: lineno, error: error?.stack || "No stack trace" });
         };
-
         const originalConsoleError = console.error;
         console.error = (...args) => {
-            try {
-                shipLog({
-                    type: "console-error",
-                    message: args.map(arg => {
-                        try { return typeof arg === 'object' ? JSON.stringify(arg) : String(arg); } 
-                        catch (e) { return "[Unserializable Object]"; }
-                    }).join(' '),
-                    source: "console.error override"
-                });
-            } catch (err) {}
+            try { shipLog({ type: "console-error", message: args.join(' '), source: "console.error override" }); } catch (err) {}
             originalConsoleError.apply(console, args);
         };
-
         console.log("📡 Vox-Conjurata: Telemetry Bridge Active.");
-        shipLog({ type: "startup", message: "Client-side module loaded and telemetry bridge active." });
-    } catch (e) {
-        console.warn("⚠️ Vox-Conjurata: Telemetry Bridge failed to initialize.", e);
-    }
+    } catch (e) { console.warn("⚠️ Vox-Conjurata: Telemetry Bridge fail.", e); }
 })();
 
 // ==========================================
 // 2. GLOBAL STATE & CONFIGURATION
 // ==========================================
-const voxHost = window.location.hostname || "127.0.0.1";
 globalThis.voxState = globalThis.voxState || { 
-    narratorActive: false, 
-    puppetActive: false,
-    playerActive: false,
-    activeSpeakerName: "",
-    activeMicType: "", 
-    activeActorId: "", 
-    activeIsMonster: false,
-    mediaRecorder: null,
-    audioChunks: [],
-    sttEndpoint: "/api/v1/audio/transcriptions",
-    voiceConversionEndpoint: "/api/voice-conversion",
-    ingestEndpoint: "/api/ingest-actor"
+    narratorActive: false, puppetActive: false, playerActive: false,
+    activeSpeakerName: "", activeMicType: "", activeActorId: "", activeIsMonster: false,
+    mediaRecorder: null, audioChunks: [],
+    voiceConversionEndpoint: "/api/voice-conversion", ingestEndpoint: "/api/ingest-actor"
 };
 
 function resolveIsMonster(actor) {
@@ -91,7 +134,7 @@ function resolveActiveToken(isGM) {
 }
 
 // ==========================================
-// 2b. EARLY AUDIO INITIALIZATION
+// 2b. AUDIO INITIALIZATION
 // ==========================================
 (async function initAudio() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
@@ -99,10 +142,7 @@ function resolveActiveToken(isGM) {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         try { globalThis.voxState.mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm; codecs=opus" }); } 
         catch (e) { globalThis.voxState.mediaRecorder = new MediaRecorder(stream); }
-        
-        globalThis.voxState.mediaRecorder.ondataavailable = (event) => {
-            if (event.data.size > 0) globalThis.voxState.audioChunks.push(event.data);
-        };
+        globalThis.voxState.mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) globalThis.voxState.audioChunks.push(e.data); };
         globalThis.voxState.mediaRecorder.onstop = async () => { await processAndSendAudio(); };
         console.log("🎙️ Vox-Conjurata: Hardware microphone pipeline ready.");
     } catch (err) { console.error("❌ Vox Audio Fail:", err); }
@@ -115,15 +155,7 @@ function registerKeybindings() {
     if (globalThis.voxKeybindingsRegistered) return;
     globalThis.voxKeybindingsRegistered = true;
     console.log("🎙️ Vox-Conjurata: Registering settings and keybindings.");
-
-    // Core Settings
-    game.settings.register("vox-conjurata", "narratorVoice", {
-        name: "Vox: Narrator Voice Profile",
-        hint: "Default fallback voice.",
-        scope: "world", config: true, type: String, default: "en-US-ChristopherNeural"
-    });
-
-    // Dummy keybindings for Foundry UI (actual logic in unified listener below)
+    game.settings.register("vox-conjurata", "narratorVoice", { name: "Vox: Narrator Voice Profile", scope: "world", config: true, type: String, default: "en-US-ChristopherNeural" });
     game.keybindings.register("vox-conjurata", "narratorPTT", { name: "Vox: Narrator PTT [Y]", editable: [{ key: "KeyY" }], onDown: () => {}, onUp: () => {} });
     game.keybindings.register("vox-conjurata", "puppeteerPTT", { name: "Vox: Puppeteer PTT [H]", editable: [{ key: "KeyH" }], onDown: () => {}, onUp: () => {} });
     game.keybindings.register("vox-conjurata", "playerPTT", { name: "Vox: Character PTT [I]", editable: [{ key: "KeyI" }], onDown: () => {}, onUp: () => {} });
@@ -131,53 +163,32 @@ function registerKeybindings() {
 
 (function() {
     const activeKeys = new Set();
-
     window.addEventListener("keydown", (event) => {
         if (event.repeat || activeKeys.has(event.code)) return;
         const target = event.target;
         if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable || target.closest(".prosemirror"))) return;
-
         const code = event.code;
         if (code === "KeyY" || code === "KeyH" || code === "KeyI") {
             activeKeys.add(code);
             console.log(`🎙️ Vox-Conjurata: Key Down [${code}]`);
             try { playAudio("sounds/lock.wav", 0.1); } catch (e) {}
-
             if (code === "KeyY" && game.user.isGM) {
-                globalThis.voxState.narratorActive = true;
-                globalThis.voxState.activeSpeakerName = "Narrator";
-                globalThis.voxState.activeActorId = "narrator";
-                globalThis.voxState.activeIsMonster = false;
-                startRecording("vox-conjurata-gm-narrate-mic");
-                statusMessage("Narrator Mic [Y]: OPEN", true);
+                globalThis.voxState.narratorActive = true; globalThis.voxState.activeSpeakerName = "Narrator"; globalThis.voxState.activeActorId = "narrator"; globalThis.voxState.activeIsMonster = false;
+                startRecording("vox-conjurata-gm-narrate-mic"); statusMessage("Narrator Mic [Y]: OPEN", true);
             } 
             else if (code === "KeyH" && game.user.isGM) {
                 const selectedToken = resolveActiveToken(true);
-                if (!selectedToken) {
-                    ui.notifications.warn("❌ Puppeteer: Hover over or select an NPC token first!");
-                    activeKeys.delete(code);
-                    return;
-                }
-                globalThis.voxState.puppetActive = true;
-                globalThis.voxState.activeSpeakerName = selectedToken.actor?.name || "Unknown NPC";
-                globalThis.voxState.activeActorId = selectedToken.actor?.id || "unknown";
-                globalThis.voxState.activeIsMonster = !!resolveIsMonster(selectedToken.actor);
-                startRecording("vox-conjurata-gm-puppet-mic");
-                statusMessage(`Puppeteer [H] (${globalThis.voxState.activeSpeakerName}): OPEN`, true);
+                if (!selectedToken) { ui.notifications.warn("❌ Puppeteer: Select/hover NPC!"); activeKeys.delete(code); return; }
+                globalThis.voxState.puppetActive = true; globalThis.voxState.activeSpeakerName = selectedToken.actor.name; globalThis.voxState.activeActorId = selectedToken.actor.id; globalThis.voxState.activeIsMonster = !!resolveIsMonster(selectedToken.actor);
+                startRecording("vox-conjurata-gm-puppet-mic"); statusMessage(`Puppeteer [H] (${globalThis.voxState.activeSpeakerName}): OPEN`, true);
             }
             else if (code === "KeyI") {
-                const selectedToken = resolveActiveToken(false);
-                const speakerActor = selectedToken?.actor || game.user.character;
-                globalThis.voxState.playerActive = true;
-                globalThis.voxState.activeSpeakerName = speakerActor?.name || game.user.name;
-                globalThis.voxState.activeActorId = speakerActor?.id || game.user.id;
-                globalThis.voxState.activeIsMonster = !!resolveIsMonster(speakerActor);
-                startRecording("vox-conjurata-player-mic");
-                statusMessage(`Character Mic [I] (${globalThis.voxState.activeSpeakerName}): OPEN`, true);
+                const selectedToken = resolveActiveToken(false); const speakerActor = selectedToken?.actor || game.user.character;
+                globalThis.voxState.playerActive = true; globalThis.voxState.activeSpeakerName = speakerActor?.name || game.user.name; globalThis.voxState.activeActorId = speakerActor?.id || game.user.id; globalThis.voxState.activeIsMonster = !!resolveIsMonster(speakerActor);
+                startRecording("vox-conjurata-player-mic"); statusMessage(`Character Mic [I] (${globalThis.voxState.activeSpeakerName}): OPEN`, true);
             }
         }
     });
-
     window.addEventListener("keyup", (event) => {
         const code = event.code;
         if (activeKeys.has(code)) {
@@ -193,9 +204,7 @@ function registerKeybindings() {
 // ==========================================
 // 4. MODULE LIFECYCLE
 // ==========================================
-const scannedScenes = new Set();
 const ingestedActors = new Set();
-
 async function scanActiveSceneTokens() {
     if (!game.user.isGM || !canvas.ready) return;
     for (let token of canvas.tokens.placeables) {
@@ -208,142 +217,32 @@ async function scanActiveSceneTokens() {
             stats: { race: actor.system.details?.race || "Unknown", level: actor.system.details?.level?.value || 0 },
             artPath: actor.img, isMonster: resolveIsMonster(actor)
         };
-        try { 
-            console.log(`📦 Vox-Conjurata: Scraping metadata for ${actorData.name} (Monster: ${actorData.isMonster})...`);
-            // UI Hint for new forging
-            ui.notifications.info(`🔍 Vox: Ingesting ${actorData.name}...`);
-            await fetch(globalThis.voxState.ingestEndpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(actorData) }); 
-        } 
-        catch (e) { console.error(`❌ Vox-Conjurata: Failed to ingest ${actorData.name}`, e); }
+        try { ui.notifications.info(`🔍 Vox: Ingesting ${actorData.name}...`); await fetch(globalThis.voxState.ingestEndpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(actorData) }); } 
+        catch (e) {}
     }
 }
-
-async function onReady() {
-    if (globalThis.voxReadyExecuted) return;
-    globalThis.voxReadyExecuted = true;
-    if (game.user.isGM) await scanActiveSceneTokens();
-}
-
+async function onReady() { if (globalThis.voxReadyExecuted) return; globalThis.voxReadyExecuted = true; if (game.user.isGM) await scanActiveSceneTokens(); }
 if (typeof game !== 'undefined' && game.ready) onReady();
 else Hooks.once("ready", onReady);
 Hooks.on("canvasReady", async () => { if (game.user.isGM) await scanActiveSceneTokens(); });
 
 // ==========================================
-// 5. CHAT SKINNING & TERMINAL ENGINE
+// 5. CHAT SKINNING & PIPELINE
 // ==========================================
-Hooks.on("chatMessage", (chatLog, message, chatData) => {
-    const cleanMsg = message.trim();
-    if (cleanMsg.toLowerCase().startsWith("/vox")) {
-        const parts = cleanMsg.split(/\s+/);
-        const command = parts[1] ? parts[1].toLowerCase() : "help";
-        const param = parts.slice(2).join(" ");
-        
-        handleVoxCommand(command, param);
-        return false; // Crucial: claims the command so Foundry stops processing
-    }
-});
-
-async function handleVoxCommand(command, param) {
-    if (!game.user.isGM) return;
-    
-    const activeToken = resolveActiveToken(true);
-    
-    if (command === "forge" || command === "voice") {
-        if (!activeToken) {
-            ui.notifications.warn("⚠️ Vox Terminal: Select or hover over a token first!");
-            return;
-        }
-        
-        const description = command === "voice" ? param : "";
-        statusMessage(`VOX TERMINAL: Manually forging seed for ${activeToken.actor.name}...`, true);
-        
-        const actorData = {
-            actorId: activeToken.actor.id,
-            name: activeToken.actor.name,
-            lore: activeToken.actor.system.details?.biography?.value || "",
-            artPath: activeToken.actor.img,
-            isMonster: resolveIsMonster(activeToken.actor),
-            customDescription: description // NEW: Pass custom description to backend
-        };
-
-        try {
-            const response = await fetch(globalThis.voxState.ingestEndpoint + "?force_refresh=true", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(actorData)
-            });
-            const data = await response.json();
-            if (data.status === "created") {
-                statusMessage(`✅ VOX TERMINAL: Voice forged for ${activeToken.actor.name}!`, false);
-                ui.notifications.info(`🎙️ Vox: Voice seed created for ${activeToken.actor.name}`);
-            }
-        } catch (e) {
-            console.error("❌ Vox Terminal Error:", e);
-            statusMessage("❌ VOX TERMINAL: Forge failed. Check logs.", false);
-        }
-    }
-    else if (command === "status") {
-        statusMessage("VOX TERMINAL: Querying system telemetry...", true);
-        // This will trigger a response from the orchestrator handled in the usual pipeline
-        fetch("/api/status").then(r => r.json()).then(data => {
-            ChatMessage.create({
-                speaker: { alias: "Vox System Console" },
-                content: `<div style="font-family: monospace; font-size: 0.8rem; background: #1a1a1a; color: #00ff00; padding: 10px; border-radius: 5px; border: 1px solid #333;">
-                    <strong>SYSTEM TELEMETRY</strong><br/>
-                    ---------------------<br/>
-                    VRAM: ${data.vram_used_gb?.toFixed(2) || "???"} / ${data.vram_total_gb?.toFixed(2) || "32"} GB<br/>
-                    FOUNDRY: CONNECTED<br/>
-                    COSYVOICE: WARM<br/>
-                    VISION: HOT (STANDBY)
-                </div>`,
-                whisper: ChatMessage.getWhisperRecipients("GM")
-            });
-        });
-    }
-    else if (command === "help") {
-        ChatMessage.create({
-            speaker: { alias: "Vox Help" },
-            content: `<div style="font-family: sans-serif; font-size: 0.85rem; background: #1a1a1a; color: #ffffff; padding: 12px; border-radius: 6px; border-left: 4px solid #00ff00;">
-                <h3 style="margin-top: 0; color: #00ff00; border-bottom: 1px solid #333; padding-bottom: 5px;">🎙️ VOX Terminal Commands</h3>
-                <p style="margin-bottom: 10px; font-style: italic; font-size: 0.75rem;">Commands target the <strong>hovered</strong> or <strong>selected</strong> token.</p>
-                <ul style="list-style: none; padding-left: 0;">
-                    <li style="margin-bottom: 8px;"><strong>/vox forge</strong><br/><span style="font-size: 0.75rem; color: #aaa;">Re-roll character voice using automatic AI analysis.</span></li>
-                    <li style="margin-bottom: 8px;"><strong>/vox voice [desc]</strong><br/><span style="font-size: 0.75rem; color: #aaa;">Manually define the voice. <em>Ex: /vox voice "A raspy dwarf"</em></span></li>
-                    <li style="margin-bottom: 8px;"><strong>/vox status</strong><br/><span style="font-size: 0.75rem; color: #aaa;">Show VRAM usage and service health.</span></li>
-                </ul>
-                <h4 style="margin-bottom: 5px; color: #00ff00;">Hotkeys (PTT)</h4>
-                <ul style="list-style: none; padding-left: 0; font-size: 0.75rem;">
-                    <li><strong>[Y]</strong> : Narrator Mic</li>
-                    <li><strong>[H]</strong> : Puppeteer Mic (targets NPC)</li>
-                    <li><strong>[I]</strong> : Character Mic (targets PC/selected)</li>
-                </ul>
-            </div>`,
-            whisper: ChatMessage.getWhisperRecipients("GM")
-        });
-    }
-    else {
-        ui.notifications.info("Available commands: /vox forge, /vox voice [desc], /vox status, /vox help");
-    }
-}
-
 Hooks.on("renderChatMessageHTML", (message, html, data) => {
     const voxType = message.getFlag("vox-conjurata", "type");
     if (!voxType) return;
-    const jHtml = $(html);
-    const content = jHtml.find(".message-content");
-    const originalContent = content.html();
-
+    const jHtml = $(html); const content = jHtml.find(".message-content"); const originalContent = content.html();
     if (voxType === "narration") {
         jHtml.addClass("vox-conjurata-card vox-conjurata-narration");
-        jHtml.empty().append(`<div class="narration-header"><i class="fas fa-book-open gold-icon"></i><span class="narration-title">SCENE DESCRIPTION</span><i class="fas fa-book-open gold-icon"></i></div><div class="message-content narration-text">${originalContent}</div>`);
+        jHtml.empty().append(`<div class="narration-header"><i class="fas fa-book-open gold-icon"></i><span class="narration-title">SCENE DESCRIPTION</span></div><div class="message-content">${originalContent}</div>`);
     } else {
         const actor = message.speaker.actor ? game.actors.get(message.speaker.actor) : null;
         const actorName = actor?.name || message.speaker.alias || "Entity";
         const actorImg = actor?.img || "icons/svg/mystery-man.svg";
         const audioUrl = message.getFlag("vox-conjurata", "audioUrl");
-        const engineName = message.getFlag("vox-conjurata", "engine") || "AI Engine";
         jHtml.addClass(`vox-conjurata-card vox-conjurata-${voxType}`);
-        const audioHtml = audioUrl ? `<div class="vox-conjurata-audio-container"><button class="vox-conjurata-audio-play-btn" data-audio-src="${audioUrl}"><i class="fas fa-volume-high"></i> Play Generated Voice</button></div>` : "";
+        const audioHtml = audioUrl ? `<div class="vox-conjurata-audio-container"><button class="vox-conjurata-audio-play-btn"><i class="fas fa-volume-high"></i> Play Generated Voice</button></div>` : "";
         jHtml.empty().append(`<div class="puppet-layout"><img class="puppet-avatar" src="${actorImg}"/><div class="puppet-body"><header class="message-header"><span class="sender">${actorName}</span><span class="${voxType}-tag">${voxType.toUpperCase()}</span></header><div class="message-content">${originalContent}</div>${audioHtml}</div></div>`);
         if (audioUrl) jHtml.find(".vox-conjurata-audio-play-btn").on("click", () => { playAudio(audioUrl, 1.0); });
     }
@@ -351,62 +250,44 @@ Hooks.on("renderChatMessageHTML", (message, html, data) => {
 
 function playAudio(audioUrl, volume = 1.0) {
     if (!audioUrl) return;
-    try {
-        const audio = new Audio(audioUrl);
-        audio.volume = volume;
-        audio.play();
-    } catch (err) { console.error("🎙️ Vox-Conjurata: Audio fail", err); }
+    try { const audio = new Audio(audioUrl); audio.volume = volume; audio.play(); } catch (err) {}
 }
 
 function startRecording(micType) {
     if (globalThis.voxState.mediaRecorder?.state === "inactive") {
-        globalThis.voxState.audioChunks = [];
-        globalThis.voxState.activeMicType = micType;
+        globalThis.voxState.audioChunks = []; globalThis.voxState.activeMicType = micType;
         globalThis.voxState.mediaRecorder.start(250);
     }
 }
 
-function stopRecording() {
-    if (globalThis.voxState.mediaRecorder?.state === "recording") globalThis.voxState.mediaRecorder.stop();
-}
+function stopRecording() { if (globalThis.voxState.mediaRecorder?.state === "recording") globalThis.voxState.mediaRecorder.stop(); }
 
 function statusMessage(text, isOpen) {
     const recipients = game.user.isGM ? ChatMessage.getWhisperRecipients("GM") : [];
     ChatMessage.create({
         speaker: { alias: "Vox Core" },
-        content: `<div style="display: flex; align-items: center; gap: 8px;"><span style="font-size: 1.2rem;">${isOpen ? '🎙️' : '🤫'}</span><div><strong>${text}</strong></div></div>`,
+        content: `<div style="display: flex; align-items: center; gap: 8px;"><span>${isOpen ? '🎙️' : '🤫'}</span><div><strong>${text}</strong></div></div>`,
         whisper: recipients.length > 0 ? recipients.map(u => u.id) : []
     });
 }
 
 async function processAndSendAudio() {
-    const chunks = globalThis.voxState.audioChunks;
-    if (chunks.length === 0) return;
+    const chunks = globalThis.voxState.audioChunks; if (chunks.length === 0) return;
     const audioBlob = new Blob(chunks, { type: "audio/webm" });
     const { activeMicType, activeActorId, activeSpeakerName, activeIsMonster } = globalThis.voxState;
-
-    const formData = new FormData();
-    formData.append("audio_blob", audioBlob, "voice_capture.webm");
+    const formData = new FormData(); formData.append("audio_blob", audioBlob, "voice_capture.webm");
     formData.append("metadata", JSON.stringify({ activeSpeakerName, actorId: activeActorId, micType: activeMicType, isMonster: activeIsMonster, userId: game.user.id }));
-
-    console.log(`📦 Vox-Conjurata: Processing voice for [${activeSpeakerName}]`);
-
     try {
         const response = await fetch(globalThis.voxState.voiceConversionEndpoint, { method: "POST", body: formData });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
-        
+        if (data.status === "success") {
             const { transcription, audio_data, engine, voxType } = data;
             if (audio_data) playAudio(audio_data, 1.0);
-            
-            // Foundry V12 / PF2e 8.x strictly requires numeric style for ChatMessage
             const message = await ChatMessage.create({ 
-                content: transcription,
-                style: 2, // 2 is In-Character (IC)
+                content: transcription, style: 2, type: 2,
                 speaker: { actor: activeActorId === 'narrator' ? null : activeActorId, alias: activeSpeakerName },
                 flags: { "vox-conjurata": { type: voxType, audioUrl: audio_data, engine: engine } } 
             });
-
             if (message && canvas.ready) {
                 const tokenId = message.speaker.token || canvas.tokens.placeables.find(t => t.actor?.id === activeActorId)?.id;
                 const token = canvas.tokens.get(tokenId);
@@ -416,12 +297,7 @@ async function processAndSendAudio() {
     } catch (err) { console.error("❌ Vox-Conjurata Pipeline fail:", err); }
 }
 
-globalThis.startRecording = startRecording;
-globalThis.stopRecording = stopRecording;
-globalThis.statusMessage = statusMessage;
-globalThis.playAudio = playAudio;
-globalThis.resolveActiveToken = resolveActiveToken;
-globalThis.resolveIsMonster = resolveIsMonster;
+globalThis.startRecording = startRecording; globalThis.stopRecording = stopRecording; globalThis.statusMessage = statusMessage; globalThis.playAudio = playAudio; globalThis.resolveActiveToken = resolveActiveToken; globalThis.resolveIsMonster = resolveIsMonster;
 
 if (typeof game !== 'undefined' && game.keybindings) registerKeybindings();
 else Hooks.once("init", registerKeybindings);
