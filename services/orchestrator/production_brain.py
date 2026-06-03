@@ -105,23 +105,37 @@ def concatenate_wavs(wav_bytes_list: List[bytes]) -> Optional[bytes]:
 
 
 def standardize_speech_text(text: str, engine_type: str, emotion: str) -> str:
-    """Maps and formats emotional tags and sound effects to engine-specific syntax."""
+    """Prepends engine-specific emotion instruction prefix and strips metadata tags.
+
+    The emotion tag (e.g. \"Enraged Growl\") is placed BEFORE the spoken text as an
+    instruction cue that CosyVoice / Fish Speech interpret for delivery modulation.
+    The engines do NOT read these prefixes aloud — they only affect vocal delivery.
+    The spoken body text is stripped of all metadata tags so nothing leaks into
+    literal TTS audio.
+    """
     import re
-    
-    # 1. Strip ALL tags to avoid spoken descriptions (e.g. "[angry]")
-    # This removes [neutral], (happy), "Mood: sad", etc.
-    clean_text = re.sub(r'\[.*?\]|\(.*?\)|\w+:\s*', '', text).strip()
-    
-    # 2. Sound Effect Parser (*gasp* -> <gasp> for CosyVoice)
+
+    # 1. Strip ALL metadata tags/instructions from the spoken body text
+    #    Removes [Neutral], (happy), "Mood: sad", etc.
+    #    This ensures only clean, speakable text reaches the TTS audio output.
+    clean_text = re.sub(r'\[.*?\]|\(.*?\)|(?:^|\s)\w+:\s*', '', text).strip()
+
+    # 2. Sound Effect Parser — engine-specific SFX markers
     if engine_type == "cosyvoice":
-        # Translate *action* into <action>
+        # Translate *action* into <action> (CosyVoice acoustic generation)
         clean_text = re.sub(r'\*(.*?)\*', r'<\1>', clean_text)
     else:
         # Strip SFX for engines that don't support acoustic generation
         clean_text = re.sub(r'\*.*?\*', '', clean_text)
 
-    # Return only the cleaned text to avoid engine 'reading' the instruction
-    return clean_text
+    # 3. Engine-Specific Emotion Instruction Prefix
+    #    These are not read aloud — they are direction cues for the model.
+    if engine_type == "fish-speech":
+        return f"[{emotion.lower()}] {clean_text}"
+    elif engine_type == "cosyvoice":
+        return f"{emotion.capitalize()} <|endofprompt|> {clean_text}"
+    else:
+        return clean_text
 
 def get_vram_used_gb() -> float:
     """Reads current GPU VRAM utilization from Host Linux sysfs dynamically."""
