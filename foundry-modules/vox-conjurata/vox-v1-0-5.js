@@ -810,11 +810,14 @@ async function processAndSendAudio() {
             });
 
             // Trigger speech bubble explicitly
-            if (canvas.ready && message.speaker.token) {
-                const token = canvas.tokens.get(message.speaker.token);
+            const tokenId = message.speaker.token;
+            if (canvas.ready && tokenId) {
+                const token = canvas.tokens.get(tokenId) || canvas.tokens.placeables.find(t => t.id === tokenId);
                 if (token) {
                     console.log(`🗯️ Vox-Conjurata: Triggering speech bubble for token ${token.name}`);
-                    canvas.bubbles.say(token, transcription);
+                    if (typeof canvas.bubbles?.say === 'function') {
+                        canvas.bubbles.say(token, transcription);
+                    }
                 }
             }
         }
