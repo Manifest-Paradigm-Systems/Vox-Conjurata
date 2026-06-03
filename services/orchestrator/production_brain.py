@@ -1087,6 +1087,18 @@ async def end_dialogue(request: DialogueEndRequest):
         "summary": summary
     }
 
+@app.get("/api/status")
+async def get_system_status():
+    """Returns basic system telemetry and health status."""
+    vram_used = get_vram_used_gb()
+    return {
+        "status": "nominal",
+        "vram_used_gb": vram_used,
+        "vram_total_gb": 32.0,
+        "vision_reader": "hot",
+        "vision_gen": "hot"
+    }
+
 @app.post("/api/v1/diagnostics/logs")
 async def receive_logs(log: DiagnosticLog):
     error_buffer.append(log.model_dump())
