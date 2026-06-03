@@ -563,29 +563,24 @@ class SpeechPipelineFactory:
         self.fishspeech = FishSpeechEngine()
 
     def get_engine(self, is_monster: bool, stats: dict, config: dict, vram_triggered: bool) -> SpeechEngine:
-        # Edge-TTS SUPPRESSED: never route to Edge-TTS regardless of VRAM or config.
-        if vram_triggered:
-            logger.warning("[VRAM] Threshold triggered but Edge-TTS is suppressed. Using local engine.")
-
-        tier_routing = config.get("tier_routing", {})
-
-        if is_monster:
-            if tier_routing.get("monster_engine") == "edge-tts":
-                logger.warning("[ROUTING] Config requests edge-tts for monster — suppressed, using Fish Speech.")
-            return self.fishspeech
-        else:
-            if tier_routing.get("humanoid_engine") == "edge-tts":
-                logger.warning("[ROUTING] Config requests edge-tts for humanoid — suppressed, using CosyVoice.")
-
-            if stats:
-                race = stats.get("race", "").lower()
-                level = stats.get("level", 0)
-                if race in ["undead", "fiend", "aberration", "dragon"] or level > 5:
-                    return self.fishspeech
-
-            return self.cosyvoice
+        # CosyVoice 3 is the only engine fast enough for 2s latency.
+        # We use it for everything, but Fish Speech is kept for manual overrides.
+        return self.cosyvoice
 
 pipeline_factory = SpeechPipelineFactory()
+
+def load_routing_config() -> dict:
+    """Loads routing and system configuration from local JSON."""
+    if not CONFIG_PATH.exists():
+        return {
+            "tier_routing": {"humanoid_engine": "cosyvoice", "monster_engine": "cosyvoice"},
+            "system_settings": {"vram_threshold_gb": 26.0}
+        }
+    try:
+        with open(CONFIG_PATH, "r") as f:
+            return json.load(f)
+    except Exception:
+        return {"system_settings": {"vram_threshold_gb": 26.0}}
 
 async def generate_vocal_profile(actor_data: ActorMetadata, visual_description: str = "") -> dict:
     """Uses Qwen 2.5 via vLLM completions endpoint to generate a descriptive acoustic prompt and gender."""
