@@ -782,114 +782,181 @@ async def generate_vocal_profile(actor_data: ActorMetadata, visual_description: 
                 "description": fallback_desc
             }
 
-async def forge_voice_seed(actor_id: str, acoustic_description: str, gender: str = "male", is_monster: bool = False) -> str:
-    """Creates a unique voice seed WAV for a character.
+async def forge_voice_seed(
+    actor_id: str,
+    acoustic_description: str,
+    gender: str = "male",
+    is_monster: bool = False,
+    is_named: bool = False,
+    archetype_key: str = "",
+) -> str | None:
+    """Create and register a voice seed for a character.
 
-    Uses Fish Speech for monsters (beastly textures) and CosyVoice 3 for
-    humanoids (clean zero-shot cloning).  The seed file is mapped to the
-    character ID and reused for all future TTS prompts via the hotkey routing
-    pipeline.
+    - Named characters: generate a unique seed cloned from the archetype palette.
+    - Generic NPCs: register to use the shared archetype palette seed directly.
+
+    Returns the seed path on success, None on failure.
     """
+    seed_text = "Hello, I am a character in this world, and this is my unique voice."
+
+    if not is_named:
+        # Generic NPC — register to use the archetype palette seed
+        if not archetype_key:
+            logger.error(f"[VOICE-SEED] No archetype for {actor_id}")
+            return None
+        palette_path_str = await ensure_palette_seed(archetype_key)
+        if not palette_path_str:
+            return None
+        register_character_voice(
+            actor_id=actor_id,
+            engine="fishspeech" if is_monster else "cosyvoice",
+            seed_path=str(Path(palette_path_str).relative_to(VOICE_SEEDS_DIR)),
+            voice_prompt=acoustic_description,
+            is_archetype=True,
+            archetype_key=archetype_key,
+        )
+        logger.info(f"[VOICE-SEED] {actor_id} registered as archetype {archetype_key}")
+        return palette_path_str
+
+    # Named character — generate a unique seed cloned from its archetype
+    if not archetype_key:
+        logger.error(f"[VOICE-SEED] No archetype for named character {actor_id}")
+        return None
+    archetype_path_str = await ensure_palette_seed(archetype_key)
+    if not archetype_path_str:
+        return None
+    archetype_path = Path(archetype_path_str)
+
     seed_path = VOICE_SEEDS_DIR / f"{actor_id}_seed_{gender}.wav"
     text_path = VOICE_SEEDS_DIR / f"{actor_id}_seed_{gender}.txt"
-    seed_text = "Hello, I am a character in this world, and this is my unique voice."
 
     async with httpx.AsyncClient(timeout=180.0) as client:
         try:
             if is_monster:
-                logger.info(f"[VOICE-SEED] Using Fish Speech for monster seed: {actor_id}")
-                narrator_wav = VOICE_SEEDS_DIR / "narrator_seed_male.wav"
-                narrator_b64 = base64.b64encode(narrator_wav.read_bytes()).decode("utf-8") if narrator_wav.exists() else ""
-
+                logger.info(f"[VOICE-SEED] Using Fish Speech for unique monster seed: {actor_id}")
+                archetype_b64 = base64.b64encode(archetype_path.read_bytes()).decode("utf-8")
+                # Build a prompted seed text with monster-appropriate tags
+                monster_seed_text = f"[{acoustic_description[:80]}] {seed_text}"
                 payload = {
-                    "text": seed_text,
-                    "references": [{"audio": narrator_b64, "text": "A clear speaking voice."}] if narrator_b64 else [],
-                    "format": "wav"
+                    "text": monster_seed_text,
+                    "references": [{"audio": archetype_b64, "text": seed_text}],
+                    "format": "wav",
                 }
                 response = await client.post(f"{TTS_MONSTER_URL}/v1/tts", json=payload)
             else:
-                logger.info(f"[VOICE-SEED] Using CosyVoice 3 for humanoid seed: {actor_id}")
-                # Use the narrator seed as reference for zero-shot voice cloning.
-                # CosyVoice 3 clones from the reference WAV and applies the acoustic
-                # description as an instruction prefix to shape delivery.
-                narrator_wav = VOICE_SEEDS_DIR / "narrator_seed_male.wav"
-                if not narrator_wav.exists():
-                    logger.error(f"[VOICE-SEED] Narrator seed missing — cannot clone for {actor_id}")
-                    return ""
-
-                f_handle = open(narrator_wav, "rb")
+                logger.info(f"[VOICE-SEED] Using CosyVoice 3 voice-design for unique humanoid seed: {actor_id}")
+                archetype_fh = open(archetype_path, "rb")
                 try:
                     response = await client.post(
-                        f"{TTS_ACTOR_URL}/api/tts",
+                        f"{TTS_ACTOR_URL}/api/voice-design",
                         data={
                             "text": seed_text,
-                            "prompt_text": f"Deliver in a {acoustic_description} voice.<|endofprompt|>",
-                            "emotion": acoustic_description[:80],
+                            "instruct_text": f"A person with the following voice: {acoustic_description}",
                         },
-                        files={"reference_audio": (narrator_wav.name, f_handle, "audio/wav")}
+                        files={"reference_audio": (archetype_path.name, archetype_fh, "audio/wav")},
                     )
                 finally:
-                    f_handle.close()
+                    archetype_fh.close()
 
             if response.status_code == 200:
-                with open(seed_path, "wb") as f:
-                    f.write(response.content)
-                with open(text_path, "w") as f:
-                    f.write(seed_text)
-                logger.info(f"[VOICE-SEED] Forged {'monster' if is_monster else 'humanoid'} seed for {actor_id} → {seed_path.name}")
+                seed_path.write_bytes(response.content)
+                text_path.write_text(seed_text)
+                register_character_voice(
+                    actor_id=actor_id,
+                    engine="fishspeech" if is_monster else "cosyvoice",
+                    seed_path=str(seed_path.relative_to(VOICE_SEEDS_DIR)),
+                    voice_prompt=acoustic_description,
+                    is_archetype=False,
+                )
+                logger.info(f"[VOICE-SEED] Forged unique seed for {actor_id} → {seed_path.name}")
                 return str(seed_path)
             else:
                 logger.error(f"[VOICE-SEED] Seed generation failed for {actor_id}: HTTP {response.status_code}")
-                return ""
+                return None
         except Exception as e:
-            logger.error(f"Seed forge error for {actor_id}: {e}")
-            return ""
+            logger.error(f"[VOICE-SEED] Seed forge error for {actor_id}: {e}")
+            return None
 
-async def enrich_and_instruct(speaker: str, role: str, text: str) -> DialogueEnrichment:
-    """Enriches dialogue with Qwen via vLLM endpoint and formats tags for specific TTS engines."""
-    system_instruction = (
-        "You are a cinematic dialogue director. Analyze the text for emotional subtext. "
-        "Output JSON with 'emotional_resonance', 'vocal_delivery_prompt', "
-        "and 'emotion_tag' (a single descriptive tag like 'Enraged Growl', 'Terrified Whisper', or 'Neutral')."
-    )
+
+async def enrich_and_instruct(speaker: str, role: str, text: str, is_monster: bool = False) -> DialogueEnrichment:
+    """Enrich dialogue with Qwen via LLM and format tags for specific TTS engines.
+
+    For monster text, the LLM is instructed to insert inline [emotion] delivery
+    tags at natural breakpoints within the dialogue for Fish Speech modulation.
+    """
+    if is_monster:
+        system_instruction = (
+            "You are a cinematic monster voice director. Analyze the creature's dialogue "
+            "and rewrite it with inline delivery tags in [square brackets] at natural "
+            "breakpoints to guide vocal performance.\n\n"
+            "Available tags include: [growl], [snarl], [roar], [whisper], [low growl], "
+            "[hiss], [guttural], [raspy], [deep], [shriek], [echo], [pause], [slow], "
+            "[rising pitch], [falling pitch].\n\n"
+            "Output JSON with:\n"
+            "- 'emotional_resonance': overall mood description\n"
+            "- 'vocal_delivery_prompt': how the creature should sound overall\n"
+            "- 'emotion_tag': a single descriptive tag like 'Enraged Growl' or 'Terrified Hiss'\n"
+            "- 'tagged_text': the dialogue WITH inline tags inserted at natural breakpoints\n\n"
+            "Example: for \"You dare enter my lair?\" output could be:\n"
+            "'[low growl] You dare enter my lair? [snarl, rising pitch] I will crush you.'"
+        )
+    else:
+        system_instruction = (
+            "You are a cinematic dialogue director. Analyze the text for emotional subtext. "
+            "Output JSON with 'emotional_resonance', 'vocal_delivery_prompt', "
+            "and 'emotion_tag' (a single descriptive tag like 'Enraged Growl', 'Terrified Whisper', or 'Neutral')."
+        )
     payload = {
         "model": "EVA-UNIT-01/EVA-Qwen2.5-7B-v0.1",
         "messages": [
             {"role": "system", "content": system_instruction},
-            {"role": "user", "content": f"Speaker: {speaker}, Text: {text}"}
+            {"role": "user", "content": f"Speaker: {speaker}, Text: {text}"},
         ],
         "temperature": 0.3,
         "max_tokens": 256,
-        "response_format": {"type": "json_object"}
+        "response_format": {"type": "json_object"},
     }
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
             response = await client.post(f"{OLLAMA_URL}/v1/chat/completions", json=payload)
-            res = json.loads(response.json()["choices"][0]["message"]["content"])
-            
+            if response.status_code != 200:
+                raise RuntimeError(f"LLM returned {response.status_code}")
+            content_str = response.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+            res = json.loads(content_str)
+
             emotion = res.get("emotion_tag", "Neutral").strip()
-            
-            # Apply engine-specific syntax mapping and SFX parsing
-            monster_text = standardize_speech_text(text, "fish-speech", emotion)
+
+            # For monsters: use the tagged_text if the LLM provided it
+            if is_monster and res.get("tagged_text", "").strip():
+                raw_tagged = res["tagged_text"].strip()
+                monster_text = standardize_speech_text(raw_tagged, "fish-speech", emotion)
+            else:
+                monster_text = standardize_speech_text(text, "fish-speech", emotion)
+
             instruct_text = standardize_speech_text(text, "cosyvoice", emotion)
-            
+
             return DialogueEnrichment(
-                speaker=speaker, role=role, raw_text=text,
+                speaker=speaker,
+                role=role,
+                raw_text=text,
                 emotional_resonance=str(res.get("emotional_resonance", emotion)),
                 vocal_delivery_prompt=res.get("vocal_delivery_prompt", f"Deliver as {emotion}."),
                 instruct_text=instruct_text,
                 monster_text=monster_text,
-                emotion_tag=emotion
+                emotion_tag=emotion,
             )
 
         except Exception as e:
             logger.error(f"Instruction error: {e}")
             return DialogueEnrichment(
-                speaker=speaker, role=role, raw_text=text,
-                emotional_resonance="Neutral", vocal_delivery_prompt="Standard.",
+                speaker=speaker,
+                role=role,
+                raw_text=text,
+                emotional_resonance="Neutral",
+                vocal_delivery_prompt="Standard.",
                 instruct_text=standardize_speech_text(text, "cosyvoice", "Neutral"),
                 monster_text=standardize_speech_text(text, "fish-speech", "neutral"),
-                emotion_tag="neutral"
+                emotion_tag="neutral",
             )
 
 async def log_to_foundry(npc_name: str, summary: str) -> bool:
