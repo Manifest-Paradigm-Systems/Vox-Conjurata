@@ -600,98 +600,85 @@ class SpeechEngine:
         raise NotImplementedError()
 
 class CosyVoiceEngine(SpeechEngine):
-    async def generate(self, text: str, actor_id: str, client: httpx.AsyncClient, emotion: str = "default") -> Optional[bytes]:
-        seeds = list(VOICE_SEEDS_DIR.glob(f"{actor_id}_seed_*.wav"))
-        seed_path = seeds[0] if seeds else None
-        
-        if not seed_path:
-            logger.info(f"[VOICE-ROUTING] No seed found for {actor_id}. Forging new seed...")
-            # We don't have full metadata here, so we use a generic but ID-specific prompt 
-            # to ensure variety until a full ingest happens.
-            seed_path = VOICE_SEEDS_DIR / f"{actor_id}_seed_male.wav"
-            await forge_voice_seed(actor_id, f"A unique, expressive voice for character {actor_id}.", "male")
-        
-        if seed_path and seed_path.exists():
-            logger.info(f"[VOICE-ROUTING] Using voice seed: {seed_path.name}")
+    async def generate(self, text: str, actor_id: str, client: httpx.AsyncClient, emotion: str = "default", is_archetype: bool = False, delivery_prompt: str = "") -> Optional[bytes]:
+        seed_path_str = resolve_seed_path(actor_id)
+        seed_path = Path(seed_path_str) if seed_path_str else None
+
+        if not seed_path or not seed_path.exists():
+            logger.warning(f"[VOICE-ROUTING] No seed found for {actor_id}. Run /api/ingest-actor first.")
+            return None
+
+        logger.info(f"[VOICE-ROUTING] Using voice seed: {seed_path.name}")
+        try:
+            text_path = seed_path.with_suffix(".txt")
+            ref_text = ""
+            if text_path.exists():
+                with open(text_path, "r") as f:
+                    ref_text = f.read().strip()
+
+            f_handle = open(seed_path, "rb")
+            files = {"reference_audio": (seed_path.name, f_handle, "audio/wav")}
+
             try:
-                # Character-specific prompt: the words spoken in the seed audio.
-                # Look for matching transcript
-                text_path = seed_path.with_suffix(".txt")
-                ref_text = ""
-                if text_path.exists():
-                    with open(text_path, "r") as f:
-                        ref_text = f.read().strip()
-                
-                # CosyVoice 3 requires a real reference audio for zero-shot cloning.
-                f_handle = open(seed_path, "rb")
-                files = {"reference_audio": (seed_path.name, f_handle, "audio/wav")}
+                mode = "instruct2" if is_archetype else "zero_shot"
+                data = {
+                    "text": text,
+                    "prompt_text": ref_text,
+                    "emotion": emotion if not delivery_prompt else delivery_prompt,
+                    "mode": mode,
+                }
+                resp = await client.post(
+                    f"{TTS_ACTOR_URL}/api/tts",
+                    data=data,
+                    files=files,
+                )
+            finally:
+                if f_handle:
+                    f_handle.close()
 
-                try:
-                    resp = await client.post(
-                        f"{TTS_ACTOR_URL}/api/tts",
-                        data={
-                            "text": text,
-                            "prompt_text": ref_text,
-                            "emotion": emotion
-                        },
-                        files=files
-                    )
-                finally:
-                    if f_handle:
-                        f_handle.close()
-
-                if resp.status_code == 200:
-                    return resp.content
-                else:
-                    logger.error(f"[VOICE-ROUTING] CosyVoice service returned error {resp.status_code}: {resp.text}")
-            except Exception as e:
-                logger.error(f"[VOICE-ROUTING] CosyVoice inference failed: {e}")
-        else:
-            logger.error(f"[VOICE-ROUTING] Failed to locate or create seed for {actor_id} at {seed_path}")
+            if resp.status_code == 200:
+                return resp.content
+            else:
+                logger.error(f"[VOICE-ROUTING] CosyVoice service returned error {resp.status_code}: {resp.text}")
+        except Exception as e:
+            logger.error(f"[VOICE-ROUTING] CosyVoice inference failed: {e}")
         return None
+
 
 class FishSpeechEngine(SpeechEngine):
     async def generate(self, text: str, actor_id: str, client: httpx.AsyncClient, emotion: str = "default") -> Optional[bytes]:
-        seeds = list(VOICE_SEEDS_DIR.glob(f"{actor_id}_seed_*.wav"))
-        seed_path = seeds[0] if seeds else None
-        
-        if not seed_path:
-            logger.info(f"[VOICE-ROUTING] Fish Speech: No seed found for {actor_id}. Forging new seed...")
-            seed_path = VOICE_SEEDS_DIR / f"{actor_id}_seed_male.wav"
-            await forge_voice_seed(actor_id, f"A deep, gravelly voice for character {actor_id}.", "male")
+        seed_path_str = resolve_seed_path(actor_id)
+        seed_path = Path(seed_path_str) if seed_path_str else None
+
+        if not seed_path or not seed_path.exists():
+            logger.warning(f"[VOICE-ROUTING] Fish Speech: No seed found for {actor_id}. Run /api/ingest-actor first.")
+            return None
 
         try:
-            # Prepare references in the format Fish Speech API expects (Base64 encoded)
             import base64
             references = []
-            if seed_path and seed_path.exists():
-                # Look for matching transcript
-                text_path = seed_path.with_suffix(".txt")
-                ref_text = ""
-                if text_path.exists():
-                    with open(text_path, "r") as f:
-                        ref_text = f.read().strip()
-                else:
-                    # Fallback text if no .txt file found
-                    ref_text = "A clear speaking voice."
+            text_path = seed_path.with_suffix(".txt")
+            ref_text = ""
+            if text_path.exists():
+                with open(text_path, "r") as f:
+                    ref_text = f.read().strip()
+            if not ref_text:
+                ref_text = "A clear speaking voice."
 
-                logger.info(f"[VOICE-ROUTING] Fish Speech using reference: {seed_path.name} with transcript: '{ref_text[:30]}...'")
-                
-                with open(seed_path, "rb") as f:
-                    audio_b64 = base64.b64encode(f.read()).decode("utf-8")
-                    references.append({
-                        "audio": audio_b64,
-                        "text": ref_text
-                    })
+            logger.info(f"[VOICE-ROUTING] Fish Speech using reference: {seed_path.name} with transcript: '{ref_text[:30]}...'")
+
+            with open(seed_path, "rb") as f:
+                audio_b64 = base64.b64encode(f.read()).decode("utf-8")
+                references.append({"audio": audio_b64, "text": ref_text})
 
             payload = {
                 "text": text,
                 "references": references,
                 "format": "wav",
                 "normalize": True,
-                "latency": "normal"
+                "latency": "normal",
             }
-            
+
             resp = await client.post(f"{TTS_MONSTER_URL}/v1/tts", json=payload)
             if resp.status_code == 200:
                 return resp.content
