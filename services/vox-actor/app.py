@@ -178,15 +178,18 @@ async def text_to_speech(
     reference_audio: UploadFile = File(...),
     prompt_text: str = Form(""),
     emotion: str = Form("default"),
+    mode: str = Form("zero_shot"),
 ):
-    """Zero-shot TTS via CosyVoice 3.
+    """TTS via CosyVoice 3.
 
     Accepts:
       - text: the dialogue line to speak (required)
       - reference_audio: WAV file for voice cloning (required)
       - prompt_text: what words are spoken in the reference audio
         (optional; if empty, a generic default is used)
-      - emotion: ignored (CosyVoice 3 handles emotion through reference)
+      - emotion: emotion hint for prompt_text construction
+      - mode: "zero_shot" (default, pure voice cloning) or
+        "instruct2" (instruct-text guided delivery modulation)
 
     Returns: WAV audio bytes.
     """
@@ -204,34 +207,24 @@ async def text_to_speech(
             f.write(ref_bytes)
 
         # If no prompt_text provided, use a fixed default
-        # But we strongly prefer the character-specific transcript for better cloning.
         if not prompt_text.strip():
             prompt_text = "You are a helpful assistant.<|endofprompt|>This is a voice sample for character speech."
         elif "<|endofprompt|>" not in prompt_text:
-            # If the user sent an emotion (e.g. "angry") but no prompt context,
-            # incorporate it into the instruction.
             if emotion and emotion != "default":
                 prompt_text = f"Deliver the following speech with a {emotion} tone.<|endofprompt|>{prompt_text}"
             else:
-                # Use the raw character transcript to anchor the zero-shot cloning.
                 prompt_text = f"Deliver in the speaker's natural voice.<|endofprompt|>{prompt_text}"
 
         logger.info(
-            f"CosyVoice 3 generating: text='{text[:60]}...' "
+            f"CosyVoice 3 ({mode}): text='{text[:60]}...' "
             f"prompt='{prompt_text[:60]}...' emotion='{emotion}' ref={len(ref_bytes)} bytes"
         )
 
-        # Run inference (returns generator of dicts)
-        result = None
-        for i, j in enumerate(
-            model.inference_zero_shot(
-                tts_text=text,
-                prompt_text=prompt_text,
-                prompt_wav=ref_path,
-                stream=False,
-            )
-        ):
-            result = j  # take the last (and only, since stream=False) result
+        # Run inference — select mode
+        if mode == "instruct2":
+            result = _run_instruct2(model, text, prompt_text, ref_path)
+        else:
+            result = _run_zero_shot(model, text, prompt_text, ref_path)
 
         if result is None or "tts_speech" not in result:
             raise HTTPException(status_code=500, detail="CosyVoice 3 returned no output")
@@ -260,6 +253,116 @@ async def text_to_speech(
     finally:
         if os.path.exists(ref_path):
             os.remove(ref_path)
+
+
+@app.post("/api/voice-design")
+async def voice_design(
+    text: str = Form(...),
+    instruct_text: str = Form(...),
+    reference_audio: UploadFile = File(...),
+):
+    """Generate a unique voice from a text description using instruct2.
+
+    Uses CosyVoice 3's inference_instruct2: the reference_audio provides
+    base voice identity (speaker embedding), while instruct_text describes
+    *how* to deliver the speech (age, emotion, accent modulation).
+
+    Accepts:
+      - text: the dialogue / preview text to speak
+      - instruct_text: acoustic delivery description
+        (e.g. "A raspy old man with a Scottish accent, slow and deliberate")
+      - reference_audio: WAV file providing the base voice identity
+
+    Returns: WAV audio bytes of the unique voice.
+    """
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="Empty text")
+    if not instruct_text.strip():
+        raise HTTPException(status_code=400, detail="Empty instruct_text")
+
+    model = _load_model()
+
+    ref_fd, ref_path = tempfile.mkstemp(suffix=".wav")
+    os.close(ref_fd)
+    try:
+        ref_bytes = await reference_audio.read()
+        with open(ref_path, "wb") as f:
+            f.write(ref_bytes)
+
+        logger.info(
+            f"CosyVoice 3 voice-design: text='{text[:60]}...' "
+            f"instruct='{instruct_text[:80]}...' ref={len(ref_bytes)} bytes"
+        )
+
+        result = _run_instruct2(model, text, instruct_text, ref_path)
+
+        if result is None or "tts_speech" not in result:
+            raise HTTPException(status_code=500, detail="CosyVoice 3 voice-design returned no output")
+
+        audio_tensor = result["tts_speech"].cpu()
+        sample_rate = model.sample_rate
+
+        out_fd, out_path = tempfile.mkstemp(suffix=".wav")
+        os.close(out_fd)
+        try:
+            torchaudio.save(out_path, audio_tensor, sample_rate)
+            logger.info(f"CosyVoice 3 voice-design done ({audio_tensor.shape} samples @ {sample_rate} Hz)")
+            return FileResponse(out_path, media_type="audio/wav")
+        except Exception as e:
+            logger.error(f"CosyVoice 3 voice-design save error: {e}")
+            if os.path.exists(out_path):
+                os.remove(out_path)
+            raise HTTPException(status_code=500, detail=str(e))
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"CosyVoice 3 voice-design error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if os.path.exists(ref_path):
+            os.remove(ref_path)
+
+
+def _run_zero_shot(model, tts_text: str, prompt_text: str, prompt_wav: str) -> dict | None:
+    """Run inference_zero_shot — pure voice cloning from reference."""
+    result = None
+    for i, j in enumerate(
+        model.inference_zero_shot(
+            tts_text=tts_text,
+            prompt_text=prompt_text,
+            prompt_wav=prompt_wav,
+            stream=False,
+        )
+    ):
+        result = j
+    return result
+
+
+def _run_instruct2(model, tts_text: str, instruct_text: str, prompt_wav: str) -> dict | None:
+    """Run inference_instruct2 — instruct-text guided delivery modulation.
+
+    Falls back to inference_zero_shot if instruct2 is not available
+    (e.g. on older CosyVoice versions).
+    """
+    if not hasattr(model, "inference_instruct2"):
+        logger.warning(
+            "inference_instruct2 not available on this CosyVoice model; "
+            "falling back to inference_zero_shot"
+        )
+        return _run_zero_shot(model, tts_text, instruct_text, prompt_wav)
+
+    result = None
+    for i, j in enumerate(
+        model.inference_instruct2(
+            tts_text=tts_text,
+            instruct_text=instruct_text,
+            prompt_wav=prompt_wav,
+            stream=False,
+        )
+    ):
+        result = j
+    return result
 
 
 if __name__ == "__main__":
