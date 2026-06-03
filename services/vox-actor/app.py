@@ -214,7 +214,6 @@ async def text_to_speech(
         out_fd, out_path = tempfile.mkstemp(suffix=".wav")
         os.close(out_fd)
         try:
-            import torchaudio
             torchaudio.save(out_path, audio_tensor.unsqueeze(0), sample_rate)
             logger.info(f"CosyVoice 3 done ({audio_tensor.shape[0]} samples @ {sample_rate} Hz)")
             return FileResponse(out_path, media_type="audio/wav")
