@@ -188,6 +188,9 @@ async def text_to_speech(
         # If no prompt_text provided, use a fixed default
         if not prompt_text.strip():
             prompt_text = "You are a helpful assistant.<|endofprompt|>This is a voice sample for character speech."
+        elif "<|endofprompt|>" not in prompt_text:
+            # CosyVoice 3 requires this token to separate prompt from instruction/context
+            prompt_text = f"You are a helpful assistant.<|endofprompt|>{prompt_text}"
 
         logger.info(
             f"CosyVoice 3 generating: text='{text[:60]}...' "
