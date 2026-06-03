@@ -294,37 +294,38 @@ def concatenate_wavs(wav_bytes_list: List[bytes]) -> Optional[bytes]:
 
 
 def standardize_speech_text(text: str, engine_type: str, emotion: str) -> str:
-    """Prepends engine-specific emotion instruction prefix and strips metadata tags.
+    """Apply engine-specific formatting to dialogue text.
 
-    The emotion tag (e.g. \"Enraged Growl\") is placed BEFORE the spoken text as an
-    instruction cue that CosyVoice / Fish Speech interpret for delivery modulation.
-    The engines do NOT read these prefixes aloud — they only affect vocal delivery.
-    The spoken body text is stripped of all metadata tags so nothing leaks into
-    literal TTS audio.
+    CosyVoice: strips all bracket tags, prepends instruction prefix.
+    Fish Speech: preserves inline [tag] expressions for delivery modulation,
+    strips only metadata prefixes like \"Mood:\" / \"Emotion:\".
     """
     import re
 
-    # 1. Strip ALL metadata tags/instructions from the spoken body text
-    #    Removes [Neutral], (happy), "Mood: sad", etc.
-    #    This ensures only clean, speakable text reaches the TTS audio output.
+    if engine_type == "fish-speech":
+        # Strip only metadata-prefix patterns (Mood: ..., Emotion: ..., etc.)
+        # but PRESERVE inline [growl], [snarl], [angry] delivery tags.
+        clean_text = re.sub(r'(?:^|\s)(?:Mood|Emotion|Sentiment|Tone|Note|Instruction|Direction):\s*',
+                           '', text, flags=re.IGNORECASE)
+        # Strip parenthetical asides like (whispering) — these are stage directions
+        clean_text = re.sub(r'\(.*?\)', '', clean_text)
+        # Strip *action* markers
+        clean_text = re.sub(r'\*.*?\*', '', clean_text)
+        # Clean up whitespace
+        clean_text = re.sub(r'\s+', ' ', clean_text).strip()
+        return f"[{emotion.lower()}] {clean_text}"
+
+    # CosyVoice / default: strip ALL metadata tags
     clean_text = re.sub(r'\[.*?\]|\(.*?\)|(?:^|\s)\w+:\s*', '', text).strip()
 
-    # 2. Sound Effect Parser — engine-specific SFX markers
     if engine_type == "cosyvoice":
         # Translate *action* into <action> (CosyVoice acoustic generation)
         clean_text = re.sub(r'\*(.*?)\*', r'<\1>', clean_text)
-    else:
-        # Strip SFX for engines that don't support acoustic generation
-        clean_text = re.sub(r'\*.*?\*', '', clean_text)
-
-    # 3. Engine-Specific Emotion Instruction Prefix
-    #    These are not read aloud — they are direction cues for the model.
-    if engine_type == "fish-speech":
-        return f"[{emotion.lower()}] {clean_text}"
-    elif engine_type == "cosyvoice":
         return f"{emotion.capitalize()} <|endofprompt|> {clean_text}"
-    else:
-        return clean_text
+
+    # Fallback — strip SFX
+    clean_text = re.sub(r'\*.*?\*', '', clean_text)
+    return clean_text
 
 def get_vram_used_gb() -> float:
     """Reads current GPU VRAM utilization from Host Linux sysfs dynamically."""
