@@ -56,6 +56,7 @@ IMAGE_GEN_URL = os.getenv("IMAGE_GEN_URL", "http://vox-vision-gen:8003")
 FOUNDRY_API_URL = os.getenv("FOUNDRY_API_URL", "http://foundry-vtt:30000/api")
 FOUNDRY_API_KEY = os.getenv("FOUNDRY_API_KEY", "")
 TTS_SFX_URL = os.getenv("TTS_SFX_URL", "http://vox-audio-generation-sfx:8001")
+W_OKADA_URL = os.getenv("W_OKADA_URL", "http://127.0.0.1:18888")
 
 # Local paths for vision scanning (mapped volumes)
 FOUNDRY_DATA_DIR = Path("/foundry_data")
@@ -1110,6 +1111,22 @@ async def receive_logs(log: DiagnosticLog):
     if len(error_buffer) > 10:
         error_buffer.pop(0)
     return {"status": "cached"}
+
+@app.post("/api/voice-changer/update")
+async def update_voice_changer(request: Request):
+    """Proxies settings updates to the local W-Okada server."""
+    try:
+        payload = await request.json()
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(f"{W_OKADA_URL}/api/voice-changer/update_settings", json=payload)
+            if resp.status_code == 200:
+                return resp.json()
+            else:
+                logger.error(f"W-Okada error: {resp.status_code} - {resp.text}")
+                raise HTTPException(status_code=resp.status_code, detail="W-Okada server error")
+    except Exception as e:
+        logger.error(f"Voice Changer Update failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/v1/diagnostics/latest")
 async def get_latest_error():
