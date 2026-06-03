@@ -224,8 +224,81 @@ else Hooks.once("ready", onReady);
 Hooks.on("canvasReady", async () => { if (game.user.isGM) await scanActiveSceneTokens(); });
 
 // ==========================================
-// 5. CHAT SKINNING & PIPELINE
+// 5. CHAT SKINNING & TERMINAL ENGINE
 // ==========================================
+Hooks.on("chatMessage", (chatLog, message, chatData) => {
+    if (message.startsWith("/vox ")) {
+        const args = message.slice(5).split(" ");
+        const command = args[0].toLowerCase();
+        const param = args.slice(1).join(" ");
+        
+        handleVoxCommand(command, param);
+        return false; // Prevent message from being sent to regular chat
+    }
+});
+
+async function handleVoxCommand(command, param) {
+    if (!game.user.isGM) return;
+    
+    const activeToken = resolveActiveToken(true);
+    
+    if (command === "forge" || command === "voice") {
+        if (!activeToken) {
+            ui.notifications.warn("⚠️ Vox Terminal: Select or hover over a token first!");
+            return;
+        }
+        
+        const description = command === "voice" ? param : "";
+        statusMessage(`VOX TERMINAL: Manually forging seed for ${activeToken.actor.name}...`, true);
+        
+        const actorData = {
+            actorId: activeToken.actor.id,
+            name: activeToken.actor.name,
+            lore: activeToken.actor.system.details?.biography?.value || "",
+            artPath: activeToken.actor.img,
+            isMonster: resolveIsMonster(activeToken.actor),
+            customDescription: description // NEW: Pass custom description to backend
+        };
+
+        try {
+            const response = await fetch(globalThis.voxState.ingestEndpoint + "?force_refresh=true", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(actorData)
+            });
+            const data = await response.json();
+            if (data.status === "created") {
+                statusMessage(`✅ VOX TERMINAL: Voice forged for ${activeToken.actor.name}!`, false);
+                ui.notifications.info(`🎙️ Vox: Voice seed created for ${activeToken.actor.name}`);
+            }
+        } catch (e) {
+            console.error("❌ Vox Terminal Error:", e);
+            statusMessage("❌ VOX TERMINAL: Forge failed. Check logs.", false);
+        }
+    }
+    else if (command === "status") {
+        statusMessage("VOX TERMINAL: Querying system telemetry...", true);
+        // This will trigger a response from the orchestrator handled in the usual pipeline
+        fetch("/api/status").then(r => r.json()).then(data => {
+            ChatMessage.create({
+                speaker: { alias: "Vox System Console" },
+                content: `<div style="font-family: monospace; font-size: 0.8rem; background: #1a1a1a; color: #00ff00; padding: 10px; border-radius: 5px; border: 1px solid #333;">
+                    <strong>SYSTEM TELEMETRY</strong><br/>
+                    ---------------------<br/>
+                    VRAM: ${data.vram_used_gb?.toFixed(2) || "???"} / ${data.vram_total_gb?.toFixed(2) || "32"} GB<br/>
+                    FOUNDRY: CONNECTED<br/>
+                    COSYVOICE: WARM<br/>
+                    VISION: HOT (STANDBY)
+                </div>`,
+                whisper: ChatMessage.getWhisperRecipients("GM")
+            });
+        });
+    }
+    else {
+        ui.notifications.info("Available commands: /vox forge, /vox voice [desc], /vox status");
+    }
+}
+
 Hooks.on("renderChatMessageHTML", (message, html, data) => {
     const voxType = message.getFlag("vox-conjurata", "type");
     if (!voxType) return;
