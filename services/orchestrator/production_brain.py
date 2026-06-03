@@ -78,76 +78,16 @@ class VisionHotSwapManager:
 
     async def swap_to(self, target_container: str):
         """Evicts the hot container and starts the target on-demand container."""
-        if not self.client:
-            logger.warning(f"⚠️ Container Manager: Bypass swap to {target_container} (No client)")
-            return
-            
-        async with self.lock:
-            try:
-                logger.info(f"🔄 Swapping: Evicting {self.hot_container} -> Loading {target_container}")
-                
-                # 1. Stop the hot generator to free ~5.5GB VRAM
-                try:
-                    gen = self.client.containers.get(self.hot_container)
-                    if gen.status == "running":
-                        gen.stop(timeout=2)
-                        logger.info(f"🛑 Paused {self.hot_container}")
-                except Exception as ex:
-                    logger.warning(f"Failed to stop {self.hot_container}: {ex}")
-                
-                # 2. Start the requested analytical service
-                target = self.client.containers.get(target_container)
-                target.start()
-                
-                # 3. Wait for service to be ready (retry healthcheck loop)
-                # MiniCPM-V on ROCm can take 10-60s to load model into VRAM.
-                #   vox-vision-reader -> :8000/v1/models (llama-cpp-python)
-                _health_probes = {
-                    "vox-vision-reader": "http://vox-vision-reader:8000/v1/models",
-                }
-                _health_url = _health_probes.get(
-                    target_container, f"http://{target_container}:8000/v1/models"
-                )
-                import httpx as _httpx
-                for attempt in range(20):
-                    await asyncio.sleep(3.0)
-                    try:
-                        async with _httpx.AsyncClient(timeout=5.0) as _hc:
-                            _r = await _hc.get(_health_url)
-                            if _r.status_code == 200:
-                                logger.info(f"🚀 Started {target_container} (ready after ~{3*(attempt+1)}s)")
-                                break
-                    except Exception:
-                        continue
-                else:
-                    logger.warning(f"⚠️ {target_container} started but healthcheck never returned 200")
-                
-            except Exception as e:
-                logger.error(f"❌ Swap-To Failed: {e}")
-                # Try DNS refresh: query the container to flush stale DNS
-                import socket as _socket
-                try:
-                    _socket.getaddrinfo(target_container, 8000)
-                except Exception:
-                    pass
+        # --- BYPASS: Both vision services are now running 'hot' simultaneously ---
+        # logger.info(f"🔄 Swapping: Evicting {self.hot_container} -> Loading {target_container}")
+        return
 
     async def restore_hot_state(self, current_container: str):
         """Stops the on-demand container and restores the default hot generator."""
-        if not self.client: return
-            
-        async with self.lock:
-            try:
-                logger.info(f"🔄 Restoring: Stopping {current_container} -> Warming {self.hot_container}")
-                
-                # 1. Stop the on-demand task
-                try:
-                    current = self.client.containers.get(current_container)
-                    current.stop(timeout=2)
-                except Exception: pass
-                
-                # 2. Re-warm the generator
-                gen = self.client.containers.get(self.hot_container)
-                gen.start()
+        # --- BYPASS: Both vision services are now running 'hot' simultaneously ---
+        # logger.info(f"🔄 Restoring: Stopping {current_container} -> Warming {self.hot_container}")
+        return
+
                 logger.info(f"🔥 {self.hot_container} is back online.")
                 
             except Exception as e:
