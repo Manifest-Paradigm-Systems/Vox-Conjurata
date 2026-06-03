@@ -5,41 +5,8 @@
 console.log("🚀 Vox-Conjurata: Script evaluation started.");
 
 // ==========================================
-// 0. TERMINAL ENGINE (PF2E & V12 COMPATIBLE)
+// 0. TERMINAL ENGINE (V12 & PF2E HARDENED)
 // ==========================================
-
-// Tier 1: Standard Hook Intercept (Highest Priority)
-Hooks.on("chatMessage", (chatLog, message, chatData) => {
-    const msg = message.trim();
-    if (msg.toLowerCase().startsWith("/vox")) {
-        console.log(`🎙️ Vox-Conjurata: Hook intercepting command: ${msg}`);
-        const parts = msg.split(/\s+/);
-        const command = parts[1] ? parts[1].toLowerCase() : "help";
-        const param = parts.slice(2).join(" ");
-        handleVoxCommand(command, param);
-        return false; // Stop Foundry & PF2e from processing
-    }
-});
-
-// Tier 2: Instance Monkeypatch (Backup for aggressive systems)
-function applyTerminalMonkeypatch() {
-    if (globalThis.voxTerminalMonkeypatched || !ui.chat) return;
-    globalThis.voxTerminalMonkeypatched = true;
-    console.log("🎙️ Vox-Conjurata: Applying Terminal monkeypatch to ui.chat...");
-    
-    const originalProcess = ui.chat.processMessage;
-    ui.chat.processMessage = function(message) {
-        if (message.trim().toLowerCase().startsWith("/vox")) {
-            console.log(`🎙️ Vox-Conjurata: Monkeypatch intercepting: ${message}`);
-            const parts = message.trim().split(/\s+/);
-            const command = parts[1] ? parts[1].toLowerCase() : "help";
-            const param = parts.slice(2).join(" ");
-            handleVoxCommand(command, param);
-            return; // Block base logic
-        }
-        return originalProcess.call(this, message);
-    };
-}
 
 async function handleVoxCommand(command, param) {
     if (!game.user.isGM) return;
@@ -69,14 +36,13 @@ async function handleVoxCommand(command, param) {
     }
     else if (command === "status") {
         fetch("/api/status").then(r => r.json()).then(data => {
-            ChatMessage.create({
+            createVoxChatMessage({
                 speaker: { alias: "Vox Console" },
                 content: `<div style="font-family: monospace; background: #000; color: #0f0; padding: 10px; border: 1px solid #333; border-radius: 5px;">
                     <strong>SYSTEM TELEMETRY</strong><br/>
                     ---------------------<br/>
                     VRAM: ${data.vram_used_gb?.toFixed(1)}GB / 32GB<br/>
-                    COSYVOICE: READY<br/>
-                    FISH-SPEECH: READY<br/>
+                    ENGINES: COSYVOICE, FISH<br/>
                     VISION: HOT
                 </div>`,
                 whisper: [game.user.id]
@@ -84,7 +50,7 @@ async function handleVoxCommand(command, param) {
         });
     }
     else {
-        ChatMessage.create({
+        createVoxChatMessage({
             speaker: { alias: "Vox Help" },
             content: `<div style="background: #1a1a1a; color: #fff; padding: 12px; border-left: 4px solid #00ff00; border-radius: 5px;">
                 <h3 style="color: #00ff00; margin: 0 0 10px 0;">🎙️ VOX Terminal</h3>
@@ -96,6 +62,67 @@ async function handleVoxCommand(command, param) {
         });
     }
 }
+
+/**
+ * createVoxChatMessage(data)
+ * ─────────────────────────────────────────────────────────────────────────────
+ * V12-compatible message creator that avoids PF2e validation errors.
+ */
+async function createVoxChatMessage(data) {
+    // Determine correct V12 style
+    let style = 0; // Default OOC
+    if (typeof CONST !== 'undefined') {
+        style = CONST.CHAT_MESSAGE_STYLES?.IC ?? CONST.CHAT_MESSAGE_TYPES?.IC ?? 2;
+    }
+    
+    const messageData = {
+        ...data,
+        style: Number(style)
+    };
+    
+    // PF2e V12+ is very sensitive about the 'type' field being present but 'style' being the source of truth.
+    // We try to create it with 'style' first, then fallback.
+    try {
+        return await ChatMessage.create(messageData);
+    } catch (err) {
+        console.error("🎙️ Vox: ChatMessage creation failed, trying fallback...", err);
+        return await ChatMessage.create({ ...data, type: Number(style) });
+    }
+}
+
+// Global Intercept logic
+function applyTerminalIntercept() {
+    if (globalThis.voxInterceptActive) return;
+    globalThis.voxInterceptActive = true;
+    console.log("🎙️ Vox-Conjurata: Activating Terminal Intercept Engine...");
+
+    // 1. Hook Intercept (Foundry Standard)
+    Hooks.on("chatMessage", (chatLog, message, chatData) => {
+        if (message.trim().toLowerCase().startsWith("/vox")) {
+            const parts = message.trim().split(/\s+/);
+            handleVoxCommand(parts[1]?.toLowerCase() || "help", parts.slice(2).join(" "));
+            return false;
+        }
+    });
+
+    // 2. Prototype Monkeypatch (Aggressive override for systems that ignore hooks)
+    if (typeof ChatLog !== 'undefined') {
+        const originalProcess = ChatLog.prototype.processMessage;
+        ChatLog.prototype.processMessage = function(message) {
+            if (message.trim().toLowerCase().startsWith("/vox")) {
+                console.log("🎙️ Vox-Conjurata: Intercepted via Prototype Monkeypatch");
+                const parts = message.trim().split(/\s+/);
+                handleVoxCommand(parts[1]?.toLowerCase() || "help", parts.slice(2).join(" "));
+                return;
+            }
+            return originalProcess.call(this, message);
+        };
+    }
+}
+
+// Launch intercept immediately
+if (typeof game !== 'undefined' && game.ready) applyTerminalIntercept();
+else Hooks.once("ready", applyTerminalIntercept);
 
 // ==========================================
 // 1. TELEMETRY BRIDGE
@@ -115,7 +142,7 @@ async function handleVoxCommand(command, param) {
 })();
 
 // ==========================================
-// 2. ACTOR LOGIC
+// 2. CORE UTILITIES
 // ==========================================
 globalThis.voxState = globalThis.voxState || { 
     narratorActive: false, puppetActive: false, playerActive: false,
@@ -142,7 +169,7 @@ function resolveActiveToken(isGM) {
 }
 
 // ==========================================
-// 3. AUDIO PIPELINE
+// 3. AUDIO & RECORDING
 // ==========================================
 (async function initAudio() {
     if (!navigator.mediaDevices?.getUserMedia) return;
@@ -229,7 +256,7 @@ async function scanActiveSceneTokens() {
 
 async function onReady() {
     if (globalThis.voxReadyExecuted) return; globalThis.voxReadyExecuted = true;
-    applyTerminalMonkeypatch();
+    applyTerminalIntercept();
     if (game.user.isGM) await scanActiveSceneTokens();
 }
 
@@ -250,7 +277,7 @@ function startRecording(micType) {
 function stopRecording() { if (globalThis.voxState.mediaRecorder?.state === "recording") globalThis.voxState.mediaRecorder.stop(); }
 
 function statusMessage(text, isOpen) {
-    ChatMessage.create({
+    createVoxChatMessage({
         speaker: { alias: "Vox Core" },
         content: `<div style="display: flex; align-items: center; gap: 8px;"><span>${isOpen ? '🎙️' : '🤫'}</span><strong>${text}</strong></div>`,
         whisper: [game.user.id]
@@ -269,11 +296,13 @@ async function processAndSendAudio() {
         if (d.status === "success") {
             const { transcription, audio_data, engine, voxType } = d;
             if (audio_data) playAudio(audio_data, 1.0);
-            const message = await ChatMessage.create({ 
-                content: transcription, style: 2, type: 2,
+            
+            const message = await createVoxChatMessage({ 
+                content: transcription,
                 speaker: { actor: activeActorId === 'narrator' ? null : activeActorId, alias: activeSpeakerName },
                 flags: { "vox-conjurata": { type: voxType, audioUrl: audio_data, engine: engine } } 
             });
+            
             if (message && canvas.ready) {
                 const tId = message.speaker.token || canvas.tokens.placeables.find(t => t.actor?.id === activeActorId)?.id;
                 const token = canvas.tokens.get(tId);
