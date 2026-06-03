@@ -224,14 +224,66 @@ function registerKeybindings() {
 // 3. MODULE LIFECYCLE
 // ==========================================
 const ingestedActors = new Set();
+
+function updateIngestionProgress(current, total, name) {
+    let bar = document.getElementById('vox-ingestion-progress');
+    if (!bar) {
+        const container = document.createElement('div');
+        container.id = 'vox-ingestion-progress';
+        container.style = "position: fixed; top: 80px; left: 50%; transform: translateX(-50%); width: 360px; padding: 12px; background: rgba(20, 20, 25, 0.95); border: 1px solid #ff6400; border-radius: 6px; z-index: 1000; color: white; font-family: 'Signika', sans-serif; box-shadow: 0 4px 20px rgba(0,0,0,0.6); display: flex; flex-direction: column; gap: 8px;";
+        container.innerHTML = `
+            <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: bold; color: #ff6400; text-transform: uppercase; letter-spacing: 0.5px;">
+                <span id="vox-progress-label">Voice Registry Ingestion</span>
+                <span id="vox-progress-count">0/0</span>
+            </div>
+            <div style="width: 100%; height: 8px; background: #1a1a1a; border-radius: 4px; overflow: hidden; border: 1px solid #333;">
+                <div id="vox-progress-fill" style="width: 100%; height: 100%; background: linear-gradient(90deg, #ff9d00, #ff6400); shadow: 0 0 10px #ff6400; transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);"></div>
+            </div>
+            <div id="vox-progress-actor" style="font-size: 11px; color: #888; text-align: center; font-style: italic;">Synchronizing neural seeds...</div>
+        `;
+        document.body.appendChild(container);
+        bar = container;
+    }
+    
+    // The user specifically requested a "shrinking" bar — so 100% is start, 0% is finish.
+    const pctRemaining = Math.max(0, Math.round(((total - current) / total) * 100));
+    const fill = document.getElementById('vox-progress-fill');
+    if (fill) fill.style.width = `${pctRemaining}%`;
+    
+    const countEl = document.getElementById('vox-progress-count');
+    if (countEl) countEl.innerText = `${current} / ${total}`;
+    
+    const actorEl = document.getElementById('vox-progress-actor');
+    if (actorEl) actorEl.innerText = current >= total ? "Neural synchronization complete." : `Forging: ${name}`;
+    
+    if (current >= total) {
+        const label = document.getElementById('vox-progress-label');
+        if (label) { label.innerText = "✅ Systems Nominal"; label.style.color = "#00ff88"; }
+        if (fill) fill.style.background = "#00ff88";
+        setTimeout(() => {
+            bar.style.opacity = '0';
+            bar.style.transition = 'opacity 1s ease';
+            setTimeout(() => bar.remove(), 1000);
+        }, 3000);
+    }
+}
+
 async function scanActiveSceneTokens() {
     if (!game.user.isGM || !canvas.ready) return;
-    for (let token of canvas.tokens.placeables) {
-        if (!token.actor || ingestedActors.has(token.actor.id)) continue;
-        ingestedActors.add(token.actor.id);
+    const tokensToIngest = canvas.tokens.placeables.filter(t => t.actor && !ingestedActors.has(t.actor.id));
+    if (tokensToIngest.length === 0) return;
+
+    let processed = 0;
+    const total = tokensToIngest.length;
+    
+    for (let token of tokensToIngest) {
         const a = token.actor;
+        if (ingestedActors.has(a.id)) { processed++; continue; }
+        ingestedActors.add(a.id);
+        
+        updateIngestionProgress(processed, total, a.name);
+        
         try { 
-            ui.notifications.info(`🔍 Vox: Ingesting ${a.name}...`);
             await fetch(globalThis.voxState.ingestEndpoint, { 
                 method: "POST", headers: { "Content-Type": "application/json" }, 
                 body: JSON.stringify({
@@ -240,8 +292,12 @@ async function scanActiveSceneTokens() {
                     stats: { race: a.system.details?.race || "Unknown", level: a.system.details?.level?.value || 0 }
                 }) 
             }); 
-        } catch (e) {}
+        } catch (e) { console.error("Vox Ingestion Error:", e); }
+        
+        processed++;
+        updateIngestionProgress(processed, total, a.name);
     }
+    ui.notifications.info("✅ Vox: All seeds ready for gameplay.");
 }
 
 async function onReady() {
