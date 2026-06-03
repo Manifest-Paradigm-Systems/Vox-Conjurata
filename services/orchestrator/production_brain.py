@@ -720,14 +720,15 @@ def load_routing_config() -> dict:
     """Loads routing and system configuration from local JSON."""
     if not CONFIG_PATH.exists():
         return {
-            "tier_routing": {"humanoid_engine": "cosyvoice", "monster_engine": "cosyvoice"},
-            "system_settings": {"vram_threshold_gb": 26.0}
+            "tier_routing": {"humanoid_engine": "cosyvoice", "monster_engine": "fishspeech"},
+            "system_settings": {"vram_threshold_gb": 26.0},
         }
     try:
         with open(CONFIG_PATH, "r") as f:
             return json.load(f)
     except Exception:
-        return {"system_settings": {"vram_threshold_gb": 26.0}}
+        return {"tier_routing": {"humanoid_engine": "cosyvoice", "monster_engine": "fishspeech"},
+                "system_settings": {"vram_threshold_gb": 26.0}}
 
 async def generate_vocal_profile(actor_data: ActorMetadata, visual_description: str = "") -> dict:
     """Uses Qwen 2.5 via vLLM completions endpoint to generate a descriptive acoustic prompt and gender."""
