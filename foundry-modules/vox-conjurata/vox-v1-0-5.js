@@ -771,12 +771,13 @@ async function processAndSendAudio() {
         const response = await fetch(globalThis.voxState.voiceConversionEndpoint, { method: "POST", body: formData });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
+        console.log("🎯 Vox-Conjurata: Orchestrator response received:", data);
         
         if (data.status === "success") {
             const transcription = data.transcription;
-            const enrichment = data.enrichment;
-            const voxType = data.voxType;
-            const engine = data.engine;
+            const enrichment = data.enrichment || {};
+            const voxType = data.voxType || "player";
+            const engine = data.engine || "Unknown";
             const audioUrl = data.audio_data || data.audioUrl; 
 
             if (audioUrl) { 
@@ -786,12 +787,17 @@ async function processAndSendAudio() {
             
             // Unconditionally retrieve the actor using the locked-in activeActorId to prevent selection switch bugs
             const speakerActor = game.actors.get(activeActorId) || null;
-            await ChatMessage.create({ 
+            const speakerData = ChatMessage.getSpeaker({ 
+                actor: speakerActor, 
+                alias: activeSpeakerName 
+            });
+
+            console.log(`💬 Vox-Conjurata: Creating chat message for ${activeSpeakerName} (Type: ${voxType})`);
+
+            const message = await ChatMessage.create({ 
                 content: transcription, 
-                speaker: ChatMessage.getSpeaker({ 
-                    actor: speakerActor, 
-                    alias: activeSpeakerName 
-                }), 
+                type: CONST.CHAT_MESSAGE_TYPES.IC, // Use IC for bubbles
+                speaker: speakerData, 
                 flags: { 
                     "vox-conjurata": { 
                         type: voxType, 
@@ -802,6 +808,15 @@ async function processAndSendAudio() {
                     } 
                 } 
             });
+
+            // Trigger speech bubble explicitly
+            if (canvas.ready && message.speaker.token) {
+                const token = canvas.tokens.get(message.speaker.token);
+                if (token) {
+                    console.log(`🗯️ Vox-Conjurata: Triggering speech bubble for token ${token.name}`);
+                    canvas.bubbles.say(token, transcription);
+                }
+            }
         }
     } catch (err) { 
         console.error("❌ Vox-Conjurata: Pipeline failure:", err); 
