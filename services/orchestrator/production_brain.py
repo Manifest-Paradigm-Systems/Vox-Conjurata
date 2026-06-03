@@ -200,7 +200,7 @@ def resolve_archetype(actor_data: "ActorMetadata", vocal_profile: dict) -> str:
 
 
 async def ensure_palette_seed(archetype_key: str) -> str:
-    """Ensure a palette archetype seed exists — generate via Fish Speech if missing.
+    """Ensure a palette archetype seed exists — generate via CosyVoice 3 (Instruct) for textured base voices.
 
     Returns the absolute path to the palette seed WAV.
     """
@@ -214,12 +214,48 @@ async def ensure_palette_seed(archetype_key: str) -> str:
         return ""
 
     PALETTE_DIR.mkdir(parents=True, exist_ok=True)
-    logger.info(f"[PALETTE] Generating new archetype seed: {archetype_key}")
+    logger.info(f"[PALETTE] Generating new archetype seed: {archetype_key} (via CosyVoice 3 Instruct)")
 
+    # We use CosyVoice 3 in Instruct mode to generate the base archetype seed.
+    # This allows us to use text descriptions (like "[guttural growl]") to create 
+    # the initial monster-like or accented-humanoid sound.
     async with httpx.AsyncClient(timeout=180.0) as client:
         try:
-            payload = {"text": prompt, "references": [], "format": "wav"}
-            resp = await client.post(f"{TTS_MONSTER_URL}/v1/tts", json=payload)
+            # For the palette, we use a fixed neutral reference (the narrator) 
+            # and let the 'instruct' prompt drive the transformation.
+            narrator_wav = VOICE_SEEDS_DIR / "narrator_seed_male.wav"
+            if not narrator_wav.exists():
+                 # Create a dummy if missing or just fail gracefully
+                 logger.warning("[PALETTE] No narrator_seed_male.wav found, palette gen may be flat.")
+            
+            data = {
+                "text": "Hello, I am a character in this world, and this is my unique voice.",
+                "prompt_text": "A clear speaking voice.",
+                "emotion": prompt, # Pass the detailed palette prompt here
+                "mode": "instruct2",
+            }
+            
+            files = {}
+            if narrator_wav.exists():
+                f_handle = open(narrator_wav, "rb")
+                files["reference_audio"] = (narrator_wav.name, f_handle, "audio/wav")
+            else:
+                # If no narrator seed, we can't really do zero-shot/instruct well in CosyVoice
+                # Fallback to Fish Speech without references (may sound like narrator)
+                payload = {"text": prompt, "references": [], "format": "wav"}
+                resp = await client.post(f"{TTS_MONSTER_URL}/v1/tts", json=payload)
+                if resp.status_code == 200:
+                    palette_path.write_bytes(resp.content)
+                    logger.info(f"[PALETTE] Created {archetype_key} via Fish Fallback")
+                    return str(palette_path)
+                return ""
+
+            try:
+                resp = await client.post(f"{TTS_ACTOR_URL}/api/tts", data=data, files=files)
+            finally:
+                if "reference_audio" in files:
+                    f_handle.close()
+
             if resp.status_code == 200:
                 palette_path.write_bytes(resp.content)
                 # Also write companion transcript
@@ -230,10 +266,10 @@ async def ensure_palette_seed(archetype_key: str) -> str:
                 logger.info(f"[PALETTE] Created {archetype_key} → {palette_path.name}")
                 return str(palette_path)
             else:
-                logger.error(f"[PALETTE] Fish Speech returned {resp.status_code} for {archetype_key}")
+                logger.error(f"[PALETTE] CosyVoice returned {resp.status_code} for {archetype_key}")
                 return ""
         except Exception as e:
-            logger.error(f"[PALETTE] Fish Speech error for {archetype_key}: {e}")
+            logger.error(f"[PALETTE] Generation error for {archetype_key}: {e}")
             return ""
 
 
@@ -252,6 +288,7 @@ def is_named_character(actor_data: "ActorMetadata") -> bool:
         r"^(human|elf|dwarf|halfling|orc|goblin|kobold)\s+(guard|soldier|peasant|thug|bandit|commoner|archer|mage)$",
         r"^(skeleton|zombie|ghoul|ghost|rat|bat|spider|slime|ooze)$",
         r"^(townsfolk|townsperson|city guard|castle guard)$",
+        r"^(giant spider|wolf|bear|boar|rat swarm)$",
     ]
     for pat in generic_patterns:
         if re.match(pat, name, re.IGNORECASE):
@@ -301,35 +338,30 @@ def standardize_speech_text(text: str, engine_type: str, emotion: str) -> str:
     """Apply engine-specific formatting to dialogue text.
 
     CosyVoice: returns ONLY clean dialogue. Emotion/delivery cues are passed
-    separately via the 'emotion' and 'prompt_text' params of /api/tts —
-    embedding them in the spoken text causes CosyVoice to read them aloud.
+    separately via the 'emotion' and 'prompt_text' params of /api/tts.
 
-    Fish Speech: preserves inline [growl]/[snarl] delivery tags within the
-    body text. Prepends a global emotion prefix. Fish Speech parses these
-    as modulation cues and does NOT speak them.
+    Fish Speech: strip all metadata/tags because the current model version 
+    reads bracketed text aloud rather than acting on it.
     """
     import re
 
-    if engine_type == "fish-speech":
-        # Strip metadata-prefix patterns but PRESERVE inline delivery tags
-        clean_text = re.sub(r'(?:^|\s)(?:Mood|Emotion|Sentiment|Tone|Note|Instruction|Direction):\s*',
-                           '', text, flags=re.IGNORECASE)
-        clean_text = re.sub(r'\(.*?\)', '', clean_text)
-        clean_text = re.sub(r'\*.*?\*', '', clean_text)
-        clean_text = re.sub(r'\s+', ' ', clean_text).strip()
-        return f"[{emotion.lower()}] {clean_text}"
-
-    # CosyVoice / default: strip ALL metadata tags, return clean dialogue
-    clean_text = re.sub(r'\[.*?\]|\(.*?\)|(?:^|\s)\w+:\s*', '', text).strip()
+    # Strip metadata-prefix patterns (Mood: Enraged, etc.)
+    clean_text = re.sub(r'(?:^|\s)(?:Mood|Emotion|Sentiment|Tone|Note|Instruction|Direction):\s*\w+',
+                       '', text, flags=re.IGNORECASE)
+    
+    # Strip all bracketed/parenthetical instructions (e.g. [growl], (whispers))
+    # This prevents Fish Speech from speaking these instructions aloud.
+    clean_text = re.sub(r'\[.*?\]', '', clean_text)
+    clean_text = re.sub(r'\(.*?\)', '', clean_text)
+    clean_text = re.sub(r'\*.*?\*', '', clean_text)
+    
+    # Final cleanup of extra whitespace
+    clean_text = re.sub(r'\s+', ' ', clean_text).strip()
 
     if engine_type == "cosyvoice":
-        clean_text = re.sub(r'\*(.*?)\*', r'<\1>', clean_text)
-        # Return ONLY clean text — no emotion prefix or <|endofprompt|> marker.
-        # Delivery modulation is handled by the prompt_text/emotion API params.
+        # Keep <tags> for CosyVoice if we want, but usually keep it clean
         return clean_text
 
-    # Fallback
-    clean_text = re.sub(r'\*.*?\*', '', clean_text)
     return clean_text
 
 def get_vram_used_gb() -> float:
@@ -841,10 +873,10 @@ async def forge_voice_seed(
             if is_monster:
                 logger.info(f"[VOICE-SEED] Using Fish Speech for unique monster seed: {actor_id}")
                 archetype_b64 = base64.b64encode(archetype_path.read_bytes()).decode("utf-8")
-                # Build a prompted seed text with monster-appropriate tags
-                monster_seed_text = f"[{acoustic_description[:80]}] {seed_text}"
+                # For Fish Speech, we rely on the reference audio (archetype) to set the style.
+                # We strip instructions from the text to prevent them from being spoken.
                 payload = {
-                    "text": monster_seed_text,
+                    "text": seed_text,
                     "references": [{"audio": archetype_b64, "text": seed_text}],
                     "format": "wav",
                 }
