@@ -22,6 +22,8 @@ for _p in [_cosyvoice_dir, _matcha_dir]:
         sys.path.insert(0, _p)
 
 import torch
+import torchaudio
+import soundfile as sf
 import tempfile
 import logging
 import gc
@@ -29,6 +31,24 @@ import time
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse, JSONResponse
+
+# ---------------------------------------------------------------------------
+# Monkeypatch: torchaudio.load in 2026 forces torchcodec, which is broken on ROCm
+# ---------------------------------------------------------------------------
+def _monkeypatch_torchaudio_load(uri, **kwargs):
+    # Simple soundfile-based fallback that ignores ignored arguments
+    # soundfile.read returns (time, channels), torchaudio expects (channels, time)
+    data, samplerate = sf.read(uri, dtype='float32')
+    tensor = torch.from_numpy(data)
+    if tensor.ndim == 1:
+        tensor = tensor.unsqueeze(0)
+    else:
+        tensor = tensor.T
+    return tensor, samplerate
+
+logging.info("Monkeypatching torchaudio.load to use soundfile (bypassing broken torchcodec)")
+torchaudio.load = _monkeypatch_torchaudio_load
+# ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
 # Logging
