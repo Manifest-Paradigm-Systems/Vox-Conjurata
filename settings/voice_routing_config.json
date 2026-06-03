@@ -2,17 +2,12 @@
   "system_settings": {
     "vram_threshold_gb": 30.5
   },
-  "narrator_preferences": {
-    "default_voice": "en-US-ChristopherNeural",
-    "rate_adjustment": "+0%"
-  },
   "tier_routing": {
     "humanoid_engine": "cosyvoice",
-    "monster_engine": "fish-speech"
+    "monster_engine": "fishspeech"
   },
   "engine_endpoints": {
     "cosyvoice_uri": "http://vox-actor:5020",
-    "fishspeech_uri": "http://vox-monster-fish:7860",
-    "parler_uri": "http://vox-designer:5010"
+    "fishspeech_uri": "http://vox-monster-fish:7860"
   }
 }
