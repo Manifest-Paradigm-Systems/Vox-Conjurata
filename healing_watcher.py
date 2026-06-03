@@ -25,11 +25,22 @@ def get_vram_used_gb() -> float:
     return 0.0
 
 def check_orchestrator_errors():
+    """Queries the orchestrator diagnostics endpoint and filters noisy telemetry.
+
+    Only returns data for actual errors (type='error' or non-'nominal' status
+    that is NOT a routine client-side telemetry ping).  Startup pings and
+    browser console-error spam are suppressed.
+    """
     try:
         response = httpx.get(ORCHESTRATOR_URL, timeout=2.0)
         if response.status_code == 200:
             data = response.json()
-            if data.get("status") != "nominal":
+            status = data.get("status", "unknown")
+            if status != "nominal":
+                # Distinguish real errors from telemetry noise
+                log_type = data.get("type", "")
+                if log_type in ("startup", "console-error"):
+                    return None  # suppress routine telemetry
                 return data
     except Exception:
         pass
