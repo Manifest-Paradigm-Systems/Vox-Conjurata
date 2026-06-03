@@ -849,7 +849,7 @@ async def ingest_actor(data: ActorMetadata, force_refresh: bool = False):
     if gender not in ["male", "female"]:
         gender = "male"
 
-    path = await forge_voice_seed(data.actorId, profile_desc, gender)
+    path = await forge_voice_seed(data.actorId, profile_desc, gender, is_monster=data.isMonster)
     return {"status": "created", "path": path, "visual_description": visual_desc} if path else {"status": "error"}
 
 class CachePurgeRequest(BaseModel):
