@@ -83,7 +83,6 @@ def trigger_emergency_shutdown(reason: str, vram_gb: float):
         "vox-vision-gen",
         "vox-vision-reader",
         "vox-actor",
-        "vox-designer",
         "vox-voice",
         "vox-monster-fish",
         "vox-audio-generation-music",
