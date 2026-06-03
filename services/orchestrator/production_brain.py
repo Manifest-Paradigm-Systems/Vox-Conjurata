@@ -356,10 +356,6 @@ async def scan_battlemap(req: BattlemapScanRequest):
         # --- Robust JSON extraction ---
         contract = _extract_scan_contract(raw_text, req.sceneId)
 
-        # Unload the vision reader BEFORE SFX generation to free VRAM
-        await hotswap_manager.restore_hot_state("vox-vision-reader")
-        reader_restored = True
-
         # --- Sequential SFX generation for each sound source ---
         sound_entries = []
         if contract.get("sound_sources"):
@@ -401,9 +397,6 @@ async def scan_battlemap(req: BattlemapScanRequest):
     except Exception as e:
         logger.error(f"🗺️ Battlemap Scan Error: {e}")
         return {"status": "error", "message": str(e)}
-    finally:
-        if not reader_restored:
-            await hotswap_manager.restore_hot_state("vox-vision-reader")
 
 # --- Voice Generation Engines (Modular Factory Pattern) ---
 
