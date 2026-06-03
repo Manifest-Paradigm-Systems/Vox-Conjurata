@@ -16,10 +16,7 @@ services:
     container_name: vox-conjurata-orchestrator
     # The rootless podman socket (mounted below) is blocked by SELinux labeling,
     # not Unix perms — its ACL already grants root rw. Disable the SELinux label
-    # so VisionHotSwapManager can reach the socket to start/stop vision containers.
-    # The rootless podman socket (mounted below) is blocked by SELinux labeling,
-    # not Unix perms — its ACL already grants root rw. Disable the SELinux label
-    # so VisionHotSwapManager can reach the socket to start/stop vision containers.
+    # so the orchestrator can access host filesystem mounts.
     security_opt:
     - label=disable
     ports:
