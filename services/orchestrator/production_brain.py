@@ -1021,6 +1021,23 @@ async def log_to_foundry(npc_name: str, summary: str) -> bool:
 
 # --- Endpoints ---
 
+@app.on_event("startup")
+async def startup_event():
+    logger.info("🚀 Vox Conjurata Orchestrator starting up...")
+    # Pre-warm palette foundation seeds in the background
+    asyncio.create_task(prewarm_palette_foundations())
+
+async def prewarm_palette_foundations():
+    """Ensure all archetype palette foundations exist on disk."""
+    logger.info(f"🎨 Pre-warming {len(PALETTE_DEFINITIONS)} palette foundations...")
+    for key in PALETTE_DEFINITIONS.keys():
+        try:
+            await ensure_palette_seed(key)
+        except Exception as e:
+            logger.error(f"Failed to pre-warm palette {key}: {e}")
+    logger.info("✅ All palette foundations pre-warmed.")
+
+
 @app.get("/")
 async def root():
     return {

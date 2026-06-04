@@ -36,6 +36,7 @@ services:
     volumes:
     - model_storage:/models:z
     - ./services/orchestrator/voice_seeds:/app/voice_seeds:Z
+    - ./settings:/app/settings:Z
     - /sys:/sys:ro
     - /home/EvokeStudio/manifest-paradigm/foundry/data/Data:/foundry_data:ro,z
     - /home/EvokeStudio/manifest-paradigm/foundry/data/Data/audio/sfx:/sfx_out:rw,z
