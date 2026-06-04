@@ -57,7 +57,12 @@ def _monkeypatch_torchaudio_save(uri, tensor, sample_rate, **kwargs):
         data = tensor.T.cpu().numpy()
     else:
         data = tensor.cpu().numpy()
-    sf.write(uri, data, sample_rate)
+        
+    # If uri is a file-like object (BytesIO), soundfile needs an explicit format
+    if hasattr(uri, 'write'):
+        sf.write(uri, data, sample_rate, format='WAV')
+    else:
+        sf.write(uri, data, sample_rate)
 
 logging.info("Monkeypatching torchaudio.load/save to use soundfile (bypassing broken torchcodec)")
 torchaudio.load = _monkeypatch_torchaudio_load
@@ -205,7 +210,7 @@ async def text_to_speech(
         audio_tensor = result["tts_speech"].cpu()
         sample_rate = model.sample_rate
 
-        # Return as Response from memory instead of FileResponse
+        # Return as Response from memory
         out_buf = io.BytesIO()
         torchaudio.save(out_buf, audio_tensor, sample_rate)
         
