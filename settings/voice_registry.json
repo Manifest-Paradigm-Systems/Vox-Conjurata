@@ -146,10 +146,10 @@
   "5vBG8a8dnJfmVd3Y": {
     "engine": "fishspeech",
     "seed_path": "5vBG8a8dnJfmVd3Y_seed_male.wav",
-    "voice_prompt": "A guttural, battle-hardened baritone resonating through the echoing caverns of a damp, ancient ruin, the Xulgath Warrior's voice is a testament to his unyielding ferocity and the weight of his dark legacy.",
+    "voice_prompt": "A guttural, thunderous baritone resonates within the echoing reverberant damp cave, a primal call that shakes the stone walls and sends ripples through the stagnant underground pools.",
     "is_archetype": false,
     "archetype_key": "",
-    "created_at": "2026-06-04T07:06:08"
+    "created_at": "2026-06-04T07:09:44"
   },
   "trchDxbDR2TiPMxT": {
     "engine": "fishspeech",
