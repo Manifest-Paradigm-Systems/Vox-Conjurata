@@ -703,12 +703,16 @@ class FishSpeechEngine(SpeechEngine):
                 audio_b64 = base64.b64encode(f.read()).decode("utf-8")
                 references.append({"audio": audio_b64, "text": ref_text})
 
+            import random
             payload = {
                 "text": text,
                 "references": references,
                 "format": "wav",
                 "normalize": True,
                 "latency": "normal",
+                "temperature": 0.8, # Increase variance for more exciting voices
+                "top_p": 0.8,
+                "seed": random.randint(0, 1000000)
             }
 
             resp = await client.post(f"{TTS_MONSTER_URL}/v1/tts", json=payload)
@@ -765,10 +769,13 @@ def load_routing_config() -> dict:
 async def generate_vocal_profile(actor_data: ActorMetadata, visual_description: str = "") -> dict:
     """Uses Qwen 2.5 via vLLM completions endpoint to generate a descriptive acoustic prompt and gender."""
     system_instruction = (
-        "You are an expert casting director and acoustic engineer. "
-        "Analyze the character name, biography, and physical appearance. Output a JSON object with: "
-        "'gender' (strictly 'male' or 'female') and "
-        "'description' (a single-sentence acoustic description including age, raspiness, pitch, inflections, and room acoustics)."
+        "You are an expert cinematic casting director and master acoustic engineer. "
+        "Analyze the character name, biography, and physical appearance. "
+        "Output a JSON object with 'gender' (strictly 'male' or 'female') and "
+        "'description' (a VIVID, EXTREMELY SPECIFIC, and COLORFUL 1-2 sentence acoustic description). "
+        "Avoid generic terms. Focus on unique textures (e.g. 'gravel-crushed baritone', 'silvery melodic soprano', "
+        "'whiskey-soaked rasp', 'shimmering ethereal resonance', 'harsh guttural clicks'). "
+        "Include room acoustics like 'reverberant damp cave' or 'tight velvet-lined study'."
     )
     
     appearance_info = f"\nPhysical Appearance: {visual_description}" if visual_description else ""
@@ -873,11 +880,15 @@ async def forge_voice_seed(
                 
                 # Use the acoustic_description as the 'prompt' within the text for Fish Speech
                 # and the archetype audio as the reference speaker identity.
+                import random
                 payload = {
-                    "text": f"[{acoustic_description[:100]}] {seed_text}",
+                    "text": f"[{acoustic_description}] {seed_text}",
                     "references": [{"audio": archetype_b64, "text": seed_text}],
                     "format": "wav",
-                    "normalize": True
+                    "normalize": True,
+                    "temperature": 0.9, # Higher temperature for more creative 'design'
+                    "top_p": 0.9,
+                    "seed": random.randint(0, 1000000)
                 }
                 response = await client.post(f"{TTS_MONSTER_URL}/v1/tts", json=payload)
 
@@ -910,18 +921,18 @@ async def enrich_and_instruct(speaker: str, role: str, text: str, is_monster: bo
     if is_monster:
         system_instruction = (
             "You are a cinematic monster voice director. Analyze the creature's dialogue "
-            "and rewrite it with inline delivery tags in [square brackets] at natural "
-            "breakpoints to guide vocal performance.\n\n"
+            "and rewrite it with EXTREME, VIVID inline delivery tags in [square brackets] "
+            "at every natural breakpoint to force a highly textured performance.\n\n"
             "Available tags include: [growl], [snarl], [roar], [whisper], [low growl], "
             "[hiss], [guttural], [raspy], [deep], [shriek], [echo], [pause], [slow], "
-            "[rising pitch], [falling pitch].\n\n"
+            "[rising pitch], [falling pitch], [vicious], [animalistic].\n\n"
             "Output JSON with:\n"
             "- 'emotional_resonance': overall mood description\n"
-            "- 'vocal_delivery_prompt': how the creature should sound overall\n"
+            "- 'vocal_delivery_prompt': how the creature should sound overall (BE VIVID)\n"
             "- 'emotion_tag': a single descriptive tag like 'Enraged Growl' or 'Terrified Hiss'\n"
             "- 'tagged_text': the dialogue WITH inline tags inserted at natural breakpoints\n\n"
             "Example: for \"You dare enter my lair?\" output could be:\n"
-            "'[low growl] You dare enter my lair? [snarl, rising pitch] I will crush you.'"
+            "'[low growl, viscous] You dare enter my lair? [shriek, rising pitch] I will crush you!'"
         )
     else:
         system_instruction = (
