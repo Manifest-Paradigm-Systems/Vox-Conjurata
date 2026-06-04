@@ -138,10 +138,10 @@
   "WNX5OQKPh4uaV7mW": {
     "engine": "fishspeech",
     "seed_path": "WNX5OQKPh4uaV7mW_seed_male.wav",
-    "voice_prompt": "A resonant, bass-baritone voice echoing through an ancient, reverberant stone chamber, hinting at a life of wisdom and adventure.",
+    "voice_prompt": "A sonorous, resonant baritone voice echoes through the vast, reverberant chamber, its rich timbre hinting at a life filled with ancient wisdom and untold stories.",
     "is_archetype": false,
     "archetype_key": "",
-    "created_at": "2026-06-04T07:04:48"
+    "created_at": "2026-06-04T07:08:28"
   },
   "5vBG8a8dnJfmVd3Y": {
     "engine": "fishspeech",
