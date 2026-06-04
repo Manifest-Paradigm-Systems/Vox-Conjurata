@@ -333,25 +333,27 @@ def concatenate_wavs(wav_bytes_list: List[bytes]) -> Optional[bytes]:
 def standardize_speech_text(text: str, engine_type: str, emotion: str) -> str:
     """Apply engine-specific formatting to dialogue text.
 
-    CosyVoice: returns ONLY clean dialogue. Emotion/delivery cues are passed
-    separately via the 'emotion' and 'prompt_text' params of /api/tts.
-
-    Fish Speech: strip all metadata/tags because the current model version 
-    reads bracketed text aloud rather than acting on it.
+    CosyVoice: returns ONLY clean dialogue.
+    Fish Speech: strips metadata and bracketed tags.
     """
     import re
 
-    # Robustly strip metadata-prefix patterns (Mood: Enraged, etc.)
-    # Consumes prefix and any trailing sentence-ending punctuation/whitespace.
-    clean_text = re.sub(r'(?i)(?:Mood|Emotion|Sentiment|Tone|Note|Instruction|Direction|Delivery|Background|Acoustics|Style|Voice):\s*.*?(?:[.!?]\s*|\n|$)',
-                       '', text)
+    # Extremely aggressive stripping of all metadata prefixes and their contents
+    # Consumes until a newline or end of string if it starts with a keyword.
+    patterns = [
+        r'(?i)^(?:Mood|Emotion|Sentiment|Tone|Note|Instruction|Direction|Delivery|Background|Acoustics|Style|Voice|Speaker):\s*.*?(?:\n|$)',
+        r'(?i)\s+(?:Mood|Emotion|Sentiment|Tone|Note|Instruction|Direction|Delivery|Background|Acoustics|Style|Voice|Speaker):\s*.*?(?:\n|$)'
+    ]
+    clean_text = text
+    for pat in patterns:
+        clean_text = re.sub(pat, ' ', clean_text)
     
     # Strip all bracketed/parenthetical instructions (e.g. [growl], (whispers))
     clean_text = re.sub(r'\[.*?\]', '', clean_text)
     clean_text = re.sub(r'\(.*?\)', '', clean_text)
     clean_text = re.sub(r'\*.*?\*', '', clean_text)
     
-    # Final cleanup of leading/trailing non-word characters and extra whitespace
+    # Final cleanup
     clean_text = re.sub(r'^\W+', '', clean_text)
     clean_text = re.sub(r'\s+', ' ', clean_text).strip()
     return clean_text
