@@ -211,7 +211,8 @@ async def get_palette_lock(archetype_key: str) -> asyncio.Lock:
         return palette_locks[archetype_key]
 
 async def ensure_palette_seed(archetype_key: str) -> str:
-    """Ensure a palette archetype seed exists — generate via CosyVoice 3 (Instruct) for textured base voices.
+    """Ensure a palette archetype seed exists — generate via Fish Speech WITHOUT reference audio.
+    This allows Fish Speech to generate a unique voice purely from the descriptive text prompt.
 
     Returns the absolute path to the palette seed WAV.
     """
@@ -231,42 +232,34 @@ async def ensure_palette_seed(archetype_key: str) -> str:
             return ""
 
         PALETTE_DIR.mkdir(parents=True, exist_ok=True)
-        logger.info(f"[PALETTE] Generating new archetype seed: {archetype_key} (via CosyVoice 3 Instruct)")
+        logger.info(f"[PALETTE] Generating foundation seed: {archetype_key} (via Fish Speech Text-to-Voice)")
 
-        # Retry loop for engine cold-starts/pre-warming
-        for attempt in range(3):
-            async with httpx.AsyncClient(timeout=180.0) as client:
-                try:
-                    narrator_wav = VOICE_SEEDS_DIR / "narrator_seed_male.wav"
-                    data = {
-                        "text": "Hello, I am a character in this world, and this is my unique voice.",
-                        "prompt_text": "A clear speaking voice.",
-                        "emotion": prompt,
-                        "mode": "instruct2",
-                    }
-                    files = {}
-                    if narrator_wav.exists():
-                        f_handle = open(narrator_wav, "rb")
-                        files["reference_audio"] = (narrator_wav.name, f_handle, "audio/wav")
-
-                    try:
-                        resp = await client.post(f"{TTS_ACTOR_URL}/api/tts", data=data, files=files)
-                        if resp.status_code == 200:
-                            palette_path.write_bytes(resp.content)
-                            transcript_path = palette_path.with_suffix(".txt")
-                            transcript_path.write_text("Hello, I am a character in this world, and this is my unique voice.")
-                            logger.info(f"[PALETTE] Created {archetype_key} on attempt {attempt+1}")
-                            return str(palette_path)
-                        else:
-                            logger.warning(f"[PALETTE] Attempt {attempt+1} failed: {resp.status_code}")
-                    finally:
-                        if "reference_audio" in files: f_handle.close()
-                except Exception as e:
-                    logger.warning(f"[PALETTE] Attempt {attempt+1} error: {e}")
+        async with httpx.AsyncClient(timeout=180.0) as client:
+            try:
+                # Generate FOUNDATION purely from text description to ensure high diversity.
+                # No reference audio (references: []) lets Fish Speech's LLM decide the voice.
+                payload = {
+                    "text": f"{prompt} Hello, I am a character in this world, and this is my unique voice.",
+                    "references": [],
+                    "format": "wav",
+                    "normalize": True,
+                    "temperature": 0.8,
+                    "top_p": 0.8,
+                }
                 
-                await asyncio.sleep(2 * (attempt + 1))
-        
-        return ""
+                resp = await client.post(f"{TTS_MONSTER_URL}/v1/tts", json=payload)
+                if resp.status_code == 200:
+                    palette_path.write_bytes(resp.content)
+                    transcript_path = palette_path.with_suffix(".txt")
+                    transcript_path.write_text("Hello, I am a character in this world, and this is my unique voice.")
+                    logger.info(f"[PALETTE] Created foundation {archetype_key}")
+                    return str(palette_path)
+                else:
+                    logger.error(f"[PALETTE] Fish Speech failed foundation {archetype_key}: {resp.status_code}")
+                    return ""
+            except Exception as e:
+                logger.error(f"[PALETTE] Foundation generation error for {archetype_key}: {e}")
+                return ""
 
 
 def is_named_character(actor_data: "ActorMetadata") -> bool:
@@ -770,13 +763,13 @@ def load_routing_config() -> dict:
 async def generate_vocal_profile(actor_data: ActorMetadata, visual_description: str = "") -> dict:
     """Uses Qwen 2.5 via vLLM completions endpoint to generate a descriptive acoustic prompt and gender."""
     system_instruction = (
-        "You are an expert cinematic casting director and master acoustic engineer. "
+        "You are an expert cinematic casting director and master acoustic engineer for high-fantasy movies. "
         "Analyze the character name, biography, and physical appearance. "
         "Output a JSON object with 'gender' (strictly 'male' or 'female') and "
-        "'description' (a VIVID, EXTREMELY SPECIFIC, and COLORFUL 1-2 sentence acoustic description). "
-        "Avoid generic terms. Focus on unique textures (e.g. 'gravel-crushed baritone', 'silvery melodic soprano', "
-        "'whiskey-soaked rasp', 'shimmering ethereal resonance', 'harsh guttural clicks'). "
-        "Include room acoustics like 'reverberant damp cave' or 'tight velvet-lined study'."
+        "'description' (a VIVID, HIGHLY DRAMATIC, and COLORFUL 1-2 sentence acoustic description fit for D&D). "
+        "Avoid generic terms. Focus on unique, exaggerated textures (e.g. 'vicious gravel-crushed baritone', 'silvery melodic soprano with ethereal resonance', "
+        "'whiskey-soaked ancient rasp', 'shimmering supernatural resonance', 'harsh guttural chittering clicks'). "
+        "Include room acoustics like 'echoing reverberant damp cave' or 'tight velvet-lined library'."
     )
     
     appearance_info = f"\nPhysical Appearance: {visual_description}" if visual_description else ""
