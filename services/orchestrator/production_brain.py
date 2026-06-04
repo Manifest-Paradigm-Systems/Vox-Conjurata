@@ -941,7 +941,7 @@ async def enrich_and_instruct(speaker: str, role: str, text: str, is_monster: bo
             "and 'emotion_tag' (a single descriptive tag like 'Enraged Growl', 'Terrified Whisper', or 'Neutral')."
         )
     payload = {
-        "model": "EVA-UNIT-01/EVA-Qwen2.5-7B-v0.1",
+        "model": "cheapest",
         "messages": [
             {"role": "system", "content": system_instruction},
             {"role": "user", "content": f"Speaker: {speaker}, Text: {text}"},
