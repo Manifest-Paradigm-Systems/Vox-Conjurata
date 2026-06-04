@@ -338,7 +338,9 @@ def standardize_speech_text(text: str, engine_type: str, emotion: str) -> str:
     import re
 
     # Strip metadata-prefix patterns (Mood: Enraged, etc.)
-    clean_text = re.sub(r'(?:^|\s)(?:Mood|Emotion|Sentiment|Tone|Note|Instruction|Direction):\s*\w+',
+    # This regex now greedily consumes until the end of the line or a punctuation/capital-letter start
+    # to ensure long instructions are fully removed.
+    clean_text = re.sub(r'(?:^|\s)(?:Mood|Emotion|Sentiment|Tone|Note|Instruction|Direction|Delivery):\s*.*?(?=[A-Z][a-z]+|\n|$)',
                        '', text, flags=re.IGNORECASE)
     
     # Strip all bracketed/parenthetical instructions (e.g. [growl], (whispers))
@@ -347,7 +349,8 @@ def standardize_speech_text(text: str, engine_type: str, emotion: str) -> str:
     clean_text = re.sub(r'\(.*?\)', '', clean_text)
     clean_text = re.sub(r'\*.*?\*', '', clean_text)
     
-    # Final cleanup of extra whitespace
+    # Final cleanup of extra whitespace and leading punctuation left by regex
+    clean_text = re.sub(r'^\W+', '', clean_text)
     clean_text = re.sub(r'\s+', ' ', clean_text).strip()
 
     if engine_type == "cosyvoice":
