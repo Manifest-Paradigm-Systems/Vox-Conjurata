@@ -320,6 +320,111 @@ async function scanActiveSceneTokens() {
     ui.notifications.info("✅ Vox: All seeds ready for gameplay.");
 }
 
+// ==========================================
+// 4. VOICE REGISTRY MANAGER UI
+// = ==========================================
+
+class VoxVoiceManager extends Application {
+    static get defaultOptions() {
+        return mergeObject(super.defaultOptions, {
+            id: "vox-voice-manager",
+            title: "Vox Neural Voice Registry",
+            template: null,
+            width: 500,
+            height: 600,
+            resizable: true,
+            classes: ["vox-ui", "vox-manager"]
+        });
+    }
+
+    async getData() {
+        try {
+            const resp = await fetch("/api/v1/registry");
+            const registry = await resp.json();
+            return { registry: Object.entries(registry).map(([id, data]) => ({ id, ...data })) };
+        } catch (e) {
+            return { registry: [], error: "Failed to load registry from orchestrator." };
+        }
+    }
+
+    render(force, options={}) {
+        this.getData().then(data => {
+            let html = `
+                <div style="padding: 10px; background: #1a1a1a; color: #eee; height: 100%; display: flex; flex-direction: column;">
+                    <div style="margin-bottom: 15px; border-bottom: 1px solid #ff6400; padding-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+                        <h2 style="margin: 0; color: #ff6400;"><i class="fas fa-microchip"></i> Active Character Seeds</h2>
+                        <button class="vox-refresh-btn" style="width: auto; padding: 2px 8px;"><i class="fas fa-sync"></i></button>
+                    </div>
+                    <div style="flex: 1; overflow-y: auto;">
+                        <ul style="list-style: none; padding: 0; margin: 0;">
+            `;
+
+            if (data.registry.length === 0) {
+                html += `<li style="text-align: center; color: #888; padding: 20px;">No characters ingested yet.</li>`;
+            }
+
+            for (let entry of data.registry) {
+                const name = game.actors.get(entry.id)?.name || entry.id;
+                html += `
+                    <li style="background: rgba(255,255,255,0.05); margin-bottom: 8px; border-radius: 4px; padding: 10px; border-left: 3px solid #ff6400;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                            <strong style="color: #fff;">${name}</strong>
+                            <span style="font-size: 10px; color: #888;">${entry.engine} | ${entry.is_archetype ? 'Foundation' : 'Unique'}</span>
+                        </div>
+                        <div style="font-size: 11px; color: #aaa; font-style: italic; margin-bottom: 8px;">"${entry.voice_prompt}"</div>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="vox-play-seed" data-actor-id="${entry.id}" style="height: 24px; line-height: 1; font-size: 11px;"><i class="fas fa-play"></i> Preview</button>
+                            <button class="vox-regen-actor" data-actor-id="${entry.id}" style="height: 24px; line-height: 1; font-size: 11px; background: #444;"><i class="fas fa-redo"></i> Re-Forge</button>
+                        </div>
+                    </li>
+                `;
+            }
+
+            html += `</ul></div></div>`;
+            this.element.html(html);
+            this._activateListeners(this.element);
+        });
+        return super.render(force, options);
+    }
+
+    _activateListeners(html) {
+        html.find('.vox-refresh-btn').click(() => this.render(true));
+        
+        html.find('.vox-play-seed').click(async (ev) => {
+            const id = ev.currentTarget.dataset.actorId;
+            const audio = new Audio(`/api/v1/registry/audio/${id}?t=${Date.now()}`);
+            audio.play();
+        });
+
+        html.find('.vox-regen-actor').click(async (ev) => {
+            const id = ev.currentTarget.dataset.actorId;
+            const token = canvas.tokens.placeables.find(t => t.actor?.id === id);
+            if (!token) {
+                ui.notifications.warn("⚠️ Character token must be on the current scene to re-forge.");
+                return;
+            }
+            ui.notifications.info(`🎙️ Re-forging voice for ${token.actor.name}...`);
+            // Trigger the existing forge logic
+            await fetch("/api/ingest-actor?force_refresh=true", {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    actorId: token.actor.id, name: token.actor.name,
+                    lore: token.actor.system.details?.biography?.value || "",
+                    artPath: token.actor.img, isMonster: resolveIsMonster(token.actor)
+                })
+            });
+            this.render(true);
+        });
+    }
+}
+
+Hooks.on("renderPlaylistDirectory", (app, html, data) => {
+    if (!game.user.isGM) return;
+    const button = $(`<button type="button" class="vox-registry-btn" style="margin: 5px 0;"><i class="fas fa-dna"></i> Manage Vox Voices</button>`);
+    button.click(() => new VoxVoiceManager().render(true));
+    html.find(".directory-footer").prepend(button);
+});
+
 async function onReady() {
     if (globalThis.voxReadyExecuted) return; globalThis.voxReadyExecuted = true;
     if (game.user.isGM) {
