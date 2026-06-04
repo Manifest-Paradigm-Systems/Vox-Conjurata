@@ -216,24 +216,36 @@ async def text_to_speech(
 
     model = _load_model()
 
+    # Save reference audio to a temp WAV (stable fallback)
+    ref_fd, ref_path = tempfile.mkstemp(suffix=".wav")
+    os.close(ref_fd)
     try:
         ref_bytes = await reference_audio.read()
-        ref_buf = io.BytesIO(ref_bytes)
+        with open(ref_path, "wb") as f:
+            f.write(ref_bytes)
 
-        if not prompt_text.strip():
-            prompt_text = "You are a helpful assistant.<|endofprompt|>This is a voice sample for character speech."
-        elif "<|endofprompt|>" not in prompt_text:
-            if emotion and emotion != "default":
-                prompt_text = f"Deliver the following speech with a {emotion} tone.<|endofprompt|>{prompt_text}"
-            else:
-                prompt_text = f"Deliver in the speaker's natural voice.<|endofprompt|>{prompt_text}"
+        # In 'instruct2' mode, the 'emotion' field IS the instruction script.
+        if mode == "instruct2":
+            instruction = emotion if emotion and emotion != "default" else prompt_text
+            if "<|endofprompt|>" not in instruction:
+                instruction = f"{instruction}<|endofprompt|>"
+            prompt_text = instruction
+        else:
+            # Default zero-shot formatting
+            if not prompt_text.strip():
+                prompt_text = "You are a helpful assistant.<|endofprompt|>This is a voice sample for character speech."
+            elif "<|endofprompt|>" not in prompt_text:
+                if emotion and emotion != "default":
+                    prompt_text = f"Deliver the following speech with a {emotion} tone.<|endofprompt|>{prompt_text}"
+                else:
+                    prompt_text = f"Deliver in the speaker's natural voice.<|endofprompt|>{prompt_text}"
 
         logger.info(f"CosyVoice 3 ({mode}): text='{text[:60]}...' ref={len(ref_bytes)} bytes")
 
         if mode == "instruct2":
-            result = _run_instruct2(model, text, prompt_text, ref_buf)
+            result = _run_instruct2(model, text, prompt_text, ref_path)
         else:
-            result = _run_zero_shot(model, text, prompt_text, ref_buf)
+            result = _run_zero_shot(model, text, prompt_text, ref_path)
 
         if result is None or "tts_speech" not in result:
             raise HTTPException(status_code=500, detail="CosyVoice 3 returned no output")
@@ -253,6 +265,9 @@ async def text_to_speech(
     except Exception as e:
         logger.error(f"CosyVoice 3 inference error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if os.path.exists(ref_path):
+            os.remove(ref_path)
 
 
 @app.post("/api/voice-design")
@@ -268,14 +283,17 @@ async def voice_design(
 
     model = _load_model()
 
+    ref_fd, ref_path = tempfile.mkstemp(suffix=".wav")
+    os.close(ref_fd)
     try:
         ref_bytes = await reference_audio.read()
-        ref_buf = io.BytesIO(ref_bytes)
+        with open(ref_path, "wb") as f:
+            f.write(ref_bytes)
 
         if "<|endofprompt|>" not in instruct_text:
             instruct_text = f"{instruct_text}<|endofprompt|>This is a voice design sample."
 
-        result = _run_instruct2(model, text, instruct_text, ref_buf)
+        result = _run_instruct2(model, text, instruct_text, ref_path)
 
         if result is None or "tts_speech" not in result:
             raise HTTPException(status_code=500, detail="CosyVoice 3 voice-design returned no output")
@@ -294,6 +312,9 @@ async def voice_design(
     except Exception as e:
         logger.error(f"CosyVoice 3 voice-design error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if os.path.exists(ref_path):
+            os.remove(ref_path)
 
 
 def _run_zero_shot(model, tts_text: str, prompt_text: str, prompt_wav: Any) -> dict | None:
