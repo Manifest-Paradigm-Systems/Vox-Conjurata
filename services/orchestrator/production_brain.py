@@ -1037,9 +1037,12 @@ async def get_narrator_voices():
 
 async def get_visual_description(image_path_relative: str) -> str:
     """Uses MiniCPM-V-2.6 (vox-vision-reader) to describe the character image."""
+    if not image_path_relative or image_path_relative.strip() == "":
+        return ""
+
     full_path = FOUNDRY_DATA_DIR / image_path_relative
-    if not full_path.exists():
-        logger.warning(f"🖼️ Visual Scan: Image not found at {full_path}")
+    if not full_path.exists() or full_path.is_dir():
+        logger.warning(f"🖼️ Visual Scan: Image not found or invalid at {full_path}")
         return ""
 
     try:
