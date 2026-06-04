@@ -630,36 +630,40 @@ class CosyVoiceEngine(SpeechEngine):
         seed_path_str = resolve_seed_path(actor_id)
         seed_path = Path(seed_path_str) if seed_path_str else None
 
-        if not seed_path or not seed_path.exists():
-            logger.warning(f"[VOICE-ROUTING] No seed found for {actor_id}. Run /api/ingest-actor first.")
-            return None
-
-        logger.info(f"[VOICE-ROUTING] Using voice seed: {seed_path.name}")
+        # Check for cached neural features first
+        feature_path = VOICE_SEEDS_DIR / f"{actor_id}.pt"
+        
         try:
-            text_path = seed_path.with_suffix(".txt")
-            ref_text = ""
-            if text_path.exists():
-                with open(text_path, "r") as f:
-                    ref_text = f.read().strip()
-
-            f_handle = open(seed_path, "rb")
-            files = {"reference_audio": (seed_path.name, f_handle, "audio/wav")}
+            data = {
+                "text": text,
+                "actor_id": actor_id,
+                "emotion": emotion if not delivery_prompt else delivery_prompt,
+                "mode": "instruct2" if is_archetype else "zero_shot",
+            }
+            
+            files = {}
+            if not feature_path.exists():
+                if not seed_path or not seed_path.exists():
+                    logger.warning(f"[VOICE-ROUTING] No seed found for {actor_id}. Run /api/ingest-actor first.")
+                    return None
+                
+                logger.info(f"[VOICE-ROUTING] CosyVoice: Extracting from raw audio for {actor_id}")
+                text_path = seed_path.with_suffix(".txt")
+                ref_text = ""
+                if text_path.exists():
+                    with open(text_path, "r") as f:
+                        ref_text = f.read().strip()
+                
+                data["prompt_text"] = ref_text
+                f_handle = open(seed_path, "rb")
+                files["reference_audio"] = (seed_path.name, f_handle, "audio/wav")
+            else:
+                logger.info(f"[VOICE-ROUTING] CosyVoice: Bypassing feature extraction for {actor_id} (using .pt cache)")
 
             try:
-                mode = "instruct2" if is_archetype else "zero_shot"
-                data = {
-                    "text": text,
-                    "prompt_text": ref_text,
-                    "emotion": emotion if not delivery_prompt else delivery_prompt,
-                    "mode": mode,
-                }
-                resp = await client.post(
-                    f"{TTS_ACTOR_URL}/api/tts",
-                    data=data,
-                    files=files,
-                )
+                resp = await client.post(f"{TTS_ACTOR_URL}/api/tts", data=data, files=files)
             finally:
-                if f_handle:
+                if "reference_audio" in files:
                     f_handle.close()
 
             if resp.status_code == 200:
