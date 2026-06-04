@@ -709,10 +709,10 @@ class FishSpeechEngine(SpeechEngine):
                 "references": references,
                 "format": "wav",
                 "normalize": True,
-                "latency": "normal",
+                "latency": "latency",
                 "temperature": 0.8, # Increase variance for more exciting voices
                 "top_p": 0.8,
-                "seed": random.randint(0, 1000000)
+                "seed": random.randint(0, 1000000) # Ensure every generation has unique jitter
             }
 
             resp = await client.post(f"{TTS_MONSTER_URL}/v1/tts", json=payload)
@@ -1316,20 +1316,23 @@ async def voice_conversion(request: Request):
             if res_content:
                 transcode_start = time.time()
                 # Transcode WAV → Opus OGG for ~90% smaller streaming to Foundry
-                # (Seed .wav files used for voice cloning are NOT affected — this is
-                # only runtime TTS output returned to the Foundry game client.)
                 if res_content.startswith(b"RIFF"):
                     try:
                         # Boost volume by 3.0 (approx 9.5dB) during transcoding
-                        proc = subprocess.run(
-                            ["ffmpeg", "-i", "pipe:0", "-filter:a", "volume=3.0", 
-                             "-c:a", "libopus", "-b:a", "64k", "-f", "ogg", "pipe:1"],
-                            input=res_content, capture_output=True, timeout=30,
+                        # Use async subprocess to avoid blocking the event loop
+                        process = await asyncio.create_subprocess_exec(
+                            "ffmpeg", "-i", "pipe:0", "-filter:a", "volume=3.0", 
+                            "-c:a", "libopus", "-b:a", "64k", "-f", "ogg", "pipe:1",
+                            stdin=asyncio.subprocess.PIPE,
+                            stdout=asyncio.subprocess.PIPE,
+                            stderr=asyncio.subprocess.PIPE,
                         )
-                        if proc.returncode == 0:
-                            res_content = proc.stdout
+                        stdout, stderr = await process.communicate(input=res_content)
+                        
+                        if process.returncode == 0:
+                            res_content = stdout
                         else:
-                            logger.warning(f"Opus transcode failed (ffmpeg rc={proc.returncode}), sending raw WAV")
+                            logger.warning(f"Opus transcode failed (ffmpeg rc={process.returncode}), stderr={stderr.decode()[:200]}")
                     except Exception as ex:
                         logger.warning(f"Opus transcode error: {ex}, sending raw WAV")
                 logger.info(f"[PERF] Transcoding took {time.time() - transcode_start:.2f}s")
