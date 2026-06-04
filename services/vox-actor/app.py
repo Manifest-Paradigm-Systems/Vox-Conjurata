@@ -20,6 +20,7 @@ import tempfile
 import logging
 import gc
 import time
+import asyncio
 from pathlib import Path
 from typing import Any
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Response
@@ -126,6 +127,31 @@ def _load_model():
     return _cosyvoice
 
 
+async def _prewarm_model():
+    """Run a dummy inference to warm up GPU kernels and trigger any necessary downloads."""
+    try:
+        model = _load_model()
+        logger.info("🔥 Pre-warming CosyVoice 3 models...")
+        
+        # Create a dummy 1-second silence WAV for pre-warming
+        dummy_wav = io.BytesIO()
+        import numpy as np
+        sf.write(dummy_wav, np.zeros(22050), 22050, format='WAV')
+        dummy_wav.seek(0)
+        
+        # Run dummy zero-shot inference
+        for _ in model.inference_zero_shot(
+            tts_text="Pre-warming engine.",
+            prompt_text="A clear speaking voice.<|endofprompt|>Dummy sample.",
+            prompt_wav=dummy_wav,
+            stream=False
+        ):
+            pass
+        logger.info("✅ CosyVoice 3 pre-warming complete.")
+    except Exception as e:
+        logger.warning(f"⚠️ Pre-warming failed (expected on cold start/no models): {e}")
+
+
 def _evict_model():
     """Unload model from VRAM."""
     global _cosyvoice, _loaded
@@ -146,6 +172,10 @@ def _evict_model():
 # ---------------------------------------------------------------------------
 app = FastAPI(title="vox-actor-cosyvoice3")
 
+@app.on_event("startup")
+async def startup_event():
+    # Pre-warm in background to not block startup
+    asyncio.create_task(_prewarm_model())
 
 @app.get("/")
 async def root():
