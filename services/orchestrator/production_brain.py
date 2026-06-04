@@ -1145,20 +1145,27 @@ async def ingest_actor(data: ActorMetadata, force_refresh: bool = False):
 
     is_named = is_named_character(data)
 
+    # Resolve Gender — Prioritize stats if provided and valid
+    gender = str(data.stats.get("gender", "")).lower().strip()
+    if gender not in ["male", "female"]:
+        gender = ""
+
     if data.customDescription:
         logger.info(f"[INGEST] GM Override provided for {data.name}: {data.customDescription}")
         profile_desc = data.customDescription
-        is_female = any(w in profile_desc.lower() for w in ["female", "woman", "lady", "she", "her"])
-        gender = "female" if is_female else "male"
+        if not gender:
+            is_female = any(w in profile_desc.lower() for w in ["female", "woman", "lady", "she", "her"])
+            gender = "female" if is_female else "male"
     else:
         profile_data = await generate_vocal_profile(data, visual_desc)
         profile_desc = profile_data.get("description", "A clear, neutral speaking voice.")
-        gender = profile_data.get("gender", "male").lower().strip()
+        if not gender:
+            gender = profile_data.get("gender", "male").lower().strip()
 
     if gender not in ["male", "female"]:
         gender = "male"
 
-    archetype_key = resolve_archetype(data, profile_data if not data.customDescription else {"gender": gender, "description": profile_desc})
+    archetype_key = resolve_archetype(data, {"gender": gender, "description": profile_desc})
 
     path = await forge_voice_seed(
         actor_id=data.actorId,
