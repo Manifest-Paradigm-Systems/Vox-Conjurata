@@ -46,5 +46,13 @@
     "is_archetype": false,
     "archetype_key": "",
     "created_at": "2026-06-04T06:22:16"
+  },
+  "palette_trigger_halfling_male_irish": {
+    "engine": "fishspeech",
+    "seed_path": "palette_trigger_halfling_male_irish_seed_male.wav",
+    "voice_prompt": "A deep, resonant baritone voice, echoing through a vast, reverberant chamber of ancient stone, with hints of a mysterious, otherworldly timbre.",
+    "is_archetype": false,
+    "archetype_key": "",
+    "created_at": "2026-06-04T06:23:12"
   }
 }
