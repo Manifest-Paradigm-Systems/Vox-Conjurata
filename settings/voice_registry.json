@@ -78,5 +78,13 @@
     "is_archetype": false,
     "archetype_key": "",
     "created_at": "2026-06-04T06:28:36"
+  },
+  "palette_trigger_elder_male_british": {
+    "engine": "fishspeech",
+    "seed_path": "palette_trigger_elder_male_british_seed_male.wav",
+    "voice_prompt": "A clear, low-pitched male voice with natural inflections and a professional tone.",
+    "is_archetype": false,
+    "archetype_key": "",
+    "created_at": "2026-06-04T06:30:27"
   }
 }
