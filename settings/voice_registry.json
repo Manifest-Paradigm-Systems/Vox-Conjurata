@@ -154,10 +154,10 @@
   "trchDxbDR2TiPMxT": {
     "engine": "fishspeech",
     "seed_path": "trchDxbDR2TiPMxT_seed_male.wav",
-    "voice_prompt": "A rasping, bone-chattering tenor emanating from a hollow, echoing chamber of a ribcage, reverberating through the damp, musty air of an ancient tomb.",
+    "voice_prompt": "A bone-chilling, hollow, rattling baritone emanating from a skeletal frame, echoing through a damp, reverberant crypt.",
     "is_archetype": false,
     "archetype_key": "",
-    "created_at": "2026-06-04T07:06:51"
+    "created_at": "2026-06-04T07:11:17"
   },
   "WPsgrCUSFCqgDvJi": {
     "engine": "fishspeech",
