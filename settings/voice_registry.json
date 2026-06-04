@@ -54,5 +54,13 @@
     "is_archetype": false,
     "archetype_key": "",
     "created_at": "2026-06-04T06:23:12"
+  },
+  "palette_trigger_halfling_female_irish": {
+    "engine": "fishspeech",
+    "seed_path": "palette_trigger_halfling_female_irish_seed_female.wav",
+    "voice_prompt": "A deep, resonant voice that echoes through the cavernous halls of a forgotten castle, its timbre a blend of ancient wisdom and untold mysteries.",
+    "is_archetype": false,
+    "archetype_key": "",
+    "created_at": "2026-06-04T06:24:37"
   }
 }
