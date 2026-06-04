@@ -30,5 +30,13 @@
     "is_archetype": false,
     "archetype_key": "",
     "created_at": "2026-06-04T06:20:26"
+  },
+  "palette_trigger_dwarf_male_scottish": {
+    "engine": "fishspeech",
+    "seed_path": "palette_trigger_dwarf_male_scottish_seed_male.wav",
+    "voice_prompt": "A sonorous, honeyed baritone resonates through the echoing reverberant damp cave, rich with the timbre of a thousand ancient tales.",
+    "is_archetype": false,
+    "archetype_key": "",
+    "created_at": "2026-06-04T06:21:24"
   }
 }
