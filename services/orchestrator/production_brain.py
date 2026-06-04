@@ -941,7 +941,7 @@ async def enrich_and_instruct(speaker: str, role: str, text: str, is_monster: bo
             "and 'emotion_tag' (a single descriptive tag like 'Enraged Growl', 'Terrified Whisper', or 'Neutral')."
         )
     payload = {
-        "model": "cheapest",
+        "model": "EVA-UNIT-01/EVA-Qwen2.5-7B-v0.1",
         "messages": [
             {"role": "system", "content": system_instruction},
             {"role": "user", "content": f"Speaker: {speaker}, Text: {text}"},
@@ -1372,7 +1372,7 @@ async def end_dialogue(request: DialogueEndRequest):
         f"{truncated_transcript}"
     )
     payload = {
-        "model": "cheapest",
+        "model": "EVA-UNIT-01/EVA-Qwen2.5-7B-v0.1",
         "prompt": prompt,
         "max_tokens": 512,
         "temperature": 0.5
