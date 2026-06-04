@@ -276,39 +276,47 @@ function updateIngestionProgress(current, total, name) {
     }
 }
 
+let isVoxScanning = false;
 async function scanActiveSceneTokens() {
-    if (!game.user.isGM || !canvas.ready) return;
+    if (!game.user.isGM || !canvas.ready || isVoxScanning) return;
     const tokensToIngest = canvas.tokens.placeables.filter(t => t.actor && !ingestedActors.has(t.actor.id));
     if (tokensToIngest.length === 0) return;
 
+    isVoxScanning = true;
     let processed = 0;
     const total = tokensToIngest.length;
     
     updateIngestionProgress(0, total, "Starting...");
 
-    // Process one-by-one to avoid Cloudflare 524 timeouts (>100s)
-    // 15-second seeds take ~40-50s each, so batching 3 would take ~150s.
+    // Strictly sequential one-by-one to avoid Cloudflare 524 timeouts (>100s)
     for (let token of tokensToIngest) {
         const a = token.actor;
         if (ingestedActors.has(a.id)) { processed++; continue; }
-        ingestedActors.add(a.id);
         
         updateIngestionProgress(processed, total, a.name);
         
         try { 
+            const stats = {
+                race: a.system.details?.race || "Unknown",
+                gender: a.system.details?.gender || a.system.details?.sex || "",
+                level: a.system.details?.level?.value || 0
+            };
+
             await fetch(globalThis.voxState.ingestEndpoint, { 
                 method: "POST", headers: { "Content-Type": "application/json" }, 
                 body: JSON.stringify({
                     actorId: a.id, name: a.name, artPath: a.img, isMonster: resolveIsMonster(a),
                     lore: a.system.details?.biography?.value || a.system.description?.value || "No bio available.",
-                    stats: { race: a.system.details?.race || "Unknown", level: a.system.details?.level?.value || 0 }
+                    stats: stats
                 }) 
             }); 
+            ingestedActors.add(a.id);
         } catch (e) { console.error("Vox Ingestion Error:", e); }
         
         processed++;
         updateIngestionProgress(processed, total, a.name);
     }
+    isVoxScanning = false;
     ui.notifications.info("✅ Vox: All seeds ready for gameplay.");
 }
 
