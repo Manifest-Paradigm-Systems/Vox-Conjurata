@@ -162,9 +162,9 @@
   "WPsgrCUSFCqgDvJi": {
     "engine": "fishspeech",
     "seed_path": "WPsgrCUSFCqgDvJi_seed_male.wav",
-    "voice_prompt": "A thunderous, reverberating bass rumbles from the depths of the juvenile horned dragon's chest, echoing through the damp, cavernous lair. The sound reverberates off the rough stone walls, a primal, ancient vibration that shakes the very foundations of the earth.",
+    "voice_prompt": "A thunderous, bone-shattering roar reverberates through the echoing cavernous lair, a vicious gravel-crushed baritone that rattles ancient stalactites and sends shivers down the spines of even the bravest adventurers.",
     "is_archetype": false,
     "archetype_key": "",
-    "created_at": "2026-06-04T07:07:58"
+    "created_at": "2026-06-04T07:10:32"
   }
 }
