@@ -110,5 +110,21 @@
     "is_archetype": false,
     "archetype_key": "",
     "created_at": "2026-06-04T06:35:22"
+  },
+  "palette_trigger_monster_dragon": {
+    "engine": "fishspeech",
+    "seed_path": "palette_trigger_monster_dragon_seed_male.wav",
+    "voice_prompt": "A thunderous, fire-roasted baritone that reverberates through the echoing caverns of a volcanic lair, accompanied by the crackling of flames and the scraping of scales against ancient stone.",
+    "is_archetype": false,
+    "archetype_key": "",
+    "created_at": "2026-06-04T06:36:08"
+  },
+  "palette_trigger_monster_demon": {
+    "engine": "fishspeech",
+    "seed_path": "palette_trigger_monster_demon_seed_male.wav",
+    "voice_prompt": "A guttural, sulfuric baritone emanating from the depths of the underworld, echoing through a cavernous, reverberant chamber of ancient evil.",
+    "is_archetype": false,
+    "archetype_key": "",
+    "created_at": "2026-06-04T06:36:26"
   }
 }
