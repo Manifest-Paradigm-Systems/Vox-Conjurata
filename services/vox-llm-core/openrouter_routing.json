@@ -11,7 +11,7 @@
     },
     "cheapest": {
       "strategy": "latency",
-      "model": "google/gemini-flash-1.5"
+      "model": "openai/gpt-4o-mini"
     },
     "coding-cheap": {
       "strategy": "cost",
