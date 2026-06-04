@@ -94,5 +94,13 @@
     "is_archetype": false,
     "archetype_key": "",
     "created_at": "2026-06-04T06:32:31"
+  },
+  "palette_trigger_monster_beast": {
+    "engine": "fishspeech",
+    "seed_path": "palette_trigger_monster_beast_seed_male.wav",
+    "voice_prompt": "A guttural, primal roar reverberates through the dense jungle undergrowth, a sound that sends shivers down the spines of all who hear it. It's a noise that seems to emanate from the very heart of the wild, a call that echoes through the humid, air-thick foliage.",
+    "is_archetype": false,
+    "archetype_key": "",
+    "created_at": "2026-06-04T06:34:17"
   }
 }
