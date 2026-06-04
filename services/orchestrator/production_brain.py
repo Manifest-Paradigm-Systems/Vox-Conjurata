@@ -211,7 +211,7 @@ async def get_palette_lock(archetype_key: str) -> asyncio.Lock:
         return palette_locks[archetype_key]
 
 async def ensure_palette_seed(archetype_key: str) -> str:
-    """Ensure a palette archetype seed exists — generate via Fish Speech for textured base voices.
+    """Ensure a palette archetype seed exists — generate via CosyVoice 3 (Instruct) for textured base voices.
 
     Returns the absolute path to the palette seed WAV.
     """
@@ -233,21 +233,34 @@ async def ensure_palette_seed(archetype_key: str) -> str:
             return ""
 
         PALETTE_DIR.mkdir(parents=True, exist_ok=True)
-        logger.info(f"[PALETTE] Generating new archetype seed: {archetype_key} (via Fish Speech)")
+        logger.info(f"[PALETTE] Generating new archetype seed: {archetype_key} (via CosyVoice 3 Instruct)")
 
         async with httpx.AsyncClient(timeout=180.0) as client:
             try:
-                # Generate the base archetype using Fish Speech's ability to interpret style from text prompts
-                payload = {
-                    "text": "Hello, I am a character in this world, and this is my unique voice.",
-                    "references": [], # No reference audio; generate purely from the 'text' (which includes our [tags])
-                    "format": "wav",
-                    "normalize": True
-                }
-                # Fish Speech handles the [tags] at the beginning of the text as style instructions
-                payload["text"] = f"{prompt} {payload['text']}"
+                # We use CosyVoice 3 in Instruct mode to generate the base archetype seed.
+                # This provides significantly better monstrous/accented textures than Fish Speech from text.
+                narrator_wav = VOICE_SEEDS_DIR / "narrator_seed_male.wav"
                 
-                resp = await client.post(f"{TTS_MONSTER_URL}/v1/tts", json=payload)
+                data = {
+                    "text": "Hello, I am a character in this world, and this is my unique voice.",
+                    "prompt_text": "A clear speaking voice.",
+                    "emotion": prompt, # Pass the detailed palette prompt here
+                    "mode": "instruct2",
+                }
+                
+                files = {}
+                if narrator_wav.exists():
+                    f_handle = open(narrator_wav, "rb")
+                    files["reference_audio"] = (narrator_wav.name, f_handle, "audio/wav")
+                else:
+                    logger.warning("[PALETTE] No narrator_seed_male.wav found, palette gen may be flat.")
+
+                try:
+                    resp = await client.post(f"{TTS_ACTOR_URL}/api/tts", data=data, files=files)
+                finally:
+                    if "reference_audio" in files:
+                        f_handle.close()
+
                 if resp.status_code == 200:
                     palette_path.write_bytes(resp.content)
                     # Also write companion transcript
@@ -258,10 +271,10 @@ async def ensure_palette_seed(archetype_key: str) -> str:
                     logger.info(f"[PALETTE] Created {archetype_key} → {palette_path.name}")
                     return str(palette_path)
                 else:
-                    logger.error(f"[PALETTE] Fish Speech returned {resp.status_code} for {archetype_key}")
+                    logger.error(f"[PALETTE] CosyVoice returned {resp.status_code} for {archetype_key}: {resp.text}")
                     return ""
             except Exception as e:
-                logger.error(f"[PALETTE] Fish Speech error for {archetype_key}: {e}")
+                logger.error(f"[PALETTE] Generation error for {archetype_key}: {e}")
                 return ""
 
 
@@ -337,24 +350,21 @@ def standardize_speech_text(text: str, engine_type: str, emotion: str) -> str:
     """
     import re
 
-    # Strip metadata-prefix patterns (Mood: Enraged, etc.)
-    # This regex now greedily consumes until the end of the line or a punctuation/capital-letter start
-    # to ensure long instructions are fully removed.
-    clean_text = re.sub(r'(?:^|\s)(?:Mood|Emotion|Sentiment|Tone|Note|Instruction|Direction|Delivery):\s*.*?(?=[A-Z][a-z]+|\n|$)',
-                       '', text, flags=re.IGNORECASE)
+    # Robustly strip metadata-prefix patterns (Mood: Enraged, etc.)
+    # Matches until the end of the sentence or line to ensure full removal.
+    clean_text = re.sub(r'(?i)(?:Mood|Emotion|Sentiment|Tone|Note|Instruction|Direction|Delivery):\s*.*?(?=[.!?]|\n|$)',
+                       '', text)
     
     # Strip all bracketed/parenthetical instructions (e.g. [growl], (whispers))
-    # This prevents Fish Speech from speaking these instructions aloud.
     clean_text = re.sub(r'\[.*?\]', '', clean_text)
     clean_text = re.sub(r'\(.*?\)', '', clean_text)
     clean_text = re.sub(r'\*.*?\*', '', clean_text)
     
-    # Final cleanup of extra whitespace and leading punctuation left by regex
+    # Final cleanup of leading/trailing non-word characters and extra whitespace
     clean_text = re.sub(r'^\W+', '', clean_text)
     clean_text = re.sub(r'\s+', ' ', clean_text).strip()
 
     if engine_type == "cosyvoice":
-        # Keep <tags> for CosyVoice if we want, but usually keep it clean
         return clean_text
 
     return clean_text
