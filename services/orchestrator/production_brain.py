@@ -1372,7 +1372,7 @@ async def end_dialogue(request: DialogueEndRequest):
         f"{truncated_transcript}"
     )
     payload = {
-        "model": "EVA-UNIT-01/EVA-Qwen2.5-7B-v0.1",
+        "model": "cheapest",
         "prompt": prompt,
         "max_tokens": 512,
         "temperature": 0.5
