@@ -7,11 +7,24 @@ Port:     5020
 Performance optimisations:
   - Model loaded on first request; kept warm for subsequent calls.
   - MIOpen kernel warm-up on startup via dummy inference.
-  - Reference audio saved as tempfile, passed to CosyVoice inference_zero_shot.
+  - In-memory BytesIO buffers for audio I/O (diskless pipeline).
 """
 
 import sys
 import os
+import io
+import torch
+import torchaudio
+import soundfile as sf
+import tempfile
+import logging
+import gc
+import time
+from pathlib import Path
+from typing import Any
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Response
+from fastapi.responses import FileResponse, JSONResponse
+
 os.environ["MIOPEN_FIND_MODE"] = "2"
 
 # Add CosyVoice package path (cloned at build time from GitHub)
@@ -21,23 +34,10 @@ for _p in [_cosyvoice_dir, _matcha_dir]:
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-import torch
-import torchaudio
-import soundfile as sf
-import tempfile
-import logging
-import gc
-import time
-from pathlib import Path
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
-from fastapi.responses import FileResponse, JSONResponse
-
 # ---------------------------------------------------------------------------
 # Monkeypatch: torchaudio in 2026 forces torchcodec, which is broken on ROCm
 # ---------------------------------------------------------------------------
 def _monkeypatch_torchaudio_load(uri, **kwargs):
-    logging.info(f"Monkeypatch loading audio: {uri}")
-    # Simple soundfile-based fallback that ignores ignored arguments
     # soundfile.read returns (time, channels), torchaudio expects (channels, time)
     data, samplerate = sf.read(uri, dtype='float32')
     tensor = torch.from_numpy(data)
@@ -45,11 +45,9 @@ def _monkeypatch_torchaudio_load(uri, **kwargs):
         tensor = tensor.unsqueeze(0)
     else:
         tensor = tensor.T
-    logging.info(f"Monkeypatch loaded: {tensor.shape} @ {samplerate} Hz")
     return tensor, samplerate
 
 def _monkeypatch_torchaudio_save(uri, tensor, sample_rate, **kwargs):
-    logging.info(f"Monkeypatch saving audio: {uri} (shape={tensor.shape})")
     # soundfile expects [time, channels]
     # torchaudio.save expects [channels, time]
     
@@ -85,8 +83,6 @@ logger = logging.getLogger("vox-actor")
 _rocm_available = torch.cuda.is_available()
 _device = "cuda" if _rocm_available else "cpu"
 logger.info(f"PyTorch backend: {_device} | ROCm/HIP: {_rocm_available}")
-if _rocm_available:
-    logger.info(f"GPU: {torch.cuda.get_device_name(0)}")
 
 # ---------------------------------------------------------------------------
 # CosyVoice 3 — lazy-loaded on first request, kept warm
@@ -180,31 +176,15 @@ async def text_to_speech(
     emotion: str = Form("default"),
     mode: str = Form("zero_shot"),
 ):
-    """TTS via CosyVoice 3.
-
-    Accepts:
-      - text: the dialogue line to speak (required)
-      - reference_audio: WAV file for voice cloning (required)
-      - prompt_text: what words are spoken in the reference audio
-        (optional; if empty, a generic default is used)
-      - emotion: emotion hint for prompt_text construction
-      - mode: "zero_shot" (default, pure voice cloning) or
-        "instruct2" (instruct-text guided delivery modulation)
-
-    Returns: WAV audio bytes.
-    """
+    """TTS via CosyVoice 3 with in-memory audio processing."""
     if not text.strip():
         raise HTTPException(status_code=400, detail="Empty text")
 
     model = _load_model()
 
-    # Save reference audio to a temp WAV
-    ref_fd, ref_path = tempfile.mkstemp(suffix=".wav")
-    os.close(ref_fd)
     try:
         ref_bytes = await reference_audio.read()
-        with open(ref_path, "wb") as f:
-            f.write(ref_bytes)
+        ref_buf = io.BytesIO(ref_bytes)
 
         # If no prompt_text provided, use a fixed default
         if not prompt_text.strip():
@@ -220,39 +200,39 @@ async def text_to_speech(
             f"prompt='{prompt_text[:60]}...' emotion='{emotion}' ref={len(ref_bytes)} bytes"
         )
 
-        # Run inference — select mode
+        # Run inference — select mode (passing BytesIO buffer directly)
         if mode == "instruct2":
-            result = _run_instruct2(model, text, prompt_text, ref_path)
+            result = _run_instruct2(model, text, prompt_text, ref_buf)
         else:
-            result = _run_zero_shot(model, text, prompt_text, ref_path)
+            result = _run_zero_shot(model, text, prompt_text, ref_buf)
 
         if result is None or "tts_speech" not in result:
             raise HTTPException(status_code=500, detail="CosyVoice 3 returned no output")
 
-        # Convert tensor to WAV
+        # Convert tensor to WAV in memory
         audio_tensor = result["tts_speech"].cpu()
         sample_rate = model.sample_rate
+        
+        # soundfile expects [time, channels], torchaudio tensor is usually [channels, time]
+        if audio_tensor.ndim == 3:
+            audio_tensor = audio_tensor.squeeze(0)
+        
+        if audio_tensor.ndim == 2:
+            audio_data = audio_tensor.T.numpy()
+        else:
+            audio_data = audio_tensor.numpy()
 
-        out_fd, out_path = tempfile.mkstemp(suffix=".wav")
-        os.close(out_fd)
-        try:
-            torchaudio.save(out_path, audio_tensor, sample_rate)
-            logger.info(f"CosyVoice 3 done ({audio_tensor.shape} samples @ {sample_rate} Hz)")
-            return FileResponse(out_path, media_type="audio/wav")
-        except Exception as e:
-            logger.error(f"CosyVoice 3 save error: {e}")
-            if os.path.exists(out_path):
-                os.remove(out_path)
-            raise HTTPException(status_code=500, detail=str(e))
+        out_buf = io.BytesIO()
+        sf.write(out_buf, audio_data, sample_rate, format='WAV')
+        
+        logger.info(f"CosyVoice 3 done ({audio_tensor.shape} samples @ {sample_rate} Hz)")
+        return Response(content=out_buf.getvalue(), media_type="audio/wav")
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"CosyVoice 3 inference error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        if os.path.exists(ref_path):
-            os.remove(ref_path)
 
 
 @app.post("/api/voice-design")
@@ -261,20 +241,7 @@ async def voice_design(
     instruct_text: str = Form(...),
     reference_audio: UploadFile = File(...),
 ):
-    """Generate a unique voice from a text description using instruct2.
-
-    Uses CosyVoice 3's inference_instruct2: the reference_audio provides
-    base voice identity (speaker embedding), while instruct_text describes
-    *how* to deliver the speech (age, emotion, accent modulation).
-
-    Accepts:
-      - text: the dialogue / preview text to speak
-      - instruct_text: acoustic delivery description
-        (e.g. "A raspy old man with a Scottish accent, slow and deliberate")
-      - reference_audio: WAV file providing the base voice identity
-
-    Returns: WAV audio bytes of the unique voice.
-    """
+    """Generate a unique voice from a text description using instruct2 (in-memory)."""
     if not text.strip():
         raise HTTPException(status_code=400, detail="Empty text")
     if not instruct_text.strip():
@@ -282,12 +249,9 @@ async def voice_design(
 
     model = _load_model()
 
-    ref_fd, ref_path = tempfile.mkstemp(suffix=".wav")
-    os.close(ref_fd)
     try:
         ref_bytes = await reference_audio.read()
-        with open(ref_path, "wb") as f:
-            f.write(ref_bytes)
+        ref_buf = io.BytesIO(ref_bytes)
 
         logger.info(
             f"CosyVoice 3 voice-design: text='{text[:60]}...' "
@@ -298,7 +262,7 @@ async def voice_design(
         if "<|endofprompt|>" not in instruct_text:
             instruct_text = f"{instruct_text}<|endofprompt|>This is a voice design sample."
 
-        result = _run_instruct2(model, text, instruct_text, ref_path)
+        result = _run_instruct2(model, text, instruct_text, ref_buf)
 
         if result is None or "tts_speech" not in result:
             raise HTTPException(status_code=500, detail="CosyVoice 3 voice-design returned no output")
@@ -306,29 +270,28 @@ async def voice_design(
         audio_tensor = result["tts_speech"].cpu()
         sample_rate = model.sample_rate
 
-        out_fd, out_path = tempfile.mkstemp(suffix=".wav")
-        os.close(out_fd)
-        try:
-            torchaudio.save(out_path, audio_tensor, sample_rate)
-            logger.info(f"CosyVoice 3 voice-design done ({audio_tensor.shape} samples @ {sample_rate} Hz)")
-            return FileResponse(out_path, media_type="audio/wav")
-        except Exception as e:
-            logger.error(f"CosyVoice 3 voice-design save error: {e}")
-            if os.path.exists(out_path):
-                os.remove(out_path)
-            raise HTTPException(status_code=500, detail=str(e))
+        # Convert tensor to WAV in memory
+        if audio_tensor.ndim == 3:
+            audio_tensor = audio_tensor.squeeze(0)
+        if audio_tensor.ndim == 2:
+            audio_data = audio_tensor.T.numpy()
+        else:
+            audio_data = audio_tensor.numpy()
+
+        out_buf = io.BytesIO()
+        sf.write(out_buf, audio_data, sample_rate, format='WAV')
+        
+        logger.info(f"CosyVoice 3 voice-design done ({audio_tensor.shape} samples @ {sample_rate} Hz)")
+        return Response(content=out_buf.getvalue(), media_type="audio/wav")
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"CosyVoice 3 voice-design error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        if os.path.exists(ref_path):
-            os.remove(ref_path)
 
 
-def _run_zero_shot(model, tts_text: str, prompt_text: str, prompt_wav: str) -> dict | None:
+def _run_zero_shot(model, tts_text: str, prompt_text: str, prompt_wav: Any) -> dict | None:
     """Run inference_zero_shot — pure voice cloning from reference."""
     result = None
     for i, j in enumerate(
@@ -343,12 +306,8 @@ def _run_zero_shot(model, tts_text: str, prompt_text: str, prompt_wav: str) -> d
     return result
 
 
-def _run_instruct2(model, tts_text: str, instruct_text: str, prompt_wav: str) -> dict | None:
-    """Run inference_instruct2 — instruct-text guided delivery modulation.
-
-    Falls back to inference_zero_shot if instruct2 is not available
-    (e.g. on older CosyVoice versions).
-    """
+def _run_instruct2(model, tts_text: str, instruct_text: str, prompt_wav: Any) -> dict | None:
+    """Run inference_instruct2 — instruct-text guided delivery modulation."""
     if not hasattr(model, "inference_instruct2"):
         logger.warning(
             "inference_instruct2 not available on this CosyVoice model; "
