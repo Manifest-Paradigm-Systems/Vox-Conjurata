@@ -935,7 +935,8 @@ async def enrich_and_instruct(speaker: str, role: str, text: str, is_monster: bo
         system_instruction = (
             "You are a cinematic dialogue director. Analyze the text for emotional subtext. "
             "Output JSON with 'emotional_resonance', 'vocal_delivery_prompt', "
-            "and 'emotion_tag' (a single descriptive tag like 'Enraged Growl', 'Terrified Whisper', or 'Neutral')."
+            "and 'emotion_tag' (a single descriptive tag like 'Enraged Growl', 'Terrified Whisper', or 'Neutral').\n\n"
+            "CRITICAL: DO NOT REWRITE OR MODIFY THE DIALOGUE TEXT. RETURN IT EXACTLY AS PROVIDED."
         )
     payload = {
         "model": "EVA-UNIT-01/EVA-Qwen2.5-7B-v0.1",
