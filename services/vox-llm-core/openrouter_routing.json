@@ -10,8 +10,8 @@
       "model": "sao10k/l3.1-euryale-70b"
     },
     "cheapest": {
-      "strategy": "cost",
-      "model": "deepseek/deepseek-chat"
+      "strategy": "latency",
+      "model": "google/gemini-2.0-flash-001"
     },
     "coding-cheap": {
       "strategy": "cost",
