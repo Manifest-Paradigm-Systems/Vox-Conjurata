@@ -222,6 +222,7 @@ services:
     - COSYVOICE_MODEL_DIR=/models/Fun-CosyVoice3-0.5B
     volumes:
     - model_storage:/models:z
+    - ./cache/vox-actor:/root/.cache:Z
     networks:
     - vox-net
     restart: unless-stopped
