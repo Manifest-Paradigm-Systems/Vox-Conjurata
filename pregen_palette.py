@@ -13,18 +13,30 @@ async def pregenerate_palette():
     # We trigger these via dummy actors that match the archetypes
     tasks = []
     for key in PALETTE_KEYS:
-        # Construct a dummy actor to trigger the palette generation
+        # Use generic names to avoid 'named character' unique seed generation
+        # We just want to trigger the foundation palette generation
         is_monster = key.startswith("monster")
         gender = "female" if "female" in key else "male"
-        race = key.split("_")[0]
-        if race == "monster": race = key.split("_")[1]
         
+        # Map back to a name that resolve_archetype will handle generically
+        name = "Generic Actor"
+        race = "human"
+        if "elf" in key: race = "elf"
+        if "dwarf" in key: race = "dwarf"
+        if "halfling" in key: race = "halfling"
+        if "barbarian" in key: name = "Barbarian"
+        if "elder" in key: name = "Elderly Person"
+        
+        if is_monster:
+            race = key.split("_")[1]
+            name = race.capitalize()
+
         payload = {
             "actorId": f"palette_trigger_{key}",
-            "name": f"Palette Trigger {key}",
-            "lore": "trigger",
+            "name": name,
+            "lore": "generic",
             "stats": {"race": race, "gender": gender},
-            "artPath": "",
+            "artPath": "", # Skip vision
             "isMonster": is_monster
         }
         tasks.append(payload)

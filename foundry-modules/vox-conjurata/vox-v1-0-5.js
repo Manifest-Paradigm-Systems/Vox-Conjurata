@@ -285,41 +285,36 @@ async function scanActiveSceneTokens() {
     isVoxScanning = true;
     let processed = 0;
     const total = tokensToIngest.length;
-    const batchSize = 2; // Concurrent batches of 2 to balance speed/timeout safety
     
     updateIngestionProgress(0, total, "Starting...");
 
-    // Split into concurrent batches
-    for (let i = 0; i < tokensToIngest.length; i += batchSize) {
-        const batch = tokensToIngest.slice(i, i + batchSize);
+    // Strictly sequential one-by-one to avoid Cloudflare 524 timeouts (>100s)
+    for (let token of tokensToIngest) {
+        const a = token.actor;
+        if (ingestedActors.has(a.id)) { processed++; continue; }
         
-        await Promise.all(batch.map(async (token) => {
-            const a = token.actor;
-            if (ingestedActors.has(a.id)) { processed++; return; }
-            
-            updateIngestionProgress(processed, total, a.name);
-            
-            try { 
-                const stats = {
-                    race: a.system.details?.race || "Unknown",
-                    gender: a.system.details?.gender || a.system.details?.sex || "",
-                    level: a.system.details?.level?.value || 0
-                };
+        updateIngestionProgress(processed, total, a.name);
+        
+        try { 
+            const stats = {
+                race: a.system.details?.race || "Unknown",
+                gender: a.system.details?.gender || a.system.details?.sex || "",
+                level: a.system.details?.level?.value || 0
+            };
 
-                await fetch(globalThis.voxState.ingestEndpoint, { 
-                    method: "POST", headers: { "Content-Type": "application/json" }, 
-                    body: JSON.stringify({
-                        actorId: a.id, name: a.name, artPath: a.img, isMonster: resolveIsMonster(a),
-                        lore: a.system.details?.biography?.value || a.system.description?.value || "No bio available.",
-                        stats: stats
-                    }) 
-                }); 
-                ingestedActors.add(a.id);
-            } catch (e) { console.error("Vox Ingestion Error:", e); }
-            
-            processed++;
-            updateIngestionProgress(processed, total, a.name);
-        }));
+            await fetch(globalThis.voxState.ingestEndpoint, { 
+                method: "POST", headers: { "Content-Type": "application/json" }, 
+                body: JSON.stringify({
+                    actorId: a.id, name: a.name, artPath: a.img, isMonster: resolveIsMonster(a),
+                    lore: a.system.details?.biography?.value || a.system.description?.value || "No bio available.",
+                    stats: stats
+                }) 
+            }); 
+            ingestedActors.add(a.id);
+        } catch (e) { console.error("Vox Ingestion Error:", e); }
+        
+        processed++;
+        updateIngestionProgress(processed, total, a.name);
     }
     isVoxScanning = false;
     ui.notifications.info("✅ Vox: All seeds ready for gameplay.");
