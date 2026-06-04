@@ -38,5 +38,13 @@
     "is_archetype": false,
     "archetype_key": "",
     "created_at": "2026-06-04T06:21:24"
+  },
+  "palette_trigger_dwarf_female_scottish": {
+    "engine": "fishspeech",
+    "seed_path": "palette_trigger_dwarf_female_scottish_seed_female.wav",
+    "voice_prompt": "A sonorous, honeyed tenor resonates within the echoing reverberant damp cave, its rich timbre bouncing off the stone walls and reverberating with ancient wisdom.",
+    "is_archetype": false,
+    "archetype_key": "",
+    "created_at": "2026-06-04T06:22:16"
   }
 }
