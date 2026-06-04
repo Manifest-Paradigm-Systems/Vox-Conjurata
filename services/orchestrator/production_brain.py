@@ -339,10 +339,12 @@ def standardize_speech_text(text: str, engine_type: str, emotion: str) -> str:
     import re
 
     # Extremely aggressive stripping of all metadata prefixes and their contents
-    # Consumes until a newline or end of string if it starts with a keyword.
+    # Matches patterns like "Instruction: ...", "Mood: ...", etc. and everything until a new sentence or line.
     patterns = [
-        r'(?i)^(?:Mood|Emotion|Sentiment|Tone|Note|Instruction|Direction|Delivery|Background|Acoustics|Style|Voice|Speaker):\s*.*?(?:\n|$)',
-        r'(?i)\s+(?:Mood|Emotion|Sentiment|Tone|Note|Instruction|Direction|Delivery|Background|Acoustics|Style|Voice|Speaker):\s*.*?(?:\n|$)'
+        r'(?i)^(?:Mood|Emotion|Sentiment|Tone|Note|Instruction|Direction|Delivery|Background|Acoustics|Style|Voice|Speaker):\s*.*?(?=[A-Z][a-z]+|\n|$)',
+        r'(?i)\s+(?:Mood|Emotion|Sentiment|Tone|Note|Instruction|Direction|Delivery|Background|Acoustics|Style|Voice|Speaker):\s*.*?(?=[A-Z][a-z]+|\n|$)',
+        r'(?i)^(?:Mood|Emotion|Sentiment|Tone|Note|Instruction|Direction|Delivery|Background|Acoustics|Style|Voice|Speaker):\s*.*?[.!?]\s*',
+        r'(?i)\s+(?:Mood|Emotion|Sentiment|Tone|Note|Instruction|Direction|Delivery|Background|Acoustics|Style|Voice|Speaker):\s*.*?[.!?]\s*'
     ]
     clean_text = text
     for pat in patterns:
@@ -353,7 +355,7 @@ def standardize_speech_text(text: str, engine_type: str, emotion: str) -> str:
     clean_text = re.sub(r'\(.*?\)', '', clean_text)
     clean_text = re.sub(r'\*.*?\*', '', clean_text)
     
-    # Final cleanup
+    # Final cleanup of leading/trailing non-word characters and extra whitespace
     clean_text = re.sub(r'^\W+', '', clean_text)
     clean_text = re.sub(r'\s+', ' ', clean_text).strip()
     return clean_text
