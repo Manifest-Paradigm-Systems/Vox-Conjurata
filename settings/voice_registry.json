@@ -22,5 +22,13 @@
     "is_archetype": false,
     "archetype_key": "",
     "created_at": "2026-06-04T06:19:22"
+  },
+  "palette_trigger_elf_female_french": {
+    "engine": "fishspeech",
+    "seed_path": "palette_trigger_elf_female_french_seed_female.wav",
+    "voice_prompt": "A deep, resonant bass-baritone voice, echoing with the weight of centuries of wisdom, reverberates through the vast, echoing chamber of an ancient, forgotten temple.",
+    "is_archetype": false,
+    "archetype_key": "",
+    "created_at": "2026-06-04T06:20:26"
   }
 }
