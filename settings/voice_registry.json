@@ -14,5 +14,13 @@
     "is_archetype": false,
     "archetype_key": "",
     "created_at": "2026-06-04T06:17:50"
+  },
+  "palette_trigger_elf_male_french": {
+    "engine": "fishspeech",
+    "seed_path": "palette_trigger_elf_male_french_seed_male.wav",
+    "voice_prompt": "A thunderous, echoing baritone resonates through the cavernous halls, reverberating off ancient stone walls. The voice carries the weight of untold centuries, a whiskey-soaked rasp that hints at a life of epic quests and hard-won battles.",
+    "is_archetype": false,
+    "archetype_key": "",
+    "created_at": "2026-06-04T06:19:22"
   }
 }
