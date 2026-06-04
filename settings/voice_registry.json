@@ -102,5 +102,13 @@
     "is_archetype": false,
     "archetype_key": "",
     "created_at": "2026-06-04T06:34:17"
+  },
+  "palette_trigger_monster_undead": {
+    "engine": "fishspeech",
+    "seed_path": "palette_trigger_monster_undead_seed_male.wav",
+    "voice_prompt": "A haunting, sepulchral baritone emanates from the Undead, echoing with the weight of centuries in a vast, cavernous tomb. His voice reverberates with a chilling, supernatural resonance that sends shivers down the spine.",
+    "is_archetype": false,
+    "archetype_key": "",
+    "created_at": "2026-06-04T06:35:22"
   }
 }
