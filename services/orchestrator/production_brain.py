@@ -199,51 +199,70 @@ def resolve_archetype(actor_data: "ActorMetadata", vocal_profile: dict) -> str:
     return f"human_{gender}_british"
 
 
+# Concurrency Control
+palette_locks: dict[str, asyncio.Lock] = {}
+global_palette_master_lock = asyncio.Lock()
+seed_forge_lock = asyncio.Lock() # Global lock for GPU-intensive forge operations
+
+async def get_palette_lock(archetype_key: str) -> asyncio.Lock:
+    async with global_palette_master_lock:
+        if archetype_key not in palette_locks:
+            palette_locks[archetype_key] = asyncio.Lock()
+        return palette_locks[archetype_key]
+
 async def ensure_palette_seed(archetype_key: str) -> str:
     """Ensure a palette archetype seed exists — generate via Fish Speech for textured base voices.
 
     Returns the absolute path to the palette seed WAV.
     """
     palette_path = PALETTE_DIR / f"{archetype_key}.wav"
+    
+    # Fast check without lock
     if palette_path.exists():
         return str(palette_path)
 
-    prompt = PALETTE_DEFINITIONS.get(archetype_key)
-    if not prompt:
-        logger.error(f"[PALETTE] Unknown archetype key: {archetype_key}")
-        return ""
+    lock = await get_palette_lock(archetype_key)
+    async with lock:
+        # Re-check after acquiring lock
+        if palette_path.exists():
+            return str(palette_path)
 
-    PALETTE_DIR.mkdir(parents=True, exist_ok=True)
-    logger.info(f"[PALETTE] Generating new archetype seed: {archetype_key} (via Fish Speech)")
-
-    async with httpx.AsyncClient(timeout=180.0) as client:
-        try:
-            # Generate the base archetype using Fish Speech's ability to interpret style from text prompts
-            payload = {
-                "text": "Hello, I am a character in this world, and this is my unique voice.",
-                "references": [], # No reference audio; generate purely from the 'text' (which includes our [tags])
-                "format": "wav",
-                "normalize": True
-            }
-            # Fish Speech handles the [tags] at the beginning of the text as style instructions
-            payload["text"] = f"{prompt} {payload['text']}"
-            
-            resp = await client.post(f"{TTS_MONSTER_URL}/v1/tts", json=payload)
-            if resp.status_code == 200:
-                palette_path.write_bytes(resp.content)
-                # Also write companion transcript
-                transcript_path = palette_path.with_suffix(".txt")
-                transcript_path.write_text(
-                    "Hello, I am a character in this world, and this is my unique voice."
-                )
-                logger.info(f"[PALETTE] Created {archetype_key} → {palette_path.name}")
-                return str(palette_path)
-            else:
-                logger.error(f"[PALETTE] Fish Speech returned {resp.status_code} for {archetype_key}")
-                return ""
-        except Exception as e:
-            logger.error(f"[PALETTE] Fish Speech error for {archetype_key}: {e}")
+        prompt = PALETTE_DEFINITIONS.get(archetype_key)
+        if not prompt:
+            logger.error(f"[PALETTE] Unknown archetype key: {archetype_key}")
             return ""
+
+        PALETTE_DIR.mkdir(parents=True, exist_ok=True)
+        logger.info(f"[PALETTE] Generating new archetype seed: {archetype_key} (via Fish Speech)")
+
+        async with httpx.AsyncClient(timeout=180.0) as client:
+            try:
+                # Generate the base archetype using Fish Speech's ability to interpret style from text prompts
+                payload = {
+                    "text": "Hello, I am a character in this world, and this is my unique voice.",
+                    "references": [], # No reference audio; generate purely from the 'text' (which includes our [tags])
+                    "format": "wav",
+                    "normalize": True
+                }
+                # Fish Speech handles the [tags] at the beginning of the text as style instructions
+                payload["text"] = f"{prompt} {payload['text']}"
+                
+                resp = await client.post(f"{TTS_MONSTER_URL}/v1/tts", json=payload)
+                if resp.status_code == 200:
+                    palette_path.write_bytes(resp.content)
+                    # Also write companion transcript
+                    transcript_path = palette_path.with_suffix(".txt")
+                    transcript_path.write_text(
+                        "Hello, I am a character in this world, and this is my unique voice."
+                    )
+                    logger.info(f"[PALETTE] Created {archetype_key} → {palette_path.name}")
+                    return str(palette_path)
+                else:
+                    logger.error(f"[PALETTE] Fish Speech returned {resp.status_code} for {archetype_key}")
+                    return ""
+            except Exception as e:
+                logger.error(f"[PALETTE] Fish Speech error for {archetype_key}: {e}")
+                return ""
 
 
 def is_named_character(actor_data: "ActorMetadata") -> bool:
@@ -841,41 +860,42 @@ async def forge_voice_seed(
     seed_path = VOICE_SEEDS_DIR / f"{actor_id}_seed_{gender}.wav"
     text_path = VOICE_SEEDS_DIR / f"{actor_id}_seed_{gender}.txt"
 
-    async with httpx.AsyncClient(timeout=180.0) as client:
-        try:
-            # We now use Fish Speech as the primary sound designer for ALL unique seeds.
-            # This ensures character voices are diverse and not just narrator clones.
-            logger.info(f"[VOICE-SEED] Using Fish Speech to forge unique seed for: {actor_id}")
-            archetype_b64 = base64.b64encode(archetype_path.read_bytes()).decode("utf-8")
-            
-            # Use the acoustic_description as the 'prompt' within the text for Fish Speech
-            # and the archetype audio as the reference speaker identity.
-            payload = {
-                "text": f"[{acoustic_description[:100]}] {seed_text}",
-                "references": [{"audio": archetype_b64, "text": seed_text}],
-                "format": "wav",
-                "normalize": True
-            }
-            response = await client.post(f"{TTS_MONSTER_URL}/v1/tts", json=payload)
+    async with seed_forge_lock: # Serialize GPU intensive operations
+        async with httpx.AsyncClient(timeout=180.0) as client:
+            try:
+                # We now use Fish Speech as the primary sound designer for ALL unique seeds.
+                # This ensures character voices are diverse and not just narrator clones.
+                logger.info(f"[VOICE-SEED] Using Fish Speech to forge unique seed for: {actor_id}")
+                archetype_b64 = base64.b64encode(archetype_path.read_bytes()).decode("utf-8")
+                
+                # Use the acoustic_description as the 'prompt' within the text for Fish Speech
+                # and the archetype audio as the reference speaker identity.
+                payload = {
+                    "text": f"[{acoustic_description[:100]}] {seed_text}",
+                    "references": [{"audio": archetype_b64, "text": seed_text}],
+                    "format": "wav",
+                    "normalize": True
+                }
+                response = await client.post(f"{TTS_MONSTER_URL}/v1/tts", json=payload)
 
-            if response.status_code == 200:
-                seed_path.write_bytes(response.content)
-                text_path.write_text(seed_text)
-                register_character_voice(
-                    actor_id=actor_id,
-                    engine="fishspeech",
-                    seed_path=str(seed_path.relative_to(VOICE_SEEDS_DIR)),
-                    voice_prompt=acoustic_description,
-                    is_archetype=False,
-                )
-                logger.info(f"[VOICE-SEED] Forged unique seed for {actor_id} → {seed_path.name}")
-                return str(seed_path)
-            else:
-                logger.error(f"[VOICE-SEED] Seed generation failed for {actor_id}: HTTP {response.status_code}")
+                if response.status_code == 200:
+                    seed_path.write_bytes(response.content)
+                    text_path.write_text(seed_text)
+                    register_character_voice(
+                        actor_id=actor_id,
+                        engine="fishspeech",
+                        seed_path=str(seed_path.relative_to(VOICE_SEEDS_DIR)),
+                        voice_prompt=acoustic_description,
+                        is_archetype=False,
+                    )
+                    logger.info(f"[VOICE-SEED] Forged unique seed for {actor_id} → {seed_path.name}")
+                    return str(seed_path)
+                else:
+                    logger.error(f"[VOICE-SEED] Seed generation failed for {actor_id}: HTTP {response.status_code}")
+                    return None
+            except Exception as e:
+                logger.error(f"[VOICE-SEED] Seed forge error for {actor_id}: {e}")
                 return None
-        except Exception as e:
-            logger.error(f"[VOICE-SEED] Seed forge error for {actor_id}: {e}")
-            return None
 
 
 async def enrich_and_instruct(speaker: str, role: str, text: str, is_monster: bool = False) -> DialogueEnrichment:
