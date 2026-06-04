@@ -841,6 +841,21 @@ async def forge_voice_seed(
         palette_path_str = await ensure_palette_seed(archetype_key)
         if not palette_path_str:
             return None
+        
+        # Trigger neural feature extraction for foundation (one-time)
+        if not is_monster:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                try:
+                    with open(palette_path_str, "rb") as f:
+                        files = {"reference_audio": (Path(palette_path_str).name, f, "audio/wav")}
+                        await client.post(
+                            f"{TTS_ACTOR_URL}/api/extract-features",
+                            data={"actorId": actor_id, "prompt_text": seed_text},
+                            files=files
+                        )
+                except Exception as e:
+                    logger.warning(f"[VOICE-SEED] Feature extraction failed for {actor_id}: {e}")
+
         register_character_voice(
             actor_id=actor_id,
             engine="fishspeech" if is_monster else "cosyvoice",
@@ -880,8 +895,8 @@ async def forge_voice_seed(
                     "references": [{"audio": archetype_b64, "text": seed_text}],
                     "format": "wav",
                     "normalize": True,
-                    "temperature": 0.9, # Higher temperature for more creative 'design'
-                    "top_p": 0.9,
+                    "temperature": 0.8,
+                    "top_p": 0.8,
                     "seed": random.randint(0, 1000000)
                 }
                 response = await client.post(f"{TTS_MONSTER_URL}/v1/tts", json=payload)
@@ -889,6 +904,20 @@ async def forge_voice_seed(
                 if response.status_code == 200:
                     seed_path.write_bytes(response.content)
                     text_path.write_text(seed_text)
+                    
+                    # Trigger neural feature extraction for unique seed
+                    if not is_monster:
+                        try:
+                            with open(seed_path, "rb") as f:
+                                files = {"reference_audio": (seed_path.name, f, "audio/wav")}
+                                await client.post(
+                                    f"{TTS_ACTOR_URL}/api/extract-features",
+                                    data={"actorId": actor_id, "prompt_text": seed_text},
+                                    files=files
+                                )
+                        except Exception as fe:
+                            logger.warning(f"[VOICE-SEED] Feature extraction failed for {actor_id}: {fe}")
+
                     register_character_voice(
                         actor_id=actor_id,
                         engine="fishspeech",
