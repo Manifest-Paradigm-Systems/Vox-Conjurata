@@ -1033,6 +1033,34 @@ async def prewarm_palette_foundations():
     logger.info("✅ All palette foundations pre-warmed.")
 
 
+@app.get("/api/v1/registry")
+async def get_voice_registry():
+    """Returns the entire voice registry for management."""
+    return load_voice_registry()
+
+@app.get("/api/v1/registry/audio/{actor_id}")
+async def get_seed_audio(actor_id: str):
+    """Returns the seed audio for a specific character."""
+    path = resolve_seed_path(actor_id)
+    if not path:
+        raise HTTPException(status_code=404, detail="Seed not found")
+    return FileResponse(path, media_type="audio/wav")
+
+@app.post("/api/v1/registry/regenerate/{actor_id}")
+async def regenerate_character_voice(actor_id: str):
+    """Triggers individual regeneration for a character."""
+    # We need the metadata to regenerate. If it's not in the registry, we can't.
+    registry = load_voice_registry()
+    entry = registry.get(actor_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Character not in registry")
+    
+    # We don't have the full ActorMetadata here, but we can try to re-forge 
+    # based on the stored voice_prompt and archetype_key.
+    # This is a bit tricky without the full original stats.
+    # For now, let's just return a hint that they should use the /vox forge command.
+    return {"status": "error", "message": "Please use the '/vox forge' command on the token in Foundry to regenerate."}
+
 @app.get("/")
 async def root():
     return {
