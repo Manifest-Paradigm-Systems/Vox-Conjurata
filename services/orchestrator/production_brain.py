@@ -217,13 +217,11 @@ async def ensure_palette_seed(archetype_key: str) -> str:
     """
     palette_path = PALETTE_DIR / f"{archetype_key}.wav"
     
-    # Fast check without lock
     if palette_path.exists():
         return str(palette_path)
 
     lock = await get_palette_lock(archetype_key)
     async with lock:
-        # Re-check after acquiring lock
         if palette_path.exists():
             return str(palette_path)
 
@@ -235,47 +233,40 @@ async def ensure_palette_seed(archetype_key: str) -> str:
         PALETTE_DIR.mkdir(parents=True, exist_ok=True)
         logger.info(f"[PALETTE] Generating new archetype seed: {archetype_key} (via CosyVoice 3 Instruct)")
 
-        async with httpx.AsyncClient(timeout=180.0) as client:
-            try:
-                # We use CosyVoice 3 in Instruct mode to generate the base archetype seed.
-                # This provides significantly better monstrous/accented textures than Fish Speech from text.
-                narrator_wav = VOICE_SEEDS_DIR / "narrator_seed_male.wav"
-                
-                data = {
-                    "text": "Hello, I am a character in this world, and this is my unique voice.",
-                    "prompt_text": "A clear speaking voice.",
-                    "emotion": prompt, # Pass the detailed palette prompt here
-                    "mode": "instruct2",
-                }
-                
-                files = {}
-                if narrator_wav.exists():
-                    f_handle = open(narrator_wav, "rb")
-                    files["reference_audio"] = (narrator_wav.name, f_handle, "audio/wav")
-                else:
-                    logger.warning("[PALETTE] No narrator_seed_male.wav found, palette gen may be flat.")
-
+        # Retry loop for engine cold-starts/pre-warming
+        for attempt in range(3):
+            async with httpx.AsyncClient(timeout=180.0) as client:
                 try:
-                    resp = await client.post(f"{TTS_ACTOR_URL}/api/tts", data=data, files=files)
-                finally:
-                    if "reference_audio" in files:
-                        f_handle.close()
+                    narrator_wav = VOICE_SEEDS_DIR / "narrator_seed_male.wav"
+                    data = {
+                        "text": "Hello, I am a character in this world, and this is my unique voice.",
+                        "prompt_text": "A clear speaking voice.",
+                        "emotion": prompt,
+                        "mode": "instruct2",
+                    }
+                    files = {}
+                    if narrator_wav.exists():
+                        f_handle = open(narrator_wav, "rb")
+                        files["reference_audio"] = (narrator_wav.name, f_handle, "audio/wav")
 
-                if resp.status_code == 200:
-                    palette_path.write_bytes(resp.content)
-                    # Also write companion transcript
-                    transcript_path = palette_path.with_suffix(".txt")
-                    transcript_path.write_text(
-                        "Hello, I am a character in this world, and this is my unique voice."
-                    )
-                    logger.info(f"[PALETTE] Created {archetype_key} → {palette_path.name}")
-                    return str(palette_path)
-                else:
-                    logger.error(f"[PALETTE] CosyVoice returned {resp.status_code} for {archetype_key}: {resp.text}")
-                    return ""
-            except Exception as e:
-                logger.error(f"[PALETTE] Generation error for {archetype_key}: {e}")
-                return ""
+                    try:
+                        resp = await client.post(f"{TTS_ACTOR_URL}/api/tts", data=data, files=files)
+                        if resp.status_code == 200:
+                            palette_path.write_bytes(resp.content)
+                            transcript_path = palette_path.with_suffix(".txt")
+                            transcript_path.write_text("Hello, I am a character in this world, and this is my unique voice.")
+                            logger.info(f"[PALETTE] Created {archetype_key} on attempt {attempt+1}")
+                            return str(palette_path)
+                        else:
+                            logger.warning(f"[PALETTE] Attempt {attempt+1} failed: {resp.status_code}")
+                    finally:
+                        if "reference_audio" in files: f_handle.close()
+                except Exception as e:
+                    logger.warning(f"[PALETTE] Attempt {attempt+1} error: {e}")
+                
+                await asyncio.sleep(2 * (attempt + 1))
+        
+        return ""
 
 
 def is_named_character(actor_data: "ActorMetadata") -> bool:
@@ -351,8 +342,8 @@ def standardize_speech_text(text: str, engine_type: str, emotion: str) -> str:
     import re
 
     # Robustly strip metadata-prefix patterns (Mood: Enraged, etc.)
-    # Matches until the end of the sentence or line to ensure full removal.
-    clean_text = re.sub(r'(?i)(?:Mood|Emotion|Sentiment|Tone|Note|Instruction|Direction|Delivery):\s*.*?(?=[.!?]|\n|$)',
+    # Consumes prefix and any trailing sentence-ending punctuation/whitespace.
+    clean_text = re.sub(r'(?i)(?:Mood|Emotion|Sentiment|Tone|Note|Instruction|Direction|Delivery|Background|Acoustics|Style|Voice):\s*.*?(?:[.!?]\s*|\n|$)',
                        '', text)
     
     # Strip all bracketed/parenthetical instructions (e.g. [growl], (whispers))
@@ -363,10 +354,6 @@ def standardize_speech_text(text: str, engine_type: str, emotion: str) -> str:
     # Final cleanup of leading/trailing non-word characters and extra whitespace
     clean_text = re.sub(r'^\W+', '', clean_text)
     clean_text = re.sub(r'\s+', ' ', clean_text).strip()
-
-    if engine_type == "cosyvoice":
-        return clean_text
-
     return clean_text
 
 def get_vram_used_gb() -> float:
