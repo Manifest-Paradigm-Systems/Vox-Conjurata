@@ -126,5 +126,13 @@
     "is_archetype": false,
     "archetype_key": "",
     "created_at": "2026-06-04T06:36:26"
+  },
+  "palette_trigger_monster_goblin": {
+    "engine": "fishspeech",
+    "seed_path": "palette_trigger_monster_goblin_seed_male.wav",
+    "voice_prompt": "A shrill, discordant screech reverberates through the dank, echoing caverns of the goblin's lair, a sound akin to the scraping of rusted blades against stone. The harsh, guttural chittering clicks of the goblin's voice bounce off the damp walls, creating a cacophonous symphony of malice and mischief.",
+    "is_archetype": false,
+    "archetype_key": "",
+    "created_at": "2026-06-04T06:37:11"
   }
 }
