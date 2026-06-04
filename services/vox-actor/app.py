@@ -27,6 +27,8 @@ from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Response
 from fastapi.responses import FileResponse, JSONResponse
 
 os.environ["MIOPEN_FIND_MODE"] = "2"
+os.environ["WETEXT_CACHE_DIR"] = "/models/wetext"
+os.makedirs("/models/wetext", exist_ok=True)
 
 # Add CosyVoice package path (cloned at build time from GitHub)
 _cosyvoice_dir = os.getenv("COSYVOICE_PACKAGE_DIR", "/app/CosyVoice")
