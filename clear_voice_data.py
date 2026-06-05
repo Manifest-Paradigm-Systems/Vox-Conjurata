@@ -51,15 +51,21 @@ def clear_voice_data(purge_palette=False):
     print("✅ Voice data cleanup complete.")
 
 if __name__ == "__main__":
-    confirm = input("Are you sure you want to clear the character voice registry? (y/N): ")
-    if confirm.lower() != 'y':
-        print("❌ Aborted.")
-        sys.exit(0)
-        
-    purge_pal = False
-    if len(sys.argv) > 1 and sys.argv[1] == "--purge-palette":
-        confirm_pal = input("‼️ REALLY delete foundations (Dragons, Elves, etc)? This will break ingestion until re-generated. (y/N): ")
-        if confirm_pal.lower() == 'y':
-            purge_pal = True
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--yes", action="store_true")
+    parser.add_argument("--purge-palette", action="store_true")
+    args = parser.parse_args()
+
+    if not args.yes:
+        confirm = input("Are you sure you want to clear the character voice registry? (y/N): ")
+        if confirm.lower() != 'y':
+            print("❌ Aborted.")
+            sys.exit(0)
             
-    clear_voice_data(purge_palette=purge_pal)
+        if args.purge_palette:
+            confirm_pal = input("‼️ REALLY delete foundations (Dragons, Elves, etc)? This will break ingestion until re-generated. (y/N): ")
+            if confirm_pal.lower() != 'y':
+                args.purge_palette = False
+            
+    clear_voice_data(purge_palette=args.purge_palette)
