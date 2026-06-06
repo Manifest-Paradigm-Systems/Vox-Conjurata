@@ -103,10 +103,10 @@ services:
     command: >
       python3 -m sglang.launch_server
       --model-path Qwen/Qwen2.5-7B-Instruct
-      --quantization gptq
+      --quantization bitsandbytes
       --mem-fraction-static 0.25
       --context-length 8192
-      --kv-cache-dtype int8
+      --kv-cache-dtype fp8_e5m2
       --host 0.0.0.0
       --port 8000
     devices:
@@ -117,6 +117,8 @@ services:
     - "105"
     environment:
     - HSA_OVERRIDE_GFX_VERSION=12.0.1
+    - PYTORCH_ROCM_ARCH=gfx1201
+    - HIP_VISIBLE_DEVICES=0
     volumes:
     - model_storage:/models:z
     networks:
