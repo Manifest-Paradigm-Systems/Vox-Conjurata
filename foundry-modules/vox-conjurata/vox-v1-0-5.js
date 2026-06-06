@@ -430,7 +430,49 @@ class VoxVoiceManager extends Application {
     }
 }
 
-Hooks.on("renderActorSheet", (app, html, data) => {
+/**
+ * Autonomous Update Listener
+ * Handles incoming images and SFX triggers from the Orchestrator.
+ */
+Hooks.on("ready", () => {
+    game.socket.on("module.vox-conjurata", async (data) => {
+        if (data.type === "display-image") {
+            const { imageType, imageUrl, prompt } = data;
+            
+            if (imageType === "atmosphere") {
+                // 1. Popup Journal for players
+                const content = `<img src="${imageUrl}" style="width: 100%; border: none;"><p><i>${prompt}</i></p>`;
+                ChatMessage.create({
+                    content: content,
+                    speaker: { alias: "Vox Narrator" },
+                    flags: { "vox-conjurata": { isMood: true } }
+                });
+
+                // 2. Update persistent Mood Scene
+                const moodScene = game.scenes.find(s => s.name === "Vox Mood Board");
+                if (moodScene) {
+                    await moodScene.update({ background: { src: imageUrl } });
+                    ui.notifications.info("🖼️ Vox: Mood Board updated.");
+                }
+            } else if (imageType === "effect") {
+                // 3. Create Active Tile on current map
+                const scene = game.scenes.active;
+                const tileData = {
+                    img: imageUrl,
+                    width: scene.width / 4,
+                    height: scene.height / 4,
+                    x: scene.width / 2 - (scene.width / 8),
+                    y: scene.height / 2 - (scene.height / 8),
+                    alpha: 0.7,
+                    overhead: true,
+                    flags: { "vox-conjurata": { isEffect: true } }
+                };
+                await scene.createEmbeddedDocuments("Tile", [tileData]);
+                ui.notifications.info(`✨ Vox: Atmospheric effect '${prompt}' placed.`);
+            }
+        }
+    });
+});
     if (!game.user.isGM) return;
     const actor = app.actor;
     const voxFlags = actor.getFlag("vox-conjurata", "dsp_presets") || {
