@@ -97,6 +97,32 @@ services:
     - vox-net
     restart: unless-stopped
 
+  vox-llm-sglang:
+    image: lmsysorg/sglang:latest
+    container_name: vox-llm-sglang
+    command: >
+      python3 -m sglang.launch_server
+      --model-path Qwen/Qwen2.5-7B-Instruct
+      --quantization gptq
+      --mem-fraction-static 0.25
+      --context-length 8192
+      --kv-cache-dtype int8
+      --host 0.0.0.0
+      --port 8000
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - "39"
+    - "105"
+    environment:
+    - HSA_OVERRIDE_GFX_VERSION=12.0.1
+    volumes:
+    - model_storage:/models:z
+    networks:
+    - vox-net
+    restart: unless-stopped
+
   vox-llm-core:
     container_name: vox-llm-core
     build:
@@ -105,6 +131,7 @@ services:
     - 11435:8080
     environment:
     - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+    - LOCAL_SGLANG_URL=http://vox-llm-sglang:8000
     networks:
     - vox-net
     restart: unless-stopped
