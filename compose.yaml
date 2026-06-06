@@ -98,7 +98,7 @@ services:
     restart: unless-stopped
 
   vox-llm-sglang:
-    image: lmsysorg/sglang:latest-rocm6.2
+    image: lmsysorg/sglang-rocm:latest
     container_name: vox-llm-sglang
     command: >
       python3 -m sglang.launch_server
