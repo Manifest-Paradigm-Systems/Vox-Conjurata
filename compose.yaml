@@ -103,7 +103,6 @@ services:
     command: >
       python3 -m vllm.entrypoints.openai.api_server
       --model Qwen/Qwen2.5-7B-Instruct
-      --quantization gptq
       --gpu-memory-utilization 0.25
       --max-model-len 8192
       --trust-remote-code
