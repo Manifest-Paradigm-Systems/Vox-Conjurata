@@ -98,7 +98,7 @@ services:
     restart: unless-stopped
 
   vox-llm-sglang:
-    image: lmsysorg/sglang:latest
+    image: lmsysorg/sglang:latest-rocm6.2
     container_name: vox-llm-sglang
     command: >
       python3 -m sglang.launch_server
@@ -181,7 +181,7 @@ services:
     - CUDA_VISIBLE_DEVICES=0
     - VRAM_LIMIT=0.80GB
     - HF_TOKEN=${HF_TOKEN}
-    - STABLE_AUDIO_MODEL=stabilityai/stable-audio-3-small-music
+    - STABLE_AUDIO_MODEL=stabilityai/stable-audio-open-1.0
     volumes:
     - ./cache/huggingface:/root/.cache/huggingface:z
     command: ["python", "tts_engine.py", "--precision", "fp8"]
@@ -212,7 +212,7 @@ services:
     - EXECUTION_DEVICE=gpu
     - VRAM_LIMIT=0.80GB
     - HF_TOKEN=${HF_TOKEN}
-    - STABLE_AUDIO_MODEL=stabilityai/stable-audio-3-small-sfx
+    - STABLE_AUDIO_MODEL=stabilityai/stable-audio-open-1.0
     volumes:
     - ./cache/huggingface:/root/.cache/huggingface:z
     command: ["python", "tts_engine.py", "--precision", "fp8"]
