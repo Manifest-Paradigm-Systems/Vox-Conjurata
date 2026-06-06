@@ -5,6 +5,9 @@ File: chronicle.py
 
 import requests
 import logging
+import time
+import json
+import random
 
 logger = logging.getLogger("vox-chronicle")
 

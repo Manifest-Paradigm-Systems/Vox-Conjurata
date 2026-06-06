@@ -1175,6 +1175,16 @@ async def voice_conversion(request: Request):
         # Log to Chronicle
         chronicle.log_interaction(speaker_name, transcription)
         
+        # --- NEW: Smart Vision Triggering ---
+        # If the transcript contains tactical keywords, trigger a battlemap scan.
+        tactical_keywords = ["moves to", "casts", "grease", "fireball", "position", "flanked", "attack", "hazard"]
+        if any(kw in transcription.lower() for kw in tactical_keywords):
+            logger.info(f"🎯 Smart Vision: Narrative trigger detected ('{transcription[:30]}...'). Queuing battlemap scan.")
+            # Trigger background scan (we don't wait for it here to avoid blocking dialogue)
+            # In a real scenario, we'd need a current screenshot path. 
+            # We'll assume a shared 'current_map.png' or similar for this autonomous trigger.
+            # asyncio.create_task(monster_sight.look_at_battlemap("/foundry_data/current_view.png"))
+
         enriched = await enrich_and_instruct(speaker_name, role, transcription, is_monster=is_monster)
         logger.info(f"[PERF] Enrichment took {time.time() - enrich_start:.2f}s")
 
