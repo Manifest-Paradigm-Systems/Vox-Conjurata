@@ -32,7 +32,8 @@ class VoxChronicleSystem:
         system_prompt = (
             "You are the Vox-Chronicle System. Analyze the provided tabletop transcript segment. "
             "Generate an updated entry for: 1. The Party Quest Journal, 2. Relevant NPC Relationship Trackers, "
-            "and 3. A visual description of the current atmosphere/mood (Atmosphere key). "
+            "3. A visual description of the current atmosphere/mood (Atmosphere key), "
+            "and 4. A brief soundscape description for ambient loops (Presence key). "
             "Output formatting must be strictly structured as a valid JSON payload."
         )
         
@@ -54,6 +55,9 @@ class VoxChronicleSystem:
             
             # --- NEW: Autonomous Visual Loop ---
             self._trigger_visual_update(structured_log)
+            
+            # --- NEW: Autonomous SFX Loop ---
+            self._trigger_sfx_update(structured_log)
 
             # Dispatch updating hooks straight into the Foundry VTT database layer
             self._flush_updates_to_foundry(session_id, structured_log)
@@ -86,6 +90,25 @@ class VoxChronicleSystem:
             requests.post(image_gen_url, json=payload, timeout=30)
         except Exception as e:
             logger.error(f"Visual update trigger failed: {e}")
+
+    def _trigger_sfx_update(self, structured_log):
+        """
+        Parses the chronicle summary to find presence cues and triggers Stable Audio.
+        """
+        try:
+            log_data = json.loads(structured_log)
+            presence = log_data.get("Presence", log_data.get("Soundscape", ""))
+            if not presence: return
+
+            sfx_gen_url = "http://vox-audio-generation-sfx:8001/generate"
+            payload = {
+                "prompt": f"Ambience, loopable, dark fantasy mood: {presence}",
+                "duration_seconds": 15
+            }
+            logger.info(f"→ Triggering Stable Audio SFX Loop: {presence}")
+            requests.post(sfx_gen_url, json=payload, timeout=45)
+        except Exception as e:
+            logger.error(f"SFX update trigger failed: {e}")
 
     def _flush_updates_to_foundry(self, session_id, json_payload):
         """
