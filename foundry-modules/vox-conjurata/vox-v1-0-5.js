@@ -471,6 +471,9 @@ Hooks.on("ready", () => {
                 ui.notifications.info(`✨ Vox: Atmospheric effect '${prompt}' placed.`);
             }
         }
+    });
+});
+
 Hooks.on("renderActorSheet", (app, html, data) => {
     if (!game.user.isGM) return;
     const actor = app.actor;
