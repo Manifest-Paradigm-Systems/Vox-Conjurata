@@ -98,7 +98,7 @@ services:
     restart: unless-stopped
 
   vox-llm-vllm:
-    image: rocm/vllm:rocm7.12.0_gfx120X-all_ubuntu24.04_py3.12_pytorch_2.9.1_vllm_0.16.0
+    image: rocm/vllm:rocm7.12.0_gfx1201_ubuntu24.04_py3.12_pytorch_2.9.1_vllm_0.16.0
     container_name: vox-llm-vllm
     command: >
       python3 -m vllm.entrypoints.openai.api_server
@@ -106,6 +106,7 @@ services:
       --quantization gptq
       --gpu-memory-utilization 0.25
       --max-model-len 8192
+      --trust-remote-code
       --host 0.0.0.0
       --port 8000
     devices:

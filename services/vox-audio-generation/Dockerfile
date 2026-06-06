@@ -8,8 +8,8 @@ WORKDIR /app
 # Ensure the render and video groups exist for Podman group_add
 RUN groupadd -r render || true && groupadd -r video || true
 
-# Install dependencies (fastapi, uvicorn, diffusers, transformers, accelerate, scipy, edge-tts)
-RUN pip install --no-cache-dir fastapi uvicorn diffusers transformers accelerate scipy edge-tts
+# Install dependencies (fastapi, uvicorn, diffusers, transformers, accelerate, scipy, edge-tts, torchsde)
+RUN pip install --no-cache-dir fastapi uvicorn diffusers transformers accelerate scipy edge-tts torchsde
 
 # Copy application code
 COPY tts_engine.py .
