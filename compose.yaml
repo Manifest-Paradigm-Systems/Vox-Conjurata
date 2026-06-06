@@ -97,16 +97,15 @@ services:
     - vox-net
     restart: unless-stopped
 
-  vox-llm-sglang:
-    image: lmsysorg/sglang-rocm:latest
-    container_name: vox-llm-sglang
+  vox-llm-vllm:
+    image: rocm/vllm:rocm7.12.0_gfx120X-all_ubuntu24.04_py3.12_pytorch_2.9.1_vllm_0.16.0
+    container_name: vox-llm-vllm
     command: >
-      python3 -m sglang.launch_server
-      --model-path Qwen/Qwen2.5-7B-Instruct
-      --quantization bitsandbytes
-      --mem-fraction-static 0.25
-      --context-length 8192
-      --kv-cache-dtype fp8_e5m2
+      python3 -m vllm.entrypoints.openai.api_server
+      --model Qwen/Qwen2.5-7B-Instruct
+      --quantization gptq
+      --gpu-memory-utilization 0.25
+      --max-model-len 8192
       --host 0.0.0.0
       --port 8000
     devices:
@@ -117,10 +116,8 @@ services:
     - "105"
     environment:
     - HSA_OVERRIDE_GFX_VERSION=12.0.1
-    - PYTORCH_ROCM_ARCH=gfx1201
-    - HIP_VISIBLE_DEVICES=0
     volumes:
-    - model_storage:/models:z
+    - model_storage:/root/.cache/huggingface:z
     networks:
     - vox-net
     restart: unless-stopped
@@ -133,7 +130,7 @@ services:
     - 11435:8080
     environment:
     - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-    - LOCAL_SGLANG_URL=http://vox-llm-sglang:8000
+    - LOCAL_SGLANG_URL=http://vox-llm-vllm:8000
     networks:
     - vox-net
     restart: unless-stopped
