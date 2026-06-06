@@ -622,131 +622,35 @@ async def scan_battlemap(req: BattlemapScanRequest):
 # --- Voice Generation Engines (Modular Factory Pattern) ---
 
 class SpeechEngine:
-    async def generate(self, text: str, actor_id: str, client: httpx.AsyncClient, emotion: str = "default") -> Optional[bytes]:
+    async def generate(self, text: str, actor_id: str, client: httpx.AsyncClient, dsp_presets: dict = None) -> Optional[bytes]:
         raise NotImplementedError()
 
-class CosyVoiceEngine(SpeechEngine):
-    async def generate(self, text: str, actor_id: str, client: httpx.AsyncClient, emotion: str = "default", is_archetype: bool = False, delivery_prompt: str = "") -> Optional[bytes]:
-        seed_path_str = resolve_seed_path(actor_id)
-        seed_path = Path(seed_path_str) if seed_path_str else None
-
-        # Check for cached neural features first
-        feature_path = VOICE_SEEDS_DIR / f"{actor_id}.pt"
-        
+class VoxAudioCoreEngine(SpeechEngine):
+    async def generate(self, text: str, actor_id: str, client: httpx.AsyncClient, dsp_presets: dict = None) -> Optional[bytes]:
+        """Calls the unified VoxCPM2 + Pedalboard service."""
         try:
-            data = {
-                "text": text,
-                "actor_id": actor_id,
-                "emotion": emotion if not delivery_prompt else delivery_prompt,
-                "mode": "instruct2" if is_archetype else "zero_shot",
-            }
-            
-            files = {}
-            if not feature_path.exists():
-                if not seed_path or not seed_path.exists():
-                    logger.warning(f"[VOICE-ROUTING] No seed found for {actor_id}. Run /api/ingest-actor first.")
-                    return None
-                
-                logger.info(f"[VOICE-ROUTING] CosyVoice: Extracting from raw audio for {actor_id}")
-                text_path = seed_path.with_suffix(".txt")
-                ref_text = ""
-                if text_path.exists():
-                    with open(text_path, "r") as f:
-                        ref_text = f.read().strip()
-                
-                data["prompt_text"] = ref_text
-                f_handle = open(seed_path, "rb")
-                files["reference_audio"] = (seed_path.name, f_handle, "audio/wav")
-            else:
-                logger.info(f"[VOICE-ROUTING] CosyVoice: Bypassing feature extraction for {actor_id} (using .pt cache)")
-
-            try:
-                resp = await client.post(f"{TTS_ACTOR_URL}/api/tts", data=data, files=files)
-            finally:
-                if "reference_audio" in files:
-                    f_handle.close()
-
-            if resp.status_code == 200:
-                return resp.content
-            else:
-                logger.error(f"[VOICE-ROUTING] CosyVoice service returned error {resp.status_code}: {resp.text}")
-        except Exception as e:
-            logger.error(f"[VOICE-ROUTING] CosyVoice inference failed: {e}")
-        return None
-
-
-class FishSpeechEngine(SpeechEngine):
-    async def generate(self, text: str, actor_id: str, client: httpx.AsyncClient, emotion: str = "default") -> Optional[bytes]:
-        seed_path_str = resolve_seed_path(actor_id)
-        seed_path = Path(seed_path_str) if seed_path_str else None
-
-        if not seed_path or not seed_path.exists():
-            logger.warning(f"[VOICE-ROUTING] Fish Speech: No seed found for {actor_id}. Run /api/ingest-actor first.")
-            return None
-
-        try:
-            import base64
-            references = []
-            text_path = seed_path.with_suffix(".txt")
-            ref_text = ""
-            if text_path.exists():
-                with open(text_path, "r") as f:
-                    ref_text = f.read().strip()
-            if not ref_text:
-                ref_text = "A clear speaking voice."
-
-            logger.info(f"[VOICE-ROUTING] Fish Speech using reference: {seed_path.name} with transcript: '{ref_text[:30]}...'")
-
-            with open(seed_path, "rb") as f:
-                audio_b64 = base64.b64encode(f.read()).decode("utf-8")
-                references.append({"audio": audio_b64, "text": ref_text})
-
-            import random
             payload = {
-                "text": text,
-                "references": references,
-                "format": "wav",
-                "normalize": True,
-                "latency": "latency",
-                "temperature": 0.8, # Increase variance for more exciting voices
-                "top_p": 0.8,
-                "seed": random.randint(0, 1000000) # Ensure every generation has unique jitter
+                "npc_id": actor_id,
+                "dialogue_text": text,
+                "dsp_presets": dsp_presets or {}
             }
-
-            resp = await client.post(f"{TTS_MONSTER_URL}/v1/tts", json=payload)
+            # TTS_ACTOR_URL now points to vox-audio-core
+            resp = await client.post(f"{TTS_ACTOR_URL}/generate", json=payload)
             if resp.status_code == 200:
                 return resp.content
             else:
-                logger.error(f"[VOICE-ROUTING] Fish Speech service returned error {resp.status_code}")
+                logger.error(f"[VOICE-ROUTING] VoxAudioCore service returned error {resp.status_code}: {resp.text}")
         except Exception as e:
-            logger.error(f"[VOICE-ROUTING] Fish Speech inference failed: {e}")
+            logger.error(f"[VOICE-ROUTING] VoxAudioCore inference failed: {e}")
         return None
 
 class SpeechPipelineFactory:
     def __init__(self):
-        self.cosyvoice = CosyVoiceEngine()
-        self.fishspeech = FishSpeechEngine()
+        self.engine = VoxAudioCoreEngine()
 
-    def get_engine(self, is_monster: bool, stats: dict, config: dict, vram_triggered: bool) -> SpeechEngine:
-        """Route to the best engine for this speaker.
-
-        Config-driven routing with monster/narrator awareness:
-        - Fish Speech handles monsters and beastly characters for textured voices.
-        - CosyVoice 3 handles humanoids and narrators for clean, fast speech.
-        - The ``tier_routing`` dict in voice_routing_config.json can override
-          any of these defaults via ``humanoid_engine`` / ``monster_engine`` keys.
-        Accepts both ``fish-speech`` and ``fishspeech`` as monster engine keys.
-        """
-        tier = config.get("tier_routing", {})
-        if is_monster:
-            target = tier.get("monster_engine", "fishspeech")
-        else:
-            target = tier.get("humanoid_engine", "cosyvoice")
-
-        # Normalise hyphenated config key to internal name
-        if target in ("fishspeech", "fish-speech", "fish_speech"):
-            return self.fishspeech
-        return self.cosyvoice
+    def get_engine(self, *args, **kwargs) -> SpeechEngine:
+        """Always returns the unified VoxAudioCoreEngine."""
+        return self.engine
 
 pipeline_factory = SpeechPipelineFactory()
 
