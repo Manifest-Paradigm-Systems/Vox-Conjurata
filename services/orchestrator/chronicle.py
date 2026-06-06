@@ -32,8 +32,9 @@ class VoxChronicleSystem:
         system_prompt = (
             "You are the Vox-Chronicle System. Analyze the provided tabletop transcript segment. "
             "Generate an updated entry for: 1. The Party Quest Journal, 2. Relevant NPC Relationship Trackers, "
-            "3. A visual description of the current atmosphere/mood (Atmosphere key), "
-            "and 4. A brief soundscape description for ambient loops (Presence key). "
+            "3. Visual Atmosphere (Atmosphere key) for Theater of the Mind, "
+            "4. Map Effects (Effect key) for active tiles/weather overlays on the battlemap, "
+            "and 5. Ambient soundscape (Presence key). "
             "Output formatting must be strictly structured as a valid JSON payload."
         )
         
