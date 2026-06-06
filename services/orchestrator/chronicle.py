@@ -31,7 +31,8 @@ class VoxChronicleSystem:
         
         system_prompt = (
             "You are the Vox-Chronicle System. Analyze the provided tabletop transcript segment. "
-            "Generate an updated entry for: 1. The Party Quest Journal, and 2. Relevant NPC Relationship Trackers. "
+            "Generate an updated entry for: 1. The Party Quest Journal, 2. Relevant NPC Relationship Trackers, "
+            "and 3. A visual description of the current atmosphere/mood (Atmosphere key). "
             "Output formatting must be strictly structured as a valid JSON payload."
         )
         
@@ -87,7 +88,31 @@ class VoxChronicleSystem:
             logger.error(f"Visual update trigger failed: {e}")
 
     def _flush_updates_to_foundry(self, session_id, json_payload):
-        # Database write code handles updates natively
-        # For now, we log it.
-        logger.info(f"Foundry Update Payload: {json_payload}")
-        pass
+        """
+        Actually pushes updates to the Foundry VTT API.
+        Requires FOUNDRY_API_URL and FOUNDRY_API_KEY.
+        """
+        try:
+            api_url = os.getenv("FOUNDRY_API_URL", "http://foundry-vtt:30000/api")
+            api_key = os.getenv("FOUNDRY_API_KEY", "")
+            if not api_key: return
+
+            log_data = json.loads(json_payload)
+            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+            
+            # 1. Update Quest Journal (JournalEntry)
+            quest_update = log_data.get("The Party Quest Journal", "")
+            if quest_update:
+                requests.post(f"{api_url}/vox/update-journal", json={
+                    "title": f"Chronicle: {session_id}",
+                    "content": quest_update
+                }, headers=headers, timeout=10)
+
+            # 2. Update NPC Relationship Flags
+            npc_updates = log_data.get("Relevant NPC Relationship Trackers", {})
+            if npc_updates:
+                requests.post(f"{api_url}/vox/update-npc-flags", json=npc_updates, headers=headers, timeout=10)
+                
+            logger.info(f"Successfully flushed Chronicle updates to Foundry for {session_id}")
+        except Exception as e:
+            logger.error(f"Failed to flush updates to Foundry: {e}")
