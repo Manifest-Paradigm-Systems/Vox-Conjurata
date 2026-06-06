@@ -1161,6 +1161,10 @@ async def voice_conversion(request: Request):
         # 2. Enrich Text
         enrich_start = time.time()
         role = "NPC" if mic_type == "vox-conjurata-gm-puppet-mic" else "Player"
+        
+        # Log to Chronicle
+        chronicle.log_interaction(speaker_name, transcription)
+        
         enriched = await enrich_and_instruct(speaker_name, role, transcription, is_monster=is_monster)
         logger.info(f"[PERF] Enrichment took {time.time() - enrich_start:.2f}s")
 
@@ -1262,6 +1266,9 @@ async def voice_conversion(request: Request):
 async def end_dialogue(request: DialogueEndRequest):
     """Endpoint triggered when a dialogue session ends, compiling summaries using vLLM."""
     logger.info(f"Received dialogue end request for NPC: {request.npcName}")
+    
+    # Trigger Chronicle commit
+    chronicle.commit_chronicle_update(session_id=request.npcName)
     
     # 1. Active Chat History Truncation: Slice conversational array to last 20 messages
     lines = [l.strip() for l in request.transcript.split("\n") if l.strip()]
