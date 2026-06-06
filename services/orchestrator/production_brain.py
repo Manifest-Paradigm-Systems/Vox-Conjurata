@@ -59,6 +59,9 @@ W_OKADA_URL = os.getenv("W_OKADA_URL", "http://127.0.0.1:18888")
 # Initialize Chronicle System
 chronicle = VoxChronicleSystem(api_url=OLLAMA_URL)
 
+# Initialize Monster Sight (MiniCPM-V)
+monster_sight = MonsterSightSystem(api_url=VISION_READER_URL)
+
 # Local paths for vision scanning (mapped volumes)
 FOUNDRY_DATA_DIR = Path("/foundry_data")
 SFX_DIR = Path("/sfx_out")
