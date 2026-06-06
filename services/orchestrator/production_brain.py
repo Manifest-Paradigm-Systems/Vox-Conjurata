@@ -564,8 +564,13 @@ async def scan_battlemap(req: BattlemapScanRequest):
             "temperature": 0.1,
         }
 
+        # Run tactical analysis via Monster Sight in parallel with the structural scan
+        tactical_task = asyncio.to_thread(monster_sight.look_at_battlemap, str(full_path))
+
         async with httpx.AsyncClient(timeout=300.0) as vision_client:
-            resp = await vision_client.post(f"{VISION_READER_URL}/v1/chat/completions", json=vision_payload)
+            vision_resp_task = vision_client.post(f"{VISION_READER_URL}/v1/chat/completions", json=vision_payload)
+            resp, tactical_analysis = await asyncio.gather(vision_resp_task, tactical_task)
+            
             if resp.status_code != 200:
                 logger.error(f"🗺️ Battlemap Scan: Vision reader returned {resp.status_code}")
                 return {"status": "error", "message": f"Vision reader returned {resp.status_code}"}
@@ -579,6 +584,7 @@ async def scan_battlemap(req: BattlemapScanRequest):
 
         # --- Robust JSON extraction ---
         contract = _extract_scan_contract(raw_text, req.sceneId)
+        contract["tactical_analysis"] = tactical_analysis
 
         # --- Sequential SFX generation for each sound source ---
         sound_entries = []
