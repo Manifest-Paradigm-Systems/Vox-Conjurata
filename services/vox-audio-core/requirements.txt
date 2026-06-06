@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+pydantic
+voxcpm
+pedalboard
+soundfile
+numpy
+python-multipart
+torch
+transformers
+accelerate

@@ -25,8 +25,8 @@ services:
     - OLLAMA_URL=http://vox-llm-core:8080
     - VISION_READER_URL=http://vox-vision-reader:8000
     - STT_URL=http://vox-voice:5000
-    - TTS_ACTOR_URL=http://vox-actor:5020
-    - TTS_MONSTER_URL=http://vox-monster-fish:7860
+    - TTS_ACTOR_URL=http://vox-audio-core:8000
+    - TTS_MONSTER_URL=http://vox-audio-core:8000
     - TTS_MUSIC_URL=http://vox-audio-generation-music:8000
     - TTS_SFX_URL=http://vox-audio-generation-sfx:8001
     - IMAGE_GEN_URL=http://vox-vision-gen:8003
@@ -191,67 +191,31 @@ services:
     - vox-net
     restart: unless-stopped
 
-  vox-actor:
+  vox-audio-core:
     build:
-      context: ./services/vox-actor
-    container_name: vox-actor
+      context: ./services/vox-audio-core
+    container_name: vox-audio-core
     ports:
-    - 5020:5020
-    # ── AMD ROCm device routing ──────────────────────────────────────────
-    # Maps host AMD render nodes into the container (mandatory for HIP/ROCm)
+    - 8004:8000
     devices:
     - /dev/kfd:/dev/kfd
     - /dev/dri:/dev/dri
-    # Grant access to the 'video' and 'render' groups so ROCm can open /dev/kfd
     group_add:
     - "39"
     - "105"
     security_opt:
     - seccomp=unconfined
     environment:
-    # ── ROCm / HIP configuration ─────────────────────────────────────────
     - HSA_OVERRIDE_GFX_VERSION=12.0.1
     - PYTORCH_ROCM_ARCH=gfx1201
     - HIP_PLATFORM=amd
     - ROCR_VISIBLE_DEVICES=0
     - HIP_VISIBLE_DEVICES=0
-    # ── HARD BLOCK: ensure no CUDA/NVIDIA code path is activated ─────────
     - CUDA_VISIBLE_DEVICES=0
-    # ── MIOpen / PyTorch optimizations: bypass slow convolution shape tuning ──
-    - MIOPEN_FIND_MODE=2
-    # ── CosyVoice 3 model location (shared model_storage volume) ─────────
-    - COSYVOICE_MODEL_DIR=/models/Fun-CosyVoice3-0.5B
+    - VRAM_LIMIT=4.20GB
     volumes:
     - model_storage:/models:z
-    - ./services/orchestrator/voice_seeds:/app/voice_seeds:Z
-    - ./cache/vox-actor:/root/.cache:Z
-    networks:
-    - vox-net
-    restart: unless-stopped
-
-  vox-monster-fish:
-    build:
-      context: ./services/vox-monster-fish
-    container_name: vox-monster-fish
-    entrypoint: ["python", "-m", "tools.api_server"]
-    command: ["--listen", "0.0.0.0:7860", "--half"]
-    ports:
-    - 5030:7860
-    volumes:
-    - ./vox-monster-voice/models:/app/checkpoints/s2-pro:Z
-    devices:
-    - /dev/kfd:/dev/kfd
-    - /dev/dri:/dev/dri
-    group_add:
-    - "39"
-    - "105"
-    security_opt:
-    - seccomp=unconfined
-    environment:
-    - HSA_OVERRIDE_GFX_VERSION=12.0.1
-    - CUDA_VISIBLE_DEVICES=0
-    - TEXT_PRECISION=int8
-    - VRAM_LIMIT=2.20GB
+    - ./services/orchestrator/voice_seeds:/app/seeds:Z
     networks:
     - vox-net
     restart: unless-stopped
