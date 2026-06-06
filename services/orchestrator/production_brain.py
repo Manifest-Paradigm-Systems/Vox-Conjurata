@@ -15,6 +15,7 @@ import wave
 import io
 from pathlib import Path
 import subprocess
+from chronicle import VoxChronicleSystem
 
 # --- vox-conjurata Orchestrator Service ---
 # Master Controller with VRAM Guardrails and Qwen-vLLM Memory Optimizations
@@ -53,6 +54,9 @@ FOUNDRY_API_URL = os.getenv("FOUNDRY_API_URL", "http://foundry-vtt:30000/api")
 FOUNDRY_API_KEY = os.getenv("FOUNDRY_API_KEY", "")
 TTS_SFX_URL = os.getenv("TTS_SFX_URL", "http://vox-audio-generation-sfx:8001")
 W_OKADA_URL = os.getenv("W_OKADA_URL", "http://127.0.0.1:18888")
+
+# Initialize Chronicle System
+chronicle = VoxChronicleSystem(api_url=OLLAMA_URL)
 
 # Local paths for vision scanning (mapped volumes)
 FOUNDRY_DATA_DIR = Path("/foundry_data")
@@ -211,9 +215,8 @@ async def get_palette_lock(archetype_key: str) -> asyncio.Lock:
         return palette_locks[archetype_key]
 
 async def ensure_palette_seed(archetype_key: str) -> str:
-    """Ensure a palette archetype seed exists — generate via Fish Speech WITHOUT reference audio.
-    This allows Fish Speech to generate a unique voice purely from the descriptive text prompt.
-
+    """Ensure a palette archetype seed exists — generate via VoxAudioCore initialization.
+    
     Returns the absolute path to the palette seed WAV.
     """
     palette_path = PALETTE_DIR / f"{archetype_key}.wav"
@@ -232,31 +235,27 @@ async def ensure_palette_seed(archetype_key: str) -> str:
             return ""
 
         PALETTE_DIR.mkdir(parents=True, exist_ok=True)
-        logger.info(f"[PALETTE] Generating foundation seed: {archetype_key} (via Fish Speech Text-to-Voice)")
+        logger.info(f"[PALETTE] Generating foundation seed: {archetype_key} via VoxAudioCore")
 
         async with httpx.AsyncClient(timeout=180.0) as client:
             try:
-                # Generate FOUNDATION purely from text description to ensure high diversity.
-                # No reference audio (references: []) lets Fish Speech's LLM decide the voice.
                 payload = {
-                    "text": f"{prompt} Hello, I am a character in this world, and this is my unique voice.",
-                    "references": [],
-                    "format": "wav",
-                    "normalize": True,
-                    "temperature": 0.8,
-                    "top_p": 0.8,
+                    "npc_id": f"archetype_{archetype_key}",
+                    "voice_description": prompt
                 }
                 
-                resp = await client.post(f"{TTS_MONSTER_URL}/v1/tts", json=payload)
+                resp = await client.post(f"{TTS_ACTOR_URL}/initialize", json=payload)
                 if resp.status_code == 200:
-                    palette_path.write_bytes(resp.content)
-                    transcript_path = palette_path.with_suffix(".txt")
-                    transcript_path.write_text("Hello, I am a character in this world, and this is my unique voice.")
-                    logger.info(f"[PALETTE] Created foundation {archetype_key}")
-                    return str(palette_path)
-                else:
-                    logger.error(f"[PALETTE] Fish Speech failed foundation {archetype_key}: {resp.status_code}")
-                    return ""
+                    data = resp.json()
+                    # Copy the generated seed to the palette path
+                    generated_path = data.get("seed_path")
+                    if generated_path and os.path.exists(generated_path):
+                        import shutil
+                        shutil.copy(generated_path, palette_path)
+                        logger.info(f"[PALETTE] Created foundation {archetype_key}")
+                        return str(palette_path)
+                logger.error(f"[PALETTE] VoxAudioCore failed foundation {archetype_key}: {resp.status_code}")
+                return ""
             except Exception as e:
                 logger.error(f"[PALETTE] Foundation generation error for {archetype_key}: {e}")
                 return ""
@@ -732,115 +731,36 @@ async def forge_voice_seed(
     is_named: bool = False,
     archetype_key: str = "",
 ) -> str | None:
-    """Create and register a voice seed for a character.
-
-    - Named characters: generate a unique seed cloned from the archetype palette.
-    - Generic NPCs: register to use the shared archetype palette seed directly.
-
-    Returns the seed path on success, None on failure.
-    """
-    seed_text = "Hello, I am a character in this world, and this is my unique voice."
-
-    if not is_named:
-        # Generic NPC — register to use the archetype palette seed
-        if not archetype_key:
-            logger.error(f"[VOICE-SEED] No archetype for {actor_id}")
-            return None
-        palette_path_str = await ensure_palette_seed(archetype_key)
-        if not palette_path_str:
-            return None
-        
-        # Trigger neural feature extraction for foundation (one-time)
-        if not is_monster:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                try:
-                    with open(palette_path_str, "rb") as f:
-                        files = {"reference_audio": (Path(palette_path_str).name, f, "audio/wav")}
-                        await client.post(
-                            f"{TTS_ACTOR_URL}/api/extract-features",
-                            data={"actorId": actor_id, "prompt_text": seed_text},
-                            files=files
-                        )
-                except Exception as e:
-                    logger.warning(f"[VOICE-SEED] Feature extraction failed for {actor_id}: {e}")
-
-        register_character_voice(
-            actor_id=actor_id,
-            engine="fishspeech" if is_monster else "cosyvoice",
-            seed_path=str(Path(palette_path_str).relative_to(VOICE_SEEDS_DIR)),
-            voice_prompt=acoustic_description,
-            is_archetype=True,
-            archetype_key=archetype_key,
-        )
-        logger.info(f"[VOICE-SEED] {actor_id} registered as archetype {archetype_key}")
-        return palette_path_str
-
-    # Named character — generate a unique seed cloned from its archetype
-    if not archetype_key:
-        logger.error(f"[VOICE-SEED] No archetype for named character {actor_id}")
-        return None
-    archetype_path_str = await ensure_palette_seed(archetype_key)
-    if not archetype_path_str:
-        return None
-    archetype_path = Path(archetype_path_str)
-
-    seed_path = VOICE_SEEDS_DIR / f"{actor_id}_seed_{gender}.wav"
-    text_path = VOICE_SEEDS_DIR / f"{actor_id}_seed_{gender}.txt"
-
-    async with seed_forge_lock: # Serialize GPU intensive operations
-        async with httpx.AsyncClient(timeout=180.0) as client:
-            try:
-                # We now use Fish Speech as the primary sound designer for ALL unique seeds.
-                # This ensures character voices are diverse and not just narrator clones.
-                logger.info(f"[VOICE-SEED] Using Fish Speech to forge unique seed for: {actor_id}")
-                archetype_b64 = base64.b64encode(archetype_path.read_bytes()).decode("utf-8")
+    """Create and register a voice seed for a character via VoxAudioCore initialization."""
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            payload = {
+                "npc_id": actor_id,
+                "voice_description": acoustic_description
+            }
+            # TTS_ACTOR_URL now points to vox-audio-core
+            resp = await client.post(f"{TTS_ACTOR_URL}/initialize", json=payload)
+            if resp.status_code == 200:
+                data = resp.json()
+                seed_path = data.get("seed_path")
                 
-                # Use the acoustic_description as the 'prompt' within the text for Fish Speech
-                # and the archetype audio as the reference speaker identity.
-                import random
-                payload = {
-                    "text": f"[{acoustic_description}] {seed_text}",
-                    "references": [{"audio": archetype_b64, "text": seed_text}],
-                    "format": "wav",
-                    "normalize": True,
-                    "temperature": 0.8,
-                    "top_p": 0.8,
-                    "seed": random.randint(0, 1000000)
-                }
-                response = await client.post(f"{TTS_MONSTER_URL}/v1/tts", json=payload)
-
-                if response.status_code == 200:
-                    seed_path.write_bytes(response.content)
-                    text_path.write_text(seed_text)
-                    
-                    # Trigger neural feature extraction for unique seed
-                    if not is_monster:
-                        try:
-                            with open(seed_path, "rb") as f:
-                                files = {"reference_audio": (seed_path.name, f, "audio/wav")}
-                                await client.post(
-                                    f"{TTS_ACTOR_URL}/api/extract-features",
-                                    data={"actorId": actor_id, "prompt_text": seed_text},
-                                    files=files
-                                )
-                        except Exception as fe:
-                            logger.warning(f"[VOICE-SEED] Feature extraction failed for {actor_id}: {fe}")
-
-                    register_character_voice(
-                        actor_id=actor_id,
-                        engine="fishspeech",
-                        seed_path=str(seed_path.relative_to(VOICE_SEEDS_DIR)),
-                        voice_prompt=acoustic_description,
-                        is_archetype=False,
-                    )
-                    logger.info(f"[VOICE-SEED] Forged unique seed for {actor_id} → {seed_path.name}")
-                    return str(seed_path)
-                else:
-                    logger.error(f"[VOICE-SEED] Seed generation failed for {actor_id}: HTTP {response.status_code}")
-                    return None
-            except Exception as e:
-                logger.error(f"[VOICE-SEED] Seed forge error for {actor_id}: {e}")
+                # Register the character voice
+                register_character_voice(
+                    actor_id=actor_id,
+                    engine="vox-audio-core",
+                    seed_path=os.path.relpath(seed_path, VOICE_SEEDS_DIR) if seed_path else f"{actor_id}.wav",
+                    voice_prompt=acoustic_description,
+                    is_archetype=not is_named,
+                    archetype_key=archetype_key
+                )
+                logger.info(f"[VOICE-SEED] Initialized NPC identity for {actor_id} via VoxAudioCore")
+                return seed_path
+            else:
+                logger.error(f"[VOICE-SEED] VoxAudioCore initialization failed: {resp.status_code}")
                 return None
+    except Exception as e:
+        logger.error(f"[VOICE-SEED] Failed to forge voice seed for {actor_id}: {e}")
+        return None
 
 
 async def enrich_and_instruct(speaker: str, role: str, text: str, is_monster: bool = False) -> DialogueEnrichment:
@@ -1246,48 +1166,44 @@ async def voice_conversion(request: Request):
 
         # 3. Determine VRAM Status, Engine, and Voice Seed
         config = load_routing_config()
+        # VRAM monitoring is handled by the core audio service now, 
+        # but we keep the logic here for potential failover in the future.
         vram_threshold = config.get("system_settings", {}).get("vram_threshold_gb", 18.0)
         vram_used = get_vram_used_gb()
         vram_triggered = vram_used > vram_threshold
 
-        engine = pipeline_factory.get_engine(
-            is_monster=is_monster,
-            stats=meta.get("stats", {}),
-            config=config,
-            vram_triggered=vram_triggered,
-        )
+        engine = pipeline_factory.get_engine()
 
-        # Check if this actor is using an archetype seed
-        registry = load_voice_registry()
-        registry_entry = registry.get(actor_id, {})
-        is_archetype = registry_entry.get("is_archetype", False)
+        # Extract DSP presets from metadata (passed from Foundry VTT)
+        dsp_presets = meta.get("dsp_presets", {})
+        if not dsp_presets:
+            # Fallback to flat flags if Foundry sends them directly
+            dsp_presets = {
+                "pitch_shift": int(meta.get("pitch", 0)),
+                "distortion_db": float(meta.get("distortion", 0)),
+                "chorus_depth": float(meta.get("chorus_depth", 0.0)),
+                "reverb_size": float(meta.get("reverb_size", 0.0)),
+                "highpass_hz": int(meta.get("highpass_hz", 0))
+            }
 
         audio_data = None
-        engine_name = "Unknown"
+        engine_name = "VoxAudioCore"
 
         async with httpx.AsyncClient(timeout=300.0) as client:
+            # VoxCPM2 uses the raw text or enriched text. 
+            # We'll use the enriched text if it contains useful emotive tags.
             target_text = enriched.monster_text if is_monster else enriched.instruct_text
-
-            if isinstance(engine, FishSpeechEngine):
-                engine_name = "Fish Speech"
-            elif isinstance(engine, CosyVoiceEngine):
-                engine_name = "CosyVoice"
 
             # Split text into sentences and process concurrently, then concatenate
             gen_start = time.time()
             sentences = split_into_sentences(target_text)
             logger.info(f"[VOICE-ROUTING] Dialogue text split into {len(sentences)} sentences")
 
-            kwargs = {"emotion": enriched.emotion_tag}
-            if isinstance(engine, CosyVoiceEngine):
-                kwargs["is_archetype"] = is_archetype
-                kwargs["delivery_prompt"] = enriched.vocal_delivery_prompt
-
             if len(sentences) <= 1:
-                res_content = await engine.generate(target_text, actor_id, client, **kwargs)
+                res_content = await engine.generate(target_text, actor_id, client, dsp_presets=dsp_presets)
             else:
                 logger.info(f"[VOICE-ROUTING] Running concurrent synthesis for {len(sentences)} sentences...")
-                tasks = [engine.generate(s, actor_id, client, **kwargs) for s in sentences]
+                tasks = [engine.generate(s, actor_id, client, dsp_presets=dsp_presets) for s in sentences]
                 results = await asyncio.gather(*tasks)
                 
                 # Check if all sentences failed
