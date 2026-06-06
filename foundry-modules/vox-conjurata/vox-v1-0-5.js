@@ -430,6 +430,138 @@ class VoxVoiceManager extends Application {
     }
 }
 
+Hooks.on("renderActorSheet", (app, html, data) => {
+    if (!game.user.isGM) return;
+    const actor = app.actor;
+    const voxFlags = actor.getFlag("vox-conjurata", "dsp_presets") || {
+        pitch_shift: 0,
+        distortion_db: 0,
+        chorus_depth: 0,
+        reverb_size: 0,
+        highpass_hz: 0,
+        voice_description: ""
+    };
+
+    const panelHtml = `
+        <div class="vox-audio-panel-wrapper" style="margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.2); border: 1px solid #444; border-radius: 5px;">
+            <h3 style="border-bottom: 1px solid #ff6400; color: #ff6400;"><i class="fas fa-waveform-path"></i> Vox Conjurata Audio Profile</h3>
+            
+            <div class="form-group">
+                <label>Base Voice Character Description</label>
+                <textarea class="vox-description" style="width: 100%; min-height: 60px; background: #222; color: #fff; border: 1px solid #333;" placeholder="An elderly, raspy male voice with a slow, menacing hiss...">${voxFlags.voice_description || ""}</textarea>
+            </div>
+            
+            <hr style="border: 0; border-top: 1px solid #333; margin: 10px 0;">
+            <h4 style="margin-top: 0;"><i class="fas fa-sliders-h"></i> Monster Filter Matrix (Pedalboard DSP)</h4>
+            
+            <div class="form-group" style="display: flex; align-items: center; gap: 10px; margin-bottom: 5px;">
+                <label style="flex: 1;">Pitch Shift</label>
+                <input type="range" class="vox-slider" data-prop="pitch_shift" min="-12" max="12" step="1" value="${voxFlags.pitch_shift}" style="flex: 2;">
+                <span class="vox-value" style="width: 30px; text-align: right;">${voxFlags.pitch_shift}</span>
+            </div>
+
+            <div class="form-group" style="display: flex; align-items: center; gap: 10px; margin-bottom: 5px;">
+                <label style="flex: 1;">Vocal Grit (dB)</label>
+                <input type="range" class="vox-slider" data-prop="distortion_db" min="0" max="20" step="0.5" value="${voxFlags.distortion_db}" style="flex: 2;">
+                <span class="vox-value" style="width: 30px; text-align: right;">${voxFlags.distortion_db}</span>
+            </div>
+
+            <div class="form-group" style="display: flex; align-items: center; gap: 10px; margin-bottom: 5px;">
+                <label style="flex: 1;">Multi-Voice Depth</label>
+                <input type="range" class="vox-slider" data-prop="chorus_depth" min="0" max="1" step="0.05" value="${voxFlags.chorus_depth}" style="flex: 2;">
+                <span class="vox-value" style="width: 30px; text-align: right;">${voxFlags.chorus_depth}</span>
+            </div>
+
+            <div class="form-group" style="display: flex; align-items: center; gap: 10px; margin-bottom: 5px;">
+                <label style="flex: 1;">Reverb Size</label>
+                <input type="range" class="vox-slider" data-prop="reverb_size" min="0" max="1" step="0.05" value="${voxFlags.reverb_size}" style="flex: 2;">
+                <span class="vox-value" style="width: 30px; text-align: right;">${voxFlags.reverb_size}</span>
+            </div>
+
+            <div class="form-group" style="display: flex; align-items: center; gap: 10px; margin-bottom: 5px;">
+                <label style="flex: 1;">Highpass (Hz)</label>
+                <input type="range" class="vox-slider" data-prop="highpass_hz" min="0" max="2000" step="50" value="${voxFlags.highpass_hz}" style="flex: 2;">
+                <span class="vox-value" style="width: 30px; text-align: right;">${voxFlags.highpass_hz}</span>
+            </div>
+            
+            <div style="display: flex; gap: 10px; margin-top: 10px;">
+                <button type="button" class="vox-test-voice-btn" style="flex: 1; background: #333;"><i class="fas fa-play"></i> Audition</button>
+                <button type="button" class="vox-save-identity-btn" style="flex: 1; background: #b34a00; color: white;"><i class="fas fa-save"></i> Lock Matrix</button>
+            </div>
+        </div>
+    `;
+
+    // Append to the end of the sheet's attributes or details tab
+    const target = html.find('.tab[data-tab="details"], .tab[data-tab="biography"]').first();
+    if (target.length) {
+        target.append(panelHtml);
+    } else {
+        html.find('form').append(panelHtml);
+    }
+
+    // Listeners
+    html.find('.vox-slider').on('input', ev => {
+        $(ev.currentTarget).next('.vox-value').text(ev.currentTarget.value);
+    });
+
+    html.find('.vox-save-identity-btn').click(async ev => {
+        const presets = {
+            pitch_shift: parseInt(html.find('[data-prop="pitch_shift"]').val()),
+            distortion_db: parseFloat(html.find('[data-prop="distortion_db"]').val()),
+            chorus_depth: parseFloat(html.find('[data-prop="chorus_depth"]').val()),
+            reverb_size: parseFloat(html.find('[data-prop="reverb_size"]').val()),
+            voice_description: html.find('.vox-description').val()
+        };
+        await actor.setFlag("vox-conjurata", "dsp_presets", presets);
+        ui.notifications.info(`🎙️ Vox: Voice matrix locked for ${actor.name}`);
+        
+        // Also trigger ingestion to update the description if it changed
+        await fetch("/api/ingest-actor?force_refresh=true", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                actorId: actor.id, name: actor.name, artPath: actor.img,
+                isMonster: resolveIsMonster(actor),
+                lore: actor.system.details?.biography?.value || "",
+                customDescription: presets.voice_description
+            })
+        });
+    });
+
+    html.find('.vox-test-voice-btn').click(async ev => {
+        const presets = {
+            pitch_shift: parseInt(html.find('[data-prop="pitch_shift"]').val()),
+            distortion_db: parseFloat(html.find('[data-prop="distortion_db"]').val()),
+            chorus_depth: parseFloat(html.find('[data-prop="chorus_depth"]').val()),
+            reverb_size: parseFloat(html.find('[data-prop="reverb_size"]').val()),
+        };
+        const text = "System voice alignment sequence active. Testing output matrix.";
+        
+        ui.notifications.info("🎙️ Auditioning voice...");
+        const formData = new FormData();
+        formData.append("metadata", JSON.stringify({
+            actorId: actor.id,
+            activeSpeakerName: actor.name,
+            dsp_presets: presets,
+            isMonster: resolveIsMonster(actor)
+        }));
+        // We need a dummy audio or the backend needs to support text-only test
+        // For now, we'll just send a small silent wav or similar if needed, 
+        // but the backend /api/voice-conversion expects audio_blob.
+        // Let's assume we use a specialized test endpoint or just a dummy blob.
+        const dummyBlob = new Blob([new Uint8Array(44)], {type: 'audio/wav'});
+        formData.append("audio_blob", dummyBlob, "test.wav");
+        
+        try {
+            const resp = await fetch("/api/voice-conversion", { method: "POST", body: formData });
+            const data = await resp.json();
+            if (data.audio_data) {
+                const audio = new Audio(data.audio_data);
+                audio.play();
+            }
+        } catch (e) { console.error(e); }
+    });
+});
+
 Hooks.on("renderPlaylistDirectory", (app, html, data) => {
     if (!game.user.isGM) return;
     const button = $(`<button type="button" class="vox-registry-btn" style="margin: 5px 0;"><i class="fas fa-dna"></i> Manage Vox Voices</button>`);
@@ -474,8 +606,25 @@ async function processAndSendAudio() {
     const chunks = globalThis.voxState.audioChunks; if (chunks.length === 0) return;
     const blob = new Blob(chunks, { type: "audio/webm" });
     const { activeMicType, activeActorId, activeSpeakerName, activeIsMonster } = globalThis.voxState;
+    
+    // Extract DSP presets from actor flags if available
+    let dsp_presets = {};
+    if (activeActorId !== "narrator") {
+        const actor = game.actors.get(activeActorId);
+        if (actor) {
+            dsp_presets = actor.getFlag("vox-conjurata", "dsp_presets") || {};
+        }
+    }
+
     const formData = new FormData(); formData.append("audio_blob", blob, "v.webm");
-    formData.append("metadata", JSON.stringify({ activeSpeakerName, actorId: activeActorId, micType: activeMicType, isMonster: activeIsMonster, userId: game.user.id }));
+    formData.append("metadata", JSON.stringify({ 
+        activeSpeakerName, 
+        actorId: activeActorId, 
+        micType: activeMicType, 
+        isMonster: activeIsMonster, 
+        userId: game.user.id,
+        dsp_presets: dsp_presets
+    }));
     try {
         const r = await fetch(globalThis.voxState.voiceConversionEndpoint, { method: "POST", body: formData });
         const d = await r.json();
