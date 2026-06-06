@@ -50,6 +50,10 @@ class VoxChronicleSystem:
             structured_log = response.json()['choices'][0]['message']['content']
             
             logger.info(f"Chronicle update committed for session {session_id}")
+            
+            # --- NEW: Autonomous Visual Loop ---
+            self._trigger_visual_update(structured_log)
+
             # Dispatch updating hooks straight into the Foundry VTT database layer
             self._flush_updates_to_foundry(session_id, structured_log)
             
@@ -57,6 +61,30 @@ class VoxChronicleSystem:
             self.sliding_window_history.clear()
         except Exception as e:
             logger.error(f"Failed to commit chronicle update: {e}")
+
+    def _trigger_visual_update(self, structured_log):
+        """
+        Parses the chronicle summary to find atmosphere cues and triggers SDXL.
+        """
+        try:
+            log_data = json.loads(structured_log)
+            # Use Quest Journal or specific visual key if present
+            atmosphere = log_data.get("Atmosphere", log_data.get("Visuals", ""))
+            if not atmosphere:
+                # Fallback: Ask Qwen for a specific visual prompt from the text
+                atmosphere = "A cinematic scene in a dark fantasy setting."
+
+            image_gen_url = "http://vox-vision-gen:8003/generate"
+            payload = {
+                "prompt": f"(Cinematic dark fantasy, highly detailed, mood lighting): {atmosphere}",
+                "negative_prompt": "cartoon, anime, low quality, text, watermark",
+                "steps": 4,
+                "cfg_scale": 2.0
+            }
+            logger.info(f"→ Triggering SDXL Visual Loop: {atmosphere}")
+            requests.post(image_gen_url, json=payload, timeout=30)
+        except Exception as e:
+            logger.error(f"Visual update trigger failed: {e}")
 
     def _flush_updates_to_foundry(self, session_id, json_payload):
         # Database write code handles updates natively
