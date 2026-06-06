@@ -16,6 +16,7 @@ import io
 from pathlib import Path
 import subprocess
 from chronicle import VoxChronicleSystem
+from vision_reader import MonsterSightSystem
 
 # --- vox-conjurata Orchestrator Service ---
 # Master Controller with VRAM Guardrails and Qwen-vLLM Memory Optimizations
