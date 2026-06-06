@@ -70,27 +70,59 @@ class VoxChronicleSystem:
 
     def _trigger_visual_update(self, structured_log):
         """
-        Parses the chronicle summary to find atmosphere cues and triggers SDXL.
+        Parses the chronicle summary to find atmosphere vs map effect cues.
         """
         try:
             log_data = json.loads(structured_log)
-            # Use Quest Journal or specific visual key if present
-            atmosphere = log_data.get("Atmosphere", log_data.get("Visuals", ""))
-            if not atmosphere:
-                # Fallback: Ask Qwen for a specific visual prompt from the text
-                atmosphere = "A cinematic scene in a dark fantasy setting."
+            atmosphere = log_data.get("Atmosphere", "")
+            map_effect = log_data.get("Effect", "")
 
             image_gen_url = "http://vox-vision-gen:8003/generate"
-            payload = {
-                "prompt": f"(Cinematic dark fantasy, highly detailed, mood lighting): {atmosphere}",
-                "negative_prompt": "cartoon, anime, low quality, text, watermark",
-                "steps": 4,
-                "cfg_scale": 2.0
-            }
-            logger.info(f"→ Triggering SDXL Visual Loop: {atmosphere}")
-            requests.post(image_gen_url, json=payload, timeout=30)
+            
+            # 1. Handle Atmosphere (Theater of the Mind)
+            if atmosphere:
+                logger.info(f"→ Generating Atmosphere: {atmosphere}")
+                resp = requests.post(image_gen_url, json={
+                    "prompt": f"(Cinematic landscape illustration, highly detailed, masterwork): {atmosphere}",
+                    "negative_prompt": "tokens, grid, map, low quality, characters",
+                    "steps": 4
+                }, timeout=30)
+                if resp.status_code == 200:
+                    self._push_to_foundry("atmosphere", resp.content, atmosphere)
+
+            # 2. Handle Map Effects (Spells/Weather)
+            if map_effect:
+                logger.info(f"→ Generating Map Effect: {map_effect}")
+                resp = requests.post(image_gen_url, json={
+                    "prompt": f"(Top-down view, semi-transparent atmospheric effect, isolated on black): {map_effect}",
+                    "negative_prompt": "background, floor, grass, text",
+                    "steps": 4
+                }, timeout=30)
+                if resp.status_code == 200:
+                    self._push_to_foundry("effect", resp.content, map_effect)
+
         except Exception as e:
             logger.error(f"Visual update trigger failed: {e}")
+
+    def _push_to_foundry(self, update_type, image_bytes, original_prompt):
+        """
+        Pushes a generated image to the Foundry VTT Media storage and triggers display.
+        """
+        try:
+            api_url = os.getenv("FOUNDRY_API_URL", "http://foundry-vtt:30000/api")
+            api_key = os.getenv("FOUNDRY_API_KEY", "")
+            
+            # Save locally for reference/serving
+            file_name = f"vox_{update_type}_{int(time.time())}.png"
+            # Foundry API call to upload and broadcast
+            files = {"file": (file_name, image_bytes, "image/png")}
+            requests.post(f"{api_url}/vox/display-image", 
+                         data={"type": update_type, "prompt": original_prompt},
+                         files=files, 
+                         headers={"Authorization": f"Bearer {api_key}"},
+                         timeout=20)
+        except Exception as e:
+            logger.error(f"Push to Foundry failed: {e}")
 
     def _trigger_sfx_update(self, structured_log):
         """
