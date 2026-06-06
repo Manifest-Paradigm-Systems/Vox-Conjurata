@@ -510,6 +510,7 @@ Hooks.on("renderActorSheet", (app, html, data) => {
             distortion_db: parseFloat(html.find('[data-prop="distortion_db"]').val()),
             chorus_depth: parseFloat(html.find('[data-prop="chorus_depth"]').val()),
             reverb_size: parseFloat(html.find('[data-prop="reverb_size"]').val()),
+            highpass_hz: parseInt(html.find('[data-prop="highpass_hz"]').val()),
             voice_description: html.find('.vox-description').val()
         };
         await actor.setFlag("vox-conjurata", "dsp_presets", presets);
@@ -533,6 +534,7 @@ Hooks.on("renderActorSheet", (app, html, data) => {
             distortion_db: parseFloat(html.find('[data-prop="distortion_db"]').val()),
             chorus_depth: parseFloat(html.find('[data-prop="chorus_depth"]').val()),
             reverb_size: parseFloat(html.find('[data-prop="reverb_size"]').val()),
+            highpass_hz: parseInt(html.find('[data-prop="highpass_hz"]').val()),
         };
         const text = "System voice alignment sequence active. Testing output matrix.";
         
