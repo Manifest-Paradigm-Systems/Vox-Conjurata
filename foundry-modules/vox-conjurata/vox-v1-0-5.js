@@ -474,6 +474,63 @@ Hooks.on("ready", () => {
     });
 });
 
+/**
+ * Tactical Eye: Screenshot & Scan Logic
+ */
+async function captureAndScanMap() {
+    ui.notifications.info("👁️ Vox: Scanning battlemap...");
+    
+    // 1. Capture the canvas as a base64 image
+    // Note: We use the stage to get everything (tokens, background, effects)
+    const screenshot = await canvas.app.renderer.extract.base64(canvas.app.stage);
+    
+    // 2. Prepare request
+    const payload = {
+        sceneId: canvas.scene.id,
+        imagePath: `current_view_${Date.now()}.png`,
+        screenshot: screenshot // Orchestrator needs to handle base64 if we send it directly
+    };
+
+    // Since our existing /api/scan-battlemap expects a path, let's upload a blob instead
+    const blob = await (await fetch(screenshot)).blob();
+    const formData = new FormData();
+    formData.append("file", blob, "scan.png");
+    formData.append("sceneId", canvas.scene.id);
+
+    try {
+        const resp = await fetch("/api/scan-battlemap", { method: "POST", body: formData });
+        const data = await resp.json();
+        
+        if (data.status === "success") {
+            // 3. Display Tactical Advice Chat Card
+            ChatMessage.create({
+                content: `
+                    <div class="vox-tactical-card" style="border: 2px solid #ff6400; background: rgba(20,20,20,0.9); padding: 10px; border-radius: 5px;">
+                        <h3 style="color: #ff6400; border-bottom: 1px solid #ff6400; margin-bottom: 10px;"><i class="fas fa-eye"></i> Tactical Analysis</h3>
+                        <p style="color: #eee; font-size: 13px;">${data.tactical_analysis || "No threats detected."}</p>
+                    </div>
+                `,
+                speaker: { alias: "Monster Sight" },
+                whisper: ChatMessage.getWhisperRecipients("GM")
+            });
+        }
+    } catch (err) { console.error("❌ Vox Scan fail:", err); }
+}
+
+Hooks.on("getSceneControlButtons", (controls) => {
+    if (!game.user.isGM) return;
+    const tokenControls = controls.find(c => c.name === "token");
+    if (tokenControls) {
+        tokenControls.tools.push({
+            name: "vox-scan",
+            title: "Tactical Eye Scan",
+            icon: "fas fa-eye",
+            onClick: () => captureAndScanMap(),
+            button: true
+        });
+    }
+});
+
 Hooks.on("renderActorSheet", (app, html, data) => {
     if (!game.user.isGM) return;
     const actor = app.actor;

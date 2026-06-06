@@ -564,8 +564,9 @@ async def scan_battlemap(req: BattlemapScanRequest):
             "temperature": 0.1,
         }
 
-        # Run tactical analysis via Monster Sight in parallel with the structural scan
-        tactical_task = asyncio.to_thread(monster_sight.look_at_battlemap, str(full_path))
+        # Request tactical analysis simultaneously, passing current transcript context
+        context = "\n".join(chronicle.sliding_window_history[-5:])
+        tactical_task = asyncio.to_thread(monster_sight.look_at_battlemap, str(full_path), context)
 
         async with httpx.AsyncClient(timeout=300.0) as vision_client:
             vision_resp_task = vision_client.post(f"{VISION_READER_URL}/v1/chat/completions", json=vision_payload)
