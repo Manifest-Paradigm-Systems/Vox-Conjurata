@@ -131,12 +131,12 @@ class VoxEventQueueHUD extends Application {
         }
 
         html += `</div></div>`;
-        return jQuery(html);
+        return $(html);
     }
 
     activateListeners(html) {
         super.activateListeners(html);
-        html.find(".vox-cancel-btn").click(async (ev) => {
+        $(html).find(".vox-cancel-btn").click(async (ev) => {
             const taskId = ev.currentTarget.dataset.taskId;
             try {
                 const resp = await fetch("/api/v1/orchestrate/cancel", {
@@ -153,7 +153,7 @@ class VoxEventQueueHUD extends Application {
             }
         });
 
-        html.find(".vox-open-transfer").click(async () => {
+        $(html).find(".vox-open-transfer").click(async () => {
             const users = game.users.filter(u => u.active && u.id !== game.user.id);
             let userOptions = users.map(u => `<option value="${u.id}">${u.name}</option>`).join("");
             userOptions = `<option value="POOL">--- Campaign Pool ---</option>` + userOptions;
@@ -185,9 +185,9 @@ class VoxEventQueueHUD extends Application {
                     gift: {
                         label: "<i class='fas fa-gift'></i> Send Gift",
                         callback: async (html) => {
-                            const source = html.find("#vox-transfer-source").val();
-                            const target = html.find("#vox-transfer-target").val();
-                            const amount = parseFloat(html.find("#vox-transfer-amount").val());
+                            const source = $(html).find("#vox-transfer-source").val();
+                            const target = $(html).find("#vox-transfer-target").val();
+                            const amount = parseFloat($(html).find("#vox-transfer-amount").val());
                             
                             try {
                                 const resp = await fetch("/api/v1/ledger/transfer", {
@@ -214,7 +214,7 @@ class VoxEventQueueHUD extends Application {
             }).render(true);
         });
 
-        html.find(".vox-buy-credits").click(async () => {
+        $(html).find(".vox-buy-credits").click(async () => {
             new Dialog({
                 title: "Top Up Credits",
                 content: `
@@ -240,8 +240,8 @@ class VoxEventQueueHUD extends Application {
                     buy: {
                         label: "<i class='fas fa-credit-card'></i> Checkout",
                         callback: async (html) => {
-                            const amount = html.find("#vox-topup-amount").val();
-                            const autoAllocate = html.find("#vox-auto-allocate").is(":checked");
+                            const amount = $(html).find("#vox-topup-amount").val();
+                            const autoAllocate = $(html).find("#vox-auto-allocate").is(":checked");
                             try {
                                 const resp = await fetch(`/api/v1/billing/create-checkout-session?user_id=${game.user.id}&amount=${amount}&auto_allocate=${autoAllocate}`, { method: "POST" });
                                 const data = await resp.json();
@@ -256,14 +256,14 @@ class VoxEventQueueHUD extends Application {
             }).render(true);
         });
 
-        html.find(".vox-return-grant").click(async () => {
+        $(html).find(".vox-return-grant").click(async () => {
             if (await Dialog.confirm({ title: "Return Grant", content: "Return unused session grant to pool?" })) {
                 await fetch("/api/v1/ledger/return", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({userId: game.user.id, amount: -1}) });
                 this.render(true);
             }
         });
 
-        html.find(".vox-return-personal").click(async () => {
+        $(html).find(".vox-return-personal").click(async () => {
             if (await Dialog.confirm({ title: "Return Personal", content: "Return all personal wallet credits to campaign pool?" })) {
                 await fetch("/api/v1/ledger/return", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({userId: game.user.id, amount: -2}) });
                 this.render(true);
@@ -865,20 +865,20 @@ class VoxEngineConfigApp extends Application {
             <div style="display: flex; gap: 15px; margin-bottom: 20px;">
                 <div style="flex: 1; background: #222; padding: 12px; border-radius: 8px; text-align: center; border: 1px solid #444;">
                     <div style="font-size: 10px; color: #888; text-transform: uppercase;">Campaign Pool</div>
-                    <div style="font-size: 20px; font-weight: bold; color: #00ff88;">$${data.ledger.campaign_pool.toFixed(6)}</div>
+                    <div style="font-size: 20px; font-weight: bold; color: #00ff88;">$${(data.ledger.campaign_pool ?? 0).toFixed(6)}</div>
                     ${data.isGM ? `<button type="button" class="topup-btn" style="margin-top: 8px; font-size: 9px; background: #333; color: #eee; border: 1px solid #555; border-radius: 4px; padding: 2px 8px; cursor: pointer;">+ TOP UP</button>` : ''}
                 </div>
                 <div style="flex: 1; background: #222; padding: 12px; border-radius: 8px; text-align: center; border: 1px solid #444;">
                     <div style="font-size: 10px; color: #888; text-transform: uppercase;">Your Allowance</div>
-                    <div style="font-size: 20px; font-weight: bold; color: #ff6400;">$${data.ledger.individual_allowance.toFixed(6)}</div>
-                    <div style="font-size: 9px; color: #666; margin-top: 5px;">Cap: $${data.ledger.individual_cap.toFixed(6)}</div>
+                    <div style="font-size: 20px; font-weight: bold; color: #ff6400;">$${(data.ledger.individual_allowance ?? 0).toFixed(6)}</div>
+                    <div style="font-size: 9px; color: #666; margin-top: 5px;">Cap: $${((data.ledger.individual_cap ?? 0) ?? 0).toFixed(6)}</div>
                 </div>
             </div>
 
             <div style="background: rgba(255,255,255,0.02); padding: 15px; border-radius: 8px; border: 1px solid #333;">
                 <label style="display: block; font-weight: bold; margin-bottom: 12px;">Manage Your Session Budget</label>
                 <div style="display: flex; gap: 10px; align-items: center;">
-                    <input type="number" id="vox-allowance-input" step="0.5" min="0" value="${data.ledger.individual_cap}" style="flex: 1; background: #000; color: #eee; border: 1px solid #444; height: 32px; padding: 0 10px; border-radius: 4px;">
+                    <input type="number" id="vox-allowance-input" step="0.5" min="0" value="${(data.ledger.individual_cap ?? 0)}" style="flex: 1; background: #000; color: #eee; border: 1px solid #444; height: 32px; padding: 0 10px; border-radius: 4px;">
                     <button type="button" class="set-allowance-btn" style="background: #ff6400; color: white; border: none; height: 32px; padding: 0 15px; border-radius: 4px; font-weight: bold; cursor: pointer;">UPDATE BUDGET</button>
                 </div>
                 <p style="font-size: 10px; color: #666; margin-top: 8px; font-style: italic;">Note: Budget is drawn autonomously from the Campaign Pool. No DM veto required.</p>
@@ -892,30 +892,30 @@ class VoxEngineConfigApp extends Application {
             </div>
         </form>
         `;
-        return jQuery(html);
+        return $(html);
     }
 
     activateListeners(html) {
         super.activateListeners(html);
         
-        html.find("#vox-llm-mode-select").change(ev => {
+        $(html).find("#vox-llm-mode-select").change(ev => {
             const val = ev.target.value;
-            html.find("#vox-local-brain-config-pane").toggle(val === 'byo_local_brain');
+            $(html).find("#vox-local-brain-config-pane").toggle(val === 'byo_local_brain');
         });
 
-        html.find(".badge-btn").click(ev => {
-            html.find("#vox-model-tag-input").val(ev.currentTarget.dataset.tag);
+        $(html).find(".badge-btn").click(ev => {
+            $(html).find("#vox-model-tag-input").val(ev.currentTarget.dataset.tag);
         });
 
-        html.find(".vox-suppress-toggle").change(async (ev) => {
+        $(html).find(".vox-suppress-toggle").change(async (ev) => {
             const cat = ev.currentTarget.dataset.cat;
             const val = ev.currentTarget.checked;
             await game.settings.set("vox-conjurata", `suppressRawVoice_${cat}`, val);
             ui.notifications.info(`✅ Suppression for ${cat.toUpperCase()} set to ${val ? "ON" : "OFF"}`);
         });
 
-        html.find(".set-allowance-btn").click(async () => {
-            const amount = parseFloat(html.find("#vox-allowance-input").val());
+        $(html).find(".set-allowance-btn").click(async () => {
+            const amount = parseFloat($(html).find("#vox-allowance-input").val());
             try {
                 const resp = await fetch("/api/v1/ledger/allowance", {
                     method: "POST",
@@ -935,7 +935,7 @@ class VoxEngineConfigApp extends Application {
         });
 
         if (game.user.isGM) {
-            html.find(".forge-scene-btn").click(async () => {
+            $(html).find(".forge-scene-btn").click(async () => {
                 const sceneActors = new Set(canvas.tokens.placeables.map(t => t.actor).filter(a => a));
                 if (sceneActors.size === 0) { ui.notifications.warn("No actors found in scene."); return; }
                 
@@ -960,7 +960,7 @@ class VoxEngineConfigApp extends Application {
                 ui.notifications.info("✅ Scene Forge Complete.");
             });
 
-            html.find(".topup-btn").click(async () => {
+            $(html).find(".topup-btn").click(async () => {
                 new Dialog({
                     title: "Top Up Campaign Pool",
                     content: `<div style="padding: 10px;"><label>Amount ($): </label><input type="number" id="topup-amount" value="10.00" step="1"></div>`,
@@ -968,7 +968,7 @@ class VoxEngineConfigApp extends Application {
                         topup: {
                             label: "Add Funds",
                             callback: async (html) => {
-                                const amount = parseFloat(html.find("#topup-amount").val());
+                                const amount = parseFloat($(html).find("#topup-amount").val());
                                 await fetch("/api/v1/ledger/topup", {
                                     method: "POST",
                                     headers: {"Content-Type": "application/json"},
@@ -982,10 +982,10 @@ class VoxEngineConfigApp extends Application {
             });
         }
 
-        html.find(".save-btn").click(async (ev) => {
+        $(html).find(".save-btn").click(async (ev) => {
             ev.preventDefault();
-            const pathway = html.find("[name='llm_pathway_mode']").val();
-            const modelTag = html.find("[name='local_model_tag']").val();
+            const pathway = $(html).find("[name='llm_pathway_mode']").val();
+            const modelTag = $(html).find("[name='local_model_tag']").val();
             
             await game.settings.set("vox-conjurata", "llmPathway", pathway);
             await game.settings.set("vox-conjurata", "localModelTag", modelTag);
@@ -1080,20 +1080,20 @@ class VoxVoiceManager extends Application {
         }
 
         html += `</ul></div></div>`;
-        return jQuery(html);
+        return $(html);
     }
 
     activateListeners(html) {
         super.activateListeners(html);
-        html.find('.vox-refresh-btn').click(() => this.render(true));
+        $(html).find('.vox-refresh-btn').click(() => this.render(true));
         
-        html.find('.vox-play-seed').click(async (ev) => {
+        $(html).find('.vox-play-seed').click(async (ev) => {
             const id = ev.currentTarget.dataset.actorId;
             const audio = new Audio(`/api/v1/registry/audio/${id}?t=${Date.now()}`);
             audio.play().catch(e => ui.notifications.error("Failed to play preview audio."));
         });
 
-        html.find('.vox-regen-actor').click(async (ev) => {
+        $(html).find('.vox-regen-actor').click(async (ev) => {
             const id = ev.currentTarget.dataset.actorId;
             const token = canvas.tokens.placeables.find(t => t.actor?.id === id);
             if (!token) {
@@ -1383,7 +1383,7 @@ Hooks.on("renderActorSheet", (app, html, data) => {
         await actor.setFlag("vox-conjurata", "dsp_presets", updated);
     });
 
-    html.find('.sheet-header').after(panel);
+    $(html).find('.sheet-header').after(panel);
 
     // Listeners for the panel
     panel.find('.vox-save-identity-btn').click(async ev => {
@@ -1445,7 +1445,7 @@ Hooks.on("renderPlaylistDirectory", (app, html, data) => {
     if (!game.user.isGM) return;
     const button = $(`<button type="button" class="vox-registry-btn" style="margin: 5px 0;"><i class="fas fa-dna"></i> Manage Vox Voices</button>`);
     button.click(() => new VoxVoiceManager().render(true));
-    html.find(".directory-footer").prepend(button);
+    $(html).find(".directory-footer").prepend(button);
 });
 
 async function onReady() {
@@ -1660,10 +1660,10 @@ class VoxLivePanel extends Application {
 
     activateListeners(html) {
         super.activateListeners(html);
-        html.find(".vox-actor-btn").click(ev => this.switchActor(ev.currentTarget.dataset.actorId, ev.currentTarget.dataset.actorName));
-        html.find(".vox-sync-toggle").click(() => { this.isSyncEnabled = !this.isSyncEnabled; this.render(); });
-        html.find("#pitch-slider").on("input", ev => { this.settings.pitch = parseInt(ev.target.value); this.updateBackend(); this.render(); });
-        html.find("#master-toggle").click(() => { this.isBypass = !this.isBypass; this.updateBackend(); this.render(); });
+        $(html).find(".vox-actor-btn").click(ev => this.switchActor(ev.currentTarget.dataset.actorId, ev.currentTarget.dataset.actorName));
+        $(html).find(".vox-sync-toggle").click(() => { this.isSyncEnabled = !this.isSyncEnabled; this.render(); });
+        $(html).find("#pitch-slider").on("input", ev => { this.settings.pitch = parseInt(ev.target.value); this.updateBackend(); this.render(); });
+        $(html).find("#master-toggle").click(() => { this.isBypass = !this.isBypass; this.updateBackend(); this.render(); });
     }
 
     async switchActor(id, name) {
