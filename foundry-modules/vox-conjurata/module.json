@@ -31,21 +31,6 @@
                 "id": "autoanimations",
                 "type": "module",
                 "compatibility": {}
-            },
-            {
-                "id": "jb2a_patreon",
-                "type": "module",
-                "compatibility": {}
-            },
-            {
-                "id": "tokenmagic",
-                "type": "module",
-                "compatibility": {}
-            },
-            {
-                "id": "blfx",
-                "type": "module",
-                "compatibility": {}
             }
         ]
     },

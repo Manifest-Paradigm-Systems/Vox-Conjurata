@@ -507,6 +507,19 @@ function resolveActiveToken(isGM) {
     } catch (err) { console.error("❌ Vox Audio Fail:", err); }
 })();
 
+function toggleFoundryAudio(state) {
+    if (typeof game === 'undefined' || !game.webrtc) return;
+    try {
+        const client = game.webrtc.client;
+        if (client && typeof client.toggleBroadcast === 'function') {
+            client.toggleBroadcast(state);
+            console.log(`🎙️ Vox | Foundry Broadcast: ${state ? 'ENABLED' : 'DISABLED'} (Suppression System)`);
+        }
+    } catch (err) {
+        console.warn("🎙️ Vox | Failed to toggle Foundry A/V broadcast:", err);
+    }
+}
+
 function registerKeybindings() {
     if (globalThis.voxKeybindingsRegistered) return;
     globalThis.voxKeybindingsRegistered = true;
@@ -522,6 +535,18 @@ function registerKeybindings() {
             "whisper": "Whisper to GM (Text Only, No Audio)"
         },
         default: "speech"
+    });
+
+    // Suppression Settings (Puppeteer Mode)
+    ["narrator", "character", "npc", "monster"].forEach(cat => {
+        game.settings.register("vox-conjurata", `suppressRawVoice_${cat}`, {
+            name: `Suppress Raw Voice: ${cat.toUpperCase()}`,
+            hint: `If enabled, your raw microphone audio to other players is muted while this category's hotkey is held.`,
+            scope: "client",
+            config: true,
+            type: Boolean,
+            default: cat === "npc" || cat === "monster" // Default ON for puppets
+        });
     });
 
     game.settings.register("vox-conjurata", "llmPathway", {
