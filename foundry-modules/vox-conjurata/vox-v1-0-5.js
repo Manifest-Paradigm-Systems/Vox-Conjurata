@@ -531,21 +531,43 @@ function registerKeybindings() {
 }
 
 (function() {
+    if (globalThis.voxHotkeyInitialized) return;
+    globalThis.voxHotkeyInitialized = true;
+
     const activeKeys = new Set();
+
+    const stopAllMics = () => {
+        if (activeKeys.size === 0) return;
+        console.log("🎙️ Vox: Closing all mics due to focus loss or reset.");
+        activeKeys.forEach(code => {
+            if (code === "KeyY") globalThis.voxState.narratorActive = false;
+            else if (code === "KeyH") globalThis.voxState.puppetActive = false;
+            else if (code === "KeyI") globalThis.voxState.playerActive = false;
+        });
+        activeKeys.clear();
+        stopRecording();
+        statusMessage("All Mics: CLOSED (Reset)", false);
+    };
+
+    window.addEventListener("blur", stopAllMics);
+
     window.addEventListener("keydown", (event) => {
         if (event.repeat || activeKeys.has(event.code)) return;
         const target = event.target;
         if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable || target.closest(".prosemirror"))) return;
         const code = event.code;
+        
         if (code === "KeyY" || code === "KeyH" || code === "KeyI") {
             activeKeys.add(code);
+            console.log(`🎙️ Vox: Hotkey ${code} pressed (PTT OPEN)`);
+            
             try { playAudio("sounds/lock.wav", 0.1); } catch (e) {}
+            
             if (code === "KeyY" && game.user.isGM) {
                 globalThis.voxState.narratorActive = true; 
                 globalThis.voxState.activeSpeakerName = "Narrator"; 
                 globalThis.voxState.activeActorId = "narrator"; 
                 globalThis.voxState.activeIsMonster = false;
-                // Narrator allows secondary triggers (SFX, Image Gen) billed to DM
                 globalThis.voxState.useVoxVoice = true; 
                 globalThis.voxState.useVoxActor = true; 
                 startRecording("vox-conjurata-gm-narrate-mic"); 
@@ -560,7 +582,6 @@ function registerKeybindings() {
                 globalThis.voxState.activeActorId = a.id; 
                 globalThis.voxState.activeIsMonster = !!resolveIsMonster(a);
                 globalThis.voxState.useVoxVoice = a.getFlag("vox-conjurata", "vox-voice") ?? true;
-                // Puppeteer [H] SUPPRESSES secondary triggers
                 globalThis.voxState.useVoxActor = false; 
                 startRecording("vox-conjurata-gm-puppet-mic"); 
                 statusMessage(`Puppeteer [H] (${globalThis.voxState.activeSpeakerName}): OPEN [Voice: ${globalThis.voxState.useVoxVoice ? 'AI' : 'RAW'}] (Triggers Suppressed)`, true);
@@ -572,11 +593,8 @@ function registerKeybindings() {
                 globalThis.voxState.activeSpeakerName = a?.name || game.user.name; 
                 globalThis.voxState.activeActorId = a?.id || game.user.id; 
                 globalThis.voxState.activeIsMonster = !!resolveIsMonster(a);
-                
-                // Players [I] allow secondary triggers billed to themselves
                 globalThis.voxState.useVoxActor = true; 
 
-                // If a player targets an NPC with VOX-ACTOR on, this is an autonomous trigger
                 const target = game.user.targets.first();
                 const targetActor = target?.actor;
                 if (targetActor && targetActor.type !== "character") {
@@ -596,10 +614,13 @@ function registerKeybindings() {
             }
         }
     });
+
     window.addEventListener("keyup", (event) => {
         const code = event.code;
         if (activeKeys.has(code)) {
             activeKeys.delete(code);
+            console.log(`🎙️ Vox: Hotkey ${code} released (PTT CLOSED)`);
+            
             if (code === "KeyY") { globalThis.voxState.narratorActive = false; stopRecording(); statusMessage("Narrator Mic [Y]: CLOSED", false); } 
             else if (code === "KeyH") { globalThis.voxState.puppetActive = false; stopRecording(); statusMessage(`Puppeteer Mic [H] (${globalThis.voxState.activeSpeakerName}): CLOSED`, false); }
             else if (code === "KeyI") { globalThis.voxState.playerActive = false; stopRecording(); statusMessage(`Character Mic [I] (${globalThis.voxState.activeSpeakerName}): CLOSED`, false); }
