@@ -3,7 +3,7 @@
   "stripe_customer_id": null,
   "personal_wallets": {
     "gm": 999.8169999999974,
-    "G3SJW9rRHe7J3AOH": 100.0
+    "G3SJW9rRHe7J3AOH": 200.0
   },
   "session_allowances": {
     "G3SJW9rRHe7J3AOH": 0.0
@@ -394,6 +394,13 @@
       "amount": -100.0,
       "description": "ADMIN OVERRIDE: Admin Quick-Fund",
       "timestamp": 1781128456.3914752,
+      "is_admin_action": true
+    },
+    {
+      "user_id": "G3SJW9rRHe7J3AOH",
+      "amount": -100.0,
+      "description": "ADMIN OVERRIDE: Admin Quick-Fund",
+      "timestamp": 1781128465.627654,
       "is_admin_action": true
     }
   ]
