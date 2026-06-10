@@ -907,6 +907,35 @@ class VoxEngineConfigApp extends Application {
             $(html).find("#vox-model-tag-input").val(ev.currentTarget.dataset.tag);
         });
 
+        $(html).find(".admin-topup-btn").click(async () => {
+            new Dialog({
+                title: "🛡️ ADMIN: Grant Test Credits",
+                content: `<div style="padding: 10px;">
+                    <p style="font-size: 11px; color: #888;">Add test dollars directly to your personal wallet to run the program.</p>
+                    <div class="form-group"><label>Target User ID:</label><input type="text" id="admin-target-id" value="${game.user.id}"></div>
+                    <div class="form-group"><label>Amount ($):</label><input type="number" id="admin-amount" value="100.00" step="10"></div>
+                </div>`,
+                buttons: {
+                    grant: {
+                        label: "Grant Credits",
+                        callback: async (html) => {
+                            const target = html.find("#admin-target-id").val();
+                            const amount = parseFloat(html.find("#admin-amount").val());
+                            const resp = await fetch("/api/v1/admin/modify-credits", {
+                                method: "POST",
+                                headers: {"Content-Type": "application/json"},
+                                body: JSON.stringify({targetUserId: target, amount: amount, description: "Test Funding"})
+                            });
+                            if (resp.ok) {
+                                ui.notifications.info(`🛡️ ADMIN: Granted $${amount} to ${target}`);
+                                this.render(true);
+                            }
+                        }
+                    }
+                }
+            }).render(true);
+        });
+
         $(html).find(".vox-suppress-toggle").change(async (ev) => {
             const cat = ev.currentTarget.dataset.cat;
             const val = ev.currentTarget.checked;
