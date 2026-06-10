@@ -5,7 +5,7 @@
 
 Hooks.once("ready", async () => {
     // 1. Check for recommendation popup
-    const recommended = ["jb2a_patreon", "jb2a_free", "blfx", "tokenmagic"];
+    const recommended = ["jb2a_patreon", "jb2a_free", "blfx", "tokenmagic", "aeris-animations", "pf2e-jb2a-macros"];
     const missing = recommended.filter(id => !game.modules.get(id)?.active);
 
     if (missing.length > 0 && !game.user.getFlag("vox-conjurata", "hide-animation-warning")) {
