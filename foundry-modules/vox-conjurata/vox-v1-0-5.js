@@ -1233,13 +1233,22 @@ async function captureAndScanMap() {
 }
 
 Hooks.on("getSceneControlButtons", (controls) => {
+    console.log("🎙️ Vox | getSceneControlButtons called. Controls structure:", controls);
+    
     // Foundry v14 Build 363 Compatibility: controls is now a Record/Object
-    const tokenControls = Array.isArray(controls) ? controls.find(c => c.name === "token") : controls.token;
+    const tokenControls = Array.isArray(controls) ? controls.find(c => c.name === "token") : (controls.token || controls.tokens);
+    
     if (tokenControls) {
+        console.log("🎙️ Vox | Found Token Controls:", tokenControls);
         const tools = Array.isArray(tokenControls.tools) ? tokenControls.tools : null;
         const addTool = (tool) => {
-            if (tools) tools.push(tool);
-            else tokenControls.tools[tool.name] = tool;
+            if (tools) {
+                console.log(`🎙️ Vox | Adding tool ${tool.name} to Array`);
+                tools.push(tool);
+            } else {
+                console.log(`🎙️ Vox | Adding tool ${tool.name} to Record`);
+                tokenControls.tools[tool.name] = tool;
+            }
         };
 
         if (game.user.isGM) {
