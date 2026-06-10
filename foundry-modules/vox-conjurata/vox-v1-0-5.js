@@ -1233,16 +1233,43 @@ async function captureAndScanMap() {
 }
 
 Hooks.on("getSceneControlButtons", (controls) => {
-    if (!game.user.isGM) return;
-    const tokenControls = controls.find(c => c.name === "token");
+    // Foundry v14 Build 363 Compatibility: controls is now a Record/Object
+    const tokenControls = Array.isArray(controls) ? controls.find(c => c.name === "token") : controls.token;
     if (tokenControls) {
-        tokenControls.tools.push({
-            name: "vox-scan",
-            title: "Tactical Eye Scan",
-            icon: "fas fa-eye",
-            onClick: () => captureAndScanMap(),
-            button: true
-        });
+        const tools = Array.isArray(tokenControls.tools) ? tokenControls.tools : null;
+        const addTool = (tool) => {
+            if (tools) tools.push(tool);
+            else tokenControls.tools[tool.name] = tool;
+        };
+
+        if (game.user.isGM) {
+            addTool({
+                name: "vox-scan",
+                title: "Tactical Eye Scan",
+                icon: "fa-solid fa-eye",
+                onClick: () => captureAndScanMap(),
+                button: true,
+                order: 50
+            });
+            addTool({
+                name: "vox-panel",
+                title: "Vox Live Panel",
+                icon: "fa-solid fa-microphone-lines",
+                button: true,
+                visible: true,
+                onClick: () => globalThis.voxLivePanel.render(true),
+                order: 51
+            });
+            addTool({
+                name: "vox-config",
+                title: "Vox Engine Config",
+                icon: "fa-solid fa-brain",
+                button: true,
+                visible: true,
+                onClick: () => new VoxEngineConfigApp().render(true),
+                order: 52
+            });
+        }
     }
 });
 
@@ -1643,17 +1670,7 @@ Hooks.on("controlToken", (token, selected) => {
     if (selected && globalThis.voxLivePanel.isSyncEnabled) globalThis.voxLivePanel.switchActor(token.actor.id, token.actor.name);
 });
 
-Hooks.on("getSceneControlButtons", (controls) => {
-    const tokenControl = controls.find(c => c.name === "token");
-    if (tokenControl) {
-        tokenControl.tools.push({
-            name: "vox-panel", title: "Vox Live Panel", icon: "fas fa-microphone-lines", button: true, visible: game.user.isGM, onClick: () => globalThis.voxLivePanel.render(true)
-        });
-        tokenControl.tools.push({
-            name: "vox-config", title: "Vox Engine Config", icon: "fas fa-brain", button: true, visible: true, onClick: () => new VoxEngineConfigApp().render(true)
-        });
-    }
-});
+
 
 Hooks.once("ready", () => {
     game.keybindings.register("vox-conjurata", "toggleVocalMask", {
