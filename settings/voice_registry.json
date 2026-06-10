@@ -70,5 +70,13 @@
     "is_archetype": false,
     "archetype_key": "human_female_british",
     "created_at": "2026-06-10T17:48:34"
+  },
+  "vcwqnXHkhzFhrt7O": {
+    "engine": "vox-audio-core",
+    "seed_path": "vcwqnXHkhzFhrt7O.wav",
+    "voice_prompt": "A rugged and imposing figure with a muscular build, his weathered face and piercing eyes speak of countless battles fought and won.",
+    "is_archetype": false,
+    "archetype_key": "human_male_british",
+    "created_at": "2026-06-10T17:48:44"
   }
 }
