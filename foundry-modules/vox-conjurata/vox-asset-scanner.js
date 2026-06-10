@@ -40,13 +40,15 @@ async function scanForAnimations() {
     const modules = game.modules.filter(m => m.active);
     
     for (let mod of modules) {
-        // This is a conceptual placeholder for the recursive scanning logic
-        // In a real implementation, we use Sequencer's database if available
         if (typeof Sequencer !== 'undefined' && Sequencer.Database) {
             const db = Sequencer.Database.entries;
-            for (let entry of db) {
+            if (!db) continue;
+            
+            // Handle both Array and Object structures in Sequencer DB
+            const entries = Array.isArray(db) ? db : Object.values(db);
+            
+            for (let entry of entries) {
                 // Map database entries back to common spell names
-                // e.g., jb2a.fireball -> "Fireball"
             }
         }
     }
