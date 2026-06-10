@@ -54,5 +54,13 @@
     "is_archetype": false,
     "archetype_key": "monster_dragon",
     "created_at": "2026-06-10T17:47:40"
+  },
+  "trchDxbDR2TiPMxT": {
+    "engine": "vox-audio-core",
+    "seed_path": "trchDxbDR2TiPMxT.wav",
+    "voice_prompt": "An eternal sentry, his hollow eye sockets glare with an unyielding deathly chill as the wind whistles through his skeletal frame.",
+    "is_archetype": false,
+    "archetype_key": "monster_undead",
+    "created_at": "2026-06-10T17:48:06"
   }
 }
