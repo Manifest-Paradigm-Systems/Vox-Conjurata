@@ -1,0 +1,12 @@
+{
+  "system_settings": {
+    "vram_threshold_gb": 30.5
+  },
+  "tier_routing": {
+    "humanoid_engine": "humanoid",
+    "monster_engine": "monster"
+  },
+  "engine_endpoints": {
+    "vox_audiocore_uri": "http://vox-audio-core:8000"
+  }
+}

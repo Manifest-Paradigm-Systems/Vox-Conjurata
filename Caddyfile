@@ -1,0 +1,42 @@
+:30000 {
+    # Logging configuration
+    log {
+        output stdout
+        format json
+    }
+
+    # Route only vox-conjurata orchestrator API traffic to the orchestrator.
+    # Use a specific prefix to avoid capturing Foundry VTT's own /api/ routes.
+    handle /api/voice-conversion* {
+        reverse_proxy orchestrator:8080
+    }
+    handle /api/ingest-actor* {
+        reverse_proxy orchestrator:8080
+    }
+    handle /api/v1/* {
+        reverse_proxy orchestrator:8080
+    }
+    handle /api/scan-battlemap* {
+        reverse_proxy orchestrator:8080
+    }
+    handle /api/status* {
+        reverse_proxy orchestrator:8080
+    }
+    handle /api/voice-changer* {
+        reverse_proxy orchestrator:8080
+    }
+    handle /music* {
+        reverse_proxy orchestrator:8080
+    }
+    handle /temp* {
+        reverse_proxy orchestrator:8080
+    }
+    handle /sessions* {
+        reverse_proxy orchestrator:8080
+    }
+
+    # Route all other traffic to Foundry VTT (includes WebSocket support)
+    handle {
+        reverse_proxy foundry-vtt:30000
+    }
+}

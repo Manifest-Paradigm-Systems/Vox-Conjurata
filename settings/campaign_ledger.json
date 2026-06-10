@@ -1,0 +1,243 @@
+{
+  "campaign_pool": 0.0,
+  "stripe_customer_id": null,
+  "personal_wallets": {
+    "gm": 999.8889999999984
+  },
+  "session_allowances": {},
+  "session_caps": {},
+  "session_spent": {
+    "gm": 0.11100000000000006
+  },
+  "transactions": [
+    {
+      "user_id": "gm",
+      "amount": -1000.0,
+      "description": "ADMIN OVERRIDE: Admin Override",
+      "timestamp": 1780988074.851421,
+      "is_admin_action": true
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Generic Actor",
+      "timestamp": 1780988075.0565765
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Generic Actor",
+      "timestamp": 1780988087.6005497
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Generic Actor",
+      "timestamp": 1780988087.6126394
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Generic Actor",
+      "timestamp": 1780988093.0121148
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Generic Actor",
+      "timestamp": 1780988093.0210364
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Generic Actor",
+      "timestamp": 1780988099.5687504
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Generic Actor",
+      "timestamp": 1780988099.5762625
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Generic Actor",
+      "timestamp": 1780988105.8261666
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Generic Actor",
+      "timestamp": 1780988105.8401623
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Generic Actor",
+      "timestamp": 1780988113.088285
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Generic Actor",
+      "timestamp": 1780988113.0958235
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Generic Actor",
+      "timestamp": 1780988119.4967554
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Generic Actor",
+      "timestamp": 1780988119.504283
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Generic Actor",
+      "timestamp": 1780988127.1821468
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Generic Actor",
+      "timestamp": 1780988127.1891892
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Generic Actor",
+      "timestamp": 1780988133.762958
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Barbarian",
+      "timestamp": 1780988133.77124
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Barbarian",
+      "timestamp": 1780988147.7086482
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Barbarian",
+      "timestamp": 1780988147.7193606
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Barbarian",
+      "timestamp": 1780988154.7827368
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Elderly Person",
+      "timestamp": 1780988154.790457
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Elderly Person",
+      "timestamp": 1780988166.929024
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Elderly Person",
+      "timestamp": 1780988166.9452157
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Elderly Person",
+      "timestamp": 1780988176.0947905
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Beast",
+      "timestamp": 1780988176.1030202
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Beast",
+      "timestamp": 1780988186.572701
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Undead",
+      "timestamp": 1780988186.5797899
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Undead",
+      "timestamp": 1780988195.790252
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Dragon",
+      "timestamp": 1780988210.0894394
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Dragon",
+      "timestamp": 1780988217.9716456
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Demon",
+      "timestamp": 1780988232.9274478
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Demon",
+      "timestamp": 1780988241.819676
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Goblin",
+      "timestamp": 1780988257.9026961
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Goblin",
+      "timestamp": 1780988266.8982651
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Scene Load & Scan for cave_01",
+      "timestamp": 1781036164.0404863
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Scene Load & Scan for cave_01",
+      "timestamp": 1781036370.455789
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Scene Load & Scan for test_scene_123",
+      "timestamp": 1781044494.639855
+    }
+  ]
+}

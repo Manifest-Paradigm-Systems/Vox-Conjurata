@@ -1,0 +1,12 @@
+{
+    "id": "vox-debug",
+    "title": "Vox DEBUG",
+    "description": "Emergency Diagnostic Module",
+    "version": "1.0.0",
+    "compatibility": {
+        "minimum": "11",
+        "verified": "14",
+        "maximum": "15"
+    },
+    "scripts": ["debug.js"]
+}

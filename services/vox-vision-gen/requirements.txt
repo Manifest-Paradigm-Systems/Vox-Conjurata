@@ -1,0 +1,5 @@
+fastapi
+uvicorn
+pydantic
+pillow
+stable-diffusion-cpp-python

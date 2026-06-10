@@ -1,0 +1,14 @@
+{
+  "id": "vox-chronicle",
+  "title": "Vox Conjurata: Ambient Chronicle Tracker",
+  "description": "System-agnostic background hooks to stream campaign milestones to a local orchestration pipeline.",
+  "version": "1.0.0",
+  "compatibility": {
+    "minimum": "11",
+    "verified": "12"
+  },
+  "esmodules": ["main.js"],
+  "relationships": {
+    "systems": []
+  }
+}

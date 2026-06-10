@@ -1,0 +1,294 @@
+name: vox-conjurata
+services:
+  cloudflared:
+    image: docker.io/cloudflare/cloudflared:latest
+    container_name: cloudflared
+    restart: unless-stopped
+    environment:
+      - TUNNEL_TOKEN=eyJhIjoiYTVkNDVhNjYyMzIzNTE0ZGJlNDU0MTQyMzk0ZjRkMDYiLCJ0IjoiNzhlMmFmODctODU3ZS00NjM2LWE5ODgtODIxNDQ0NDk2MDExIiwicyI6Ik56QXpOVEF6TURVdFlUUmlNaTAwTW1ObUxUZ3dNMkV0TmpSaU1USmlPRE0yTkRZNCJ9
+    command: tunnel --no-autoupdate run
+    networks:
+      - vox-net
+
+  orchestrator:
+    build:
+      context: ./services/orchestrator
+    container_name: vox-conjurata-orchestrator
+    # The rootless podman socket (mounted below) is blocked by SELinux labeling,
+    # not Unix perms — its ACL already grants root rw. Disable the SELinux label
+    # so the orchestrator can access host filesystem mounts.
+    security_opt:
+    - label=disable
+    ports:
+    - 8080:8080
+    environment:
+    - OLLAMA_URL=http://vox-llm-core:8081
+    - VISION_READER_URL=http://vox-vision-reader:8000
+    - STT_URL=http://vox-voice:5000
+    - TTS_ACTOR_URL=http://vox-audio-core:8000
+    - TTS_MONSTER_URL=http://vox-audio-core:8000
+    - TTS_MUSIC_URL=http://vox-audio-generation-music:8000
+    - TTS_SFX_URL=http://vox-audio-generation-sfx:8000
+    - IMAGE_GEN_URL=http://vox-vision-gen:8003
+    - FOUNDRY_API_URL=http://foundry-vtt:30000/api
+    - FOUNDRY_API_KEY=${FOUNDRY_API_KEY}
+    - PYTHONUNBUFFERED=1
+    volumes:
+    - model_storage:/models:z
+    - ./services/orchestrator/voice_seeds:/app/voice_seeds:z
+    - ./services/orchestrator/music_library:/app/music_library:z
+    - ./settings:/app/settings:z
+    - /sys:/sys:ro
+    - /run/user/1000/podman/podman.sock:/var/run/docker.sock:rw
+    - /home/EvokeStudio/manifest-paradigm/foundry/data/Data:/foundry_data:rw,z
+    - /home/EvokeStudio/manifest-paradigm/foundry/data/Data/audio/sfx:/sfx_out:rw,z
+    networks:
+    - vox-net
+
+  foundry-vtt:
+    image: node:24-slim
+    container_name: foundry-vtt
+    working_dir: /app
+    volumes:
+      - /home/EvokeStudio/manifest-paradigm/foundry/app:/app:z
+      - /home/EvokeStudio/manifest-paradigm/foundry/data:/data:z
+      - /var/home/EvokeStudio/vox-conjurata:/var/home/EvokeStudio/vox-conjurata:ro,z
+    command: ["node", "main.js", "--dataPath=/data"]
+    networks:
+      - vox-net
+    restart: unless-stopped
+
+  caddy:
+    image: docker.io/library/caddy:latest
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      - "30000:30000"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:z
+    networks:
+      - vox-net
+    depends_on:
+      - foundry-vtt
+      - orchestrator
+
+  vox-vision-reader:
+    image: ghcr.io/abetlen/llama-cpp-python:latest
+    container_name: vox-vision-reader
+    ports:
+    - 8002:8000
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - "39"
+    - "105"
+    security_opt:
+    - seccomp=unconfined
+    environment:
+    - HSA_OVERRIDE_GFX_VERSION=12.0.1
+    - CUDA_VISIBLE_DEVICES=""
+    - MODEL=/models/MiniCPM-V-2_6-GGUF/MiniCPM-V-2_6-Q4_K_M.gguf
+    - CLIP_MODEL_PATH=/models/MiniCPM-V-2_6-GGUF/mmproj-model-f16.gguf
+    - N_GPU_LAYERS=-1
+    - CHAT_FORMAT=minicpm-v-2.6
+    - VRAM_ALLOCATION=4.80GB
+    volumes:
+    - model_storage:/models:z
+    networks:
+    - vox-net
+    restart: unless-stopped
+
+  vox-llm-vllm:
+    image: ghcr.io/abetlen/llama-cpp-python:latest
+    container_name: vox-llm-llama
+    command: >
+      python3 -m llama_cpp.server
+      --model /models/14B-Qwen2.5-Kunou-v1.Q4_K_M.gguf
+      --n_gpu_layers -1
+      --n_ctx 32768
+      --cache True
+      --cache_type ram
+      --type_k 2
+      --type_v 2
+      --flash_attn True
+      --host 0.0.0.0
+      --port 8000
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - "39"
+    - "105"
+    security_opt:
+    - seccomp=unconfined
+    environment:
+    - HSA_OVERRIDE_GFX_VERSION=12.0.1
+    - CUDA_VISIBLE_DEVICES=""
+    volumes:
+    - /var/home/EvokeStudio/models/Sao10K-14B-Kunou:/models:z
+    networks:
+    - vox-net
+    restart: unless-stopped
+
+  vox-llm-core:
+    container_name: vox-llm-core
+    build:
+      context: ./services/vox-llm-core
+    ports:
+    - 11435:8081
+    environment:
+    - PORT=8081
+    - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+    - LOCAL_SGLANG_URL=http://vox-llm-vllm:8000
+    networks:
+    - vox-net
+    restart: unless-stopped
+
+  vox-voice:
+    build:
+      context: ./services/vox-voice
+    container_name: vox-voice
+    ports:
+    - 5000:5000
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - "39"
+    - "105"
+    security_opt:
+    - seccomp=unconfined
+    environment:
+    - HSA_OVERRIDE_GFX_VERSION=12.0.1
+    - CUDA_VISIBLE_DEVICES=""
+    - PYTHONUNBUFFERED=1
+    networks:
+    - vox-net
+    restart: unless-stopped
+
+  vox-audio-generation-music:
+    build:
+      context: ./services/vox-audio-generation
+    container_name: vox-audio-generation-music
+    ports:
+    - 8000:8000
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - "39"
+    - "105"
+    security_opt:
+    - seccomp=unconfined
+    environment:
+    - HSA_OVERRIDE_GFX_VERSION=12.0.1
+    - ROCR_VISIBLE_DEVICES=0
+    - HIP_VISIBLE_DEVICES=0
+    - CUDA_VISIBLE_DEVICES=0
+    - VRAM_LIMIT=0.80GB
+    - HF_TOKEN=${HF_TOKEN}
+    - STABLE_AUDIO_MODEL=stabilityai/stable-audio-open-1.0
+    volumes:
+    - ./cache/huggingface:/root/.cache/huggingface:z
+    command: ["python", "tts_engine.py", "--precision", "fp8"]
+    networks:
+    - vox-net
+    restart: unless-stopped
+
+  vox-audio-generation-sfx:
+    build:
+      context: ./services/vox-audio-generation
+    container_name: vox-audio-generation-sfx
+    ports:
+    - 8001:8000
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - "39"
+    - "105"
+    security_opt:
+    - seccomp=unconfined
+    environment:
+    - HSA_OVERRIDE_GFX_VERSION=12.0.1
+    - ROCR_VISIBLE_DEVICES=0
+    - HIP_VISIBLE_DEVICES=0
+    - CUDA_VISIBLE_DEVICES=0
+    - AUDIO_ENGINE_TYPE=sfx
+    - EXECUTION_DEVICE=gpu
+    - VRAM_LIMIT=0.80GB
+    - HF_TOKEN=${HF_TOKEN}
+    - STABLE_AUDIO_MODEL=stabilityai/stable-audio-open-1.0
+    volumes:
+    - ./cache/huggingface:/root/.cache/huggingface:z
+    command: ["python", "tts_engine.py", "--precision", "fp8"]
+    networks:
+    - vox-net
+    restart: unless-stopped
+
+  vox-audio-core:
+    build:
+      context: ./services/vox-audio-core
+    container_name: vox-audio-core
+    ports:
+    - 8004:8000
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - "39"
+    - "105"
+    security_opt:
+    - seccomp=unconfined
+    environment:
+    - HSA_OVERRIDE_GFX_VERSION=12.0.1
+    - PYTORCH_ROCM_ARCH=gfx1201
+    - HIP_PLATFORM=amd
+    - ROCR_VISIBLE_DEVICES=0
+    - HIP_VISIBLE_DEVICES=0
+    - CUDA_VISIBLE_DEVICES=0
+    - VRAM_LIMIT=4.20GB
+    - SEED_DIR=/app/voice_seeds/
+    volumes:
+    - model_storage:/models:z
+    - ./services/orchestrator/voice_seeds:/app/voice_seeds:z
+    networks:
+    - vox-net
+    restart: unless-stopped
+
+  vox-vision-gen:
+    build:
+      context: ./services/vox-vision-gen
+    container_name: vox-vision-gen
+    ports:
+    - 8003:8003
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - "39"
+    - "105"
+    security_opt:
+    - seccomp=unconfined
+    environment:
+    - HSA_OVERRIDE_GFX_VERSION=12.0.1
+    - ROCR_VISIBLE_DEVICES=0
+    - HIP_VISIBLE_DEVICES=0
+    - CUDA_VISIBLE_DEVICES=0
+    - VRAM_LIMIT=5.50GB
+    - MODEL_PATH=/models/stable-diffusion-xl-base-1.0-Q4_0.gguf
+    - LORA_DIR=/loras
+    volumes:
+    - model_storage:/models:z
+    - ./loras:/loras:z
+    networks:
+    - vox-net
+    restart: unless-stopped
+
+networks:
+  vox-net:
+    name: vox-net
+    driver: bridge
+volumes:
+  model_storage: null

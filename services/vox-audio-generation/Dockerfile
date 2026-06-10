@@ -1,0 +1,19 @@
+# vox-conjurata Audio Generation (TTS & Stable Audio) Dockerfile
+FROM docker.io/rocm/pytorch:latest
+
+ENV HSA_OVERRIDE_GFX_VERSION=11.0.0
+ENV DEBIAN_FRONTEND=noninteractive
+
+WORKDIR /app
+# Ensure the render and video groups exist for Podman group_add
+RUN groupadd -r render || true && groupadd -r video || true
+
+# Install dependencies (fastapi, uvicorn, diffusers, transformers, accelerate, scipy, edge-tts, torchsde)
+RUN pip install --no-cache-dir fastapi uvicorn diffusers transformers accelerate scipy edge-tts torchsde
+
+# Copy application code
+COPY tts_engine.py .
+
+EXPOSE 8000
+
+CMD ["python3", "tts_engine.py"]

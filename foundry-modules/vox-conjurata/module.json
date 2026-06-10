@@ -1,0 +1,59 @@
+{
+    "id": "vox-conjurata",
+    "title": "Vox-Conjurata AI",
+    "description": "The zero-click, secure AI orchestrator bridging local ROCm models and cloud engines to dynamically synthesize narration, NPC memories, voice, and foley sound effects.",
+    "version": "1.0.0",
+    "library": false,
+    "manifest": "",
+    "download": "",
+    "compatibility": {
+        "minimum": "11",
+        "verified": "14",
+        "maximum": "15"
+    },
+    "authors": [
+        {
+            "name": "Michael Meyer",
+            "email": "mnmeyer@gmail.com"
+        }
+    ],
+    "styles": [
+        "vox-conjurata.css"
+    ],
+    "relationships": {
+        "requires": [
+            {
+                "id": "sequencer",
+                "type": "module",
+                "compatibility": {}
+            },
+            {
+                "id": "autoanimations",
+                "type": "module",
+                "compatibility": {}
+            },
+            {
+                "id": "jb2a_patreon",
+                "type": "module",
+                "compatibility": {}
+            },
+            {
+                "id": "tokenmagic",
+                "type": "module",
+                "compatibility": {}
+            },
+            {
+                "id": "blfx",
+                "type": "module",
+                "compatibility": {}
+            }
+        ]
+    },
+    "minimumCoreVersion": "11",
+    "compatibleCoreVersion": "13",
+    "scripts": [
+        "vox-v1-0-5.js",
+        "vox-interface-fix.js",
+        "vox-combat-hook.js"
+    ]
+}

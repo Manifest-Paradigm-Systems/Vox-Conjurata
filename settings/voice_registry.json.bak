@@ -1,0 +1,186 @@
+{
+  "palette_trigger_human_male_british": {
+    "engine": "fishspeech",
+    "seed_path": "palette_trigger_human_male_british_seed_male.wav",
+    "voice_prompt": "A thunderous, bass-heavy baritone reverberates through the echoing cavernous halls, as if the earth itself were speaking. The voice carries the weight of eons, a whiskey-soaked ancient rasp that hints at untold secrets and forgotten lore.",
+    "is_archetype": false,
+    "archetype_key": "",
+    "created_at": "2026-06-04T06:14:56"
+  },
+  "palette_trigger_human_female_british": {
+    "engine": "fishspeech",
+    "seed_path": "palette_trigger_human_female_british_seed_female.wav",
+    "voice_prompt": "A deep, resonant baritone that echoes through the cavernous halls of a forgotten castle, reverberating off ancient stone walls.",
+    "is_archetype": false,
+    "archetype_key": "",
+    "created_at": "2026-06-04T06:17:50"
+  },
+  "palette_trigger_elf_male_french": {
+    "engine": "fishspeech",
+    "seed_path": "palette_trigger_elf_male_french_seed_male.wav",
+    "voice_prompt": "A thunderous, echoing baritone resonates through the cavernous halls, reverberating off ancient stone walls. The voice carries the weight of untold centuries, a whiskey-soaked rasp that hints at a life of epic quests and hard-won battles.",
+    "is_archetype": false,
+    "archetype_key": "",
+    "created_at": "2026-06-04T06:19:22"
+  },
+  "palette_trigger_elf_female_french": {
+    "engine": "fishspeech",
+    "seed_path": "palette_trigger_elf_female_french_seed_female.wav",
+    "voice_prompt": "A deep, resonant bass-baritone voice, echoing with the weight of centuries of wisdom, reverberates through the vast, echoing chamber of an ancient, forgotten temple.",
+    "is_archetype": false,
+    "archetype_key": "",
+    "created_at": "2026-06-04T06:20:26"
+  },
+  "palette_trigger_dwarf_male_scottish": {
+    "engine": "fishspeech",
+    "seed_path": "palette_trigger_dwarf_male_scottish_seed_male.wav",
+    "voice_prompt": "A sonorous, honeyed baritone resonates through the echoing reverberant damp cave, rich with the timbre of a thousand ancient tales.",
+    "is_archetype": false,
+    "archetype_key": "",
+    "created_at": "2026-06-04T06:21:24"
+  },
+  "palette_trigger_dwarf_female_scottish": {
+    "engine": "fishspeech",
+    "seed_path": "palette_trigger_dwarf_female_scottish_seed_female.wav",
+    "voice_prompt": "A sonorous, honeyed tenor resonates within the echoing reverberant damp cave, its rich timbre bouncing off the stone walls and reverberating with ancient wisdom.",
+    "is_archetype": false,
+    "archetype_key": "",
+    "created_at": "2026-06-04T06:22:16"
+  },
+  "palette_trigger_halfling_male_irish": {
+    "engine": "fishspeech",
+    "seed_path": "palette_trigger_halfling_male_irish_seed_male.wav",
+    "voice_prompt": "A deep, resonant baritone voice, echoing through a vast, reverberant chamber of ancient stone, with hints of a mysterious, otherworldly timbre.",
+    "is_archetype": false,
+    "archetype_key": "",
+    "created_at": "2026-06-04T06:23:12"
+  },
+  "palette_trigger_halfling_female_irish": {
+    "engine": "fishspeech",
+    "seed_path": "palette_trigger_halfling_female_irish_seed_female.wav",
+    "voice_prompt": "A deep, resonant voice that echoes through the cavernous halls of a forgotten castle, its timbre a blend of ancient wisdom and untold mysteries.",
+    "is_archetype": false,
+    "archetype_key": "",
+    "created_at": "2026-06-04T06:24:37"
+  },
+  "palette_trigger_barbarian_male_german": {
+    "engine": "fishspeech",
+    "seed_path": "palette_trigger_barbarian_male_german_seed_male.wav",
+    "voice_prompt": "A thunderous, battle-hardened bass-baritone that reverberates through the echoing caverns of a damp, moss-covered cave, each syllable a primal declaration of unbridled fury.",
+    "is_archetype": false,
+    "archetype_key": "",
+    "created_at": "2026-06-04T06:26:41"
+  },
+  "palette_trigger_barbarian_female_german": {
+    "engine": "fishspeech",
+    "seed_path": "palette_trigger_barbarian_female_german_seed_female.wav",
+    "voice_prompt": "A thunderous, battle-hardened bass-baritone reverberates through the echoing reverberant damp cave, as if the very walls are alive with the weight of a thousand battles.",
+    "is_archetype": false,
+    "archetype_key": "",
+    "created_at": "2026-06-04T06:28:36"
+  },
+  "palette_trigger_elder_male_british": {
+    "engine": "fishspeech",
+    "seed_path": "palette_trigger_elder_male_british_seed_male.wav",
+    "voice_prompt": "A clear, low-pitched male voice with natural inflections and a professional tone.",
+    "is_archetype": false,
+    "archetype_key": "",
+    "created_at": "2026-06-04T06:30:27"
+  },
+  "palette_trigger_elder_female_british": {
+    "engine": "fishspeech",
+    "seed_path": "palette_trigger_elder_female_british_seed_female.wav",
+    "voice_prompt": "A weathered, whiskey-soaked ancient rasp, echoing through the reverberant damp cave of a life well-lived, each syllable a testament to the weight of countless winters.",
+    "is_archetype": false,
+    "archetype_key": "",
+    "created_at": "2026-06-04T06:32:31"
+  },
+  "palette_trigger_monster_beast": {
+    "engine": "fishspeech",
+    "seed_path": "palette_trigger_monster_beast_seed_male.wav",
+    "voice_prompt": "A guttural, primal roar reverberates through the dense jungle undergrowth, a sound that sends shivers down the spines of all who hear it. It's a noise that seems to emanate from the very heart of the wild, a call that echoes through the humid, air-thick foliage.",
+    "is_archetype": false,
+    "archetype_key": "",
+    "created_at": "2026-06-04T06:34:17"
+  },
+  "palette_trigger_monster_undead": {
+    "engine": "fishspeech",
+    "seed_path": "palette_trigger_monster_undead_seed_male.wav",
+    "voice_prompt": "A haunting, sepulchral baritone emanates from the Undead, echoing with the weight of centuries in a vast, cavernous tomb. His voice reverberates with a chilling, supernatural resonance that sends shivers down the spine.",
+    "is_archetype": false,
+    "archetype_key": "",
+    "created_at": "2026-06-04T06:35:22"
+  },
+  "palette_trigger_monster_dragon": {
+    "engine": "fishspeech",
+    "seed_path": "palette_trigger_monster_dragon_seed_male.wav",
+    "voice_prompt": "A thunderous, fire-roasted baritone that reverberates through the echoing caverns of a volcanic lair, accompanied by the crackling of flames and the scraping of scales against ancient stone.",
+    "is_archetype": false,
+    "archetype_key": "",
+    "created_at": "2026-06-04T06:36:08"
+  },
+  "palette_trigger_monster_demon": {
+    "engine": "fishspeech",
+    "seed_path": "palette_trigger_monster_demon_seed_male.wav",
+    "voice_prompt": "A guttural, sulfuric baritone emanating from the depths of the underworld, echoing through a cavernous, reverberant chamber of ancient evil.",
+    "is_archetype": false,
+    "archetype_key": "",
+    "created_at": "2026-06-04T06:36:26"
+  },
+  "palette_trigger_monster_goblin": {
+    "engine": "fishspeech",
+    "seed_path": "palette_trigger_monster_goblin_seed_male.wav",
+    "voice_prompt": "A shrill, discordant screech reverberates through the dank, echoing caverns of the goblin's lair, a sound akin to the scraping of rusted blades against stone. The harsh, guttural chittering clicks of the goblin's voice bounce off the damp walls, creating a cacophonous symphony of malice and mischief.",
+    "is_archetype": false,
+    "archetype_key": "",
+    "created_at": "2026-06-04T06:37:11"
+  },
+  "WNX5OQKPh4uaV7mW": {
+    "engine": "fishspeech",
+    "seed_path": "WNX5OQKPh4uaV7mW_seed_male.wav",
+    "voice_prompt": "A sonorous, resonant baritone voice echoes through the vast, reverberant chamber, its rich timbre hinting at a life filled with ancient wisdom and untold stories.",
+    "is_archetype": false,
+    "archetype_key": "",
+    "created_at": "2026-06-04T07:08:28"
+  },
+  "5vBG8a8dnJfmVd3Y": {
+    "engine": "fishspeech",
+    "seed_path": "5vBG8a8dnJfmVd3Y_seed_male.wav",
+    "voice_prompt": "A guttural, thunderous baritone resonates within the echoing reverberant damp cave, a primal call that shakes the stone walls and sends ripples through the stagnant underground pools.",
+    "is_archetype": false,
+    "archetype_key": "",
+    "created_at": "2026-06-04T07:09:44"
+  },
+  "trchDxbDR2TiPMxT": {
+    "engine": "fishspeech",
+    "seed_path": "trchDxbDR2TiPMxT_seed_male.wav",
+    "voice_prompt": "A bone-chilling, hollow, rattling baritone emanating from a skeletal frame, echoing through a damp, reverberant crypt.",
+    "is_archetype": false,
+    "archetype_key": "",
+    "created_at": "2026-06-04T07:11:17"
+  },
+  "WPsgrCUSFCqgDvJi": {
+    "engine": "fishspeech",
+    "seed_path": "WPsgrCUSFCqgDvJi_seed_male.wav",
+    "voice_prompt": "A thunderous, bone-shattering roar reverberates through the echoing cavernous lair, a vicious gravel-crushed baritone that rattles ancient stalactites and sends shivers down the spines of even the bravest adventurers.",
+    "is_archetype": false,
+    "archetype_key": "",
+    "created_at": "2026-06-04T07:10:32"
+  },
+  "vcwqnXHkhzFhrt7O": {
+    "engine": "fishspeech",
+    "seed_path": "vcwqnXHkhzFhrt7O_seed_male.wav",
+    "voice_prompt": "A thunderous, battle-hardened baritone resonates within the echoing reverberant damp cave, hinting at a warrior's tale of conquest and glory.",
+    "is_archetype": false,
+    "archetype_key": "",
+    "created_at": "2026-06-04T07:11:58"
+  },
+  "czQ0MaZBu3BqMpce": {
+    "engine": "fishspeech",
+    "seed_path": "czQ0MaZBu3BqMpce_seed_female.wav",
+    "voice_prompt": "A silvery melodic soprano with ethereal resonance, echoing through a vast, reverberant cathedral.",
+    "is_archetype": false,
+    "archetype_key": "",
+    "created_at": "2026-06-04T07:12:12"
+  }
+}

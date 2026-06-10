@@ -1,0 +1,24 @@
+.env
+node_modules/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.pyo
+*.pyd
+
+# Models and Large Data
+cache/
+models/
+loras/
+voice_seeds/
+services/orchestrator/music_library/
+services/orchestrator/session_library/
+services/orchestrator/temp_assets/
+services/conjurata-orchestrator/archive/audio/*.mp3
+vox-monster-voice/models/
+
+# Logs and system
+*.log
+nohup.out
+.cline/
+.git-corrupted-bak*/
