@@ -875,6 +875,26 @@ class VoxEngineConfigApp extends Application {
                 </div>
             </div>
 
+            ${data.isGM ? `
+            <div class="form-group-box" style="background: rgba(233, 30, 99, 0.1); padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #e91e63;">
+                <h3 style="font-size: 14px; margin-top: 0; color: #ff80ab;"><i class="fas fa-user-shield"></i> GM Admin Quick-Fund</h3>
+                <p style="font-size: 10px; color: #888; margin-bottom: 15px;">Inject test credits directly into your wallet or the campaign pool to bypass billing for testing.</p>
+                <div style="display: flex; gap: 10px; align-items: flex-end;">
+                    <div style="flex: 1;">
+                        <label style="font-size: 11px; color: #aaa; display: block; margin-bottom: 4px;">Target Account</label>
+                        <select id="admin-inline-target" style="width: 100%; background: #222; color: #eee; border: 1px solid #444; height: 28px; border-radius: 4px;">
+                            <option value="${game.user.id}">My Wallet (${game.user.name})</option>
+                            <option value="POOL">Campaign Pool (Global)</option>
+                        </select>
+                    </div>
+                    <div style="width: 100px;">
+                        <label style="font-size: 11px; color: #aaa; display: block; margin-bottom: 4px;">Amount ($)</label>
+                        <input type="number" id="admin-inline-amount" value="100" step="10" style="width: 100%; background: #000; color: #fff; border: 1px solid #444; height: 28px; padding: 0 8px;">
+                    </div>
+                    <button type="button" id="admin-inline-grant-btn" style="background: #e91e63; color: white; border: none; height: 28px; padding: 0 15px; border-radius: 4px; font-weight: bold; cursor: pointer;">GRANT</button>
+                </div>
+            </div>` : ""}
+
             <div style="background: rgba(255,255,255,0.02); padding: 15px; border-radius: 8px; border: 1px solid #333;">
                 <label style="display: block; font-weight: bold; margin-bottom: 12px;">Manage Your Session Budget</label>
                 <div style="display: flex; gap: 10px; align-items: center;">
@@ -901,6 +921,29 @@ class VoxEngineConfigApp extends Application {
         $(html).find("#vox-llm-mode-select").change(ev => {
             const val = ev.target.value;
             $(html).find("#vox-local-brain-config-pane").toggle(val === 'byo_local_brain');
+        });
+
+        $(html).find("#admin-inline-grant-btn").click(async (ev) => {
+            const target = $(html).find("#admin-inline-target").val();
+            const amount = parseFloat($(html).find("#admin-inline-amount").val());
+            const endpoint = (target === "POOL") ? "/api/v1/admin/set-pool" : "/api/v1/admin/modify-credits";
+            const payload = (target === "POOL") ? {amount: amount} : {targetUserId: target, amount: amount, description: "Admin Quick-Fund"};
+            
+            try {
+                const resp = await fetch(endpoint, {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify(payload)
+                });
+                if (resp.ok) {
+                    ui.notifications.info(`🛡️ ADMIN: Successfully added $${amount} to ${target}`);
+                    this.render(true);
+                } else {
+                    ui.notifications.error("🛡️ ADMIN: Funding failed. Check backend logs.");
+                }
+            } catch (err) {
+                console.error("🎙️ Vox | Admin Quick-Fund Error:", err);
+            }
         });
 
         $(html).find(".badge-btn").click(ev => {
