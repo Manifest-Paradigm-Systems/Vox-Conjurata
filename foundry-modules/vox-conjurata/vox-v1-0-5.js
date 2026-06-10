@@ -538,9 +538,8 @@ function registerKeybindings() {
         default: "eva-qwen2.5-7b"
     });
 
-    game.keybindings.register("vox-conjurata", "narratorPTT", { name: "Vox: Narrator PTT [Y]", editable: [{ key: "KeyY" }], onDown: () => {}, onUp: () => {} });
-    game.keybindings.register("vox-conjurata", "puppeteerPTT", { name: "Vox: Puppet PTT [H]", editable: [{ key: "KeyH" }], onDown: () => {}, onUp: () => {} });
-    game.keybindings.register("vox-conjurata", "playerPTT", { name: "Vox: Char PTT [I]", editable: [{ key: "KeyI" }], onDown: () => {}, onUp: () => {} });
+    // PTT keys are handled via global window listeners in the anonymous function below
+    // to ensure stopImmediatePropagation() works reliably across the whole session.
 }
 
 (function() {
@@ -1397,10 +1396,16 @@ function statusMessage(text, isOpen) {
 }
 
 async function processAndSendAudio() {
-    const chunks = globalThis.voxState.audioChunks; if (chunks.length === 0) return;
+    const chunks = globalThis.voxState.audioChunks; 
+    console.log(`🎙️ Vox | Processing ${chunks.length} audio chunks...`);
+    if (chunks.length === 0) {
+        console.warn("🎙️ Vox | No audio chunks captured. Stream might have been silent or interrupted.");
+        return;
+    }
     
     // Pre-flight Credit Check
     try {
+        console.log(`🎙️ Vox | Checking credits for ${game.user.name}...`);
         const bResp = await fetch(`/api/v1/ledger/balance/${game.user.id}`);
         const balance = await bResp.json();
         if (balance.is_out_of_credits) {
@@ -1482,7 +1487,9 @@ async function processAndSendAudio() {
     }));
 
     try {
+        console.log(`🎙️ Vox | Sending audio to pipeline: ${globalThis.voxState.voiceConversionEndpoint}`);
         const r = await fetch(globalThis.voxState.voiceConversionEndpoint, { method: "POST", body: formData });
+        console.log(`🎙️ Vox | Pipeline Response: ${r.status}`);
         const d = await r.json();
         if (d.status === "success") {
             const { transcription, audio_data, engine, voxType, ai_reply } = d;
