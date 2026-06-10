@@ -16,7 +16,7 @@ class VoxEventQueueHUD extends Application {
     }
 
     static get defaultOptions() {
-        return mergeObject(super.defaultOptions, {
+        return foundry.utils.mergeObject(super.defaultOptions, {
             id: "vox-event-queue-hud",
             title: "Vox: Task Pipeline",
             template: null, // We'll use _renderInner
@@ -780,7 +780,7 @@ class VoxEngineConfigApp extends Application {
     }
 
     static get defaultOptions() {
-        return mergeObject(super.defaultOptions, {
+        return foundry.utils.mergeObject(super.defaultOptions, {
             id: "vox-engine-config",
             title: "Vox Conjurata: Engine Configuration",
             width: 550,
@@ -998,7 +998,7 @@ class VoxVoiceManager extends Application {
     }
 
     static get defaultOptions() {
-        return mergeObject(super.defaultOptions, {
+        return foundry.utils.mergeObject(super.defaultOptions, {
             id: "vox-voice-manager",
             title: "Vox Neural Voice Registry",
             width: 500,
@@ -1634,7 +1634,7 @@ class VoxLivePanel extends Application {
     }
 
     static get defaultOptions() {
-        return mergeObject(super.defaultOptions, {
+        return foundry.utils.mergeObject(super.defaultOptions, {
             id: "vox-live-panel", title: "🎙️ Vox Conjurata Live Panel", width: 320, height: "auto", resizable: false, dragDrop: [{ dragSelector: ".window-header" }]
         });
     }
