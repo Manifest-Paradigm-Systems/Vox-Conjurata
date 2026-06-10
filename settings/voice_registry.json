@@ -30,5 +30,13 @@
     "is_archetype": false,
     "archetype_key": "monster_goblin",
     "created_at": "2026-06-09T06:57:49"
+  },
+  "WNX5OQKPh4uaV7mW": {
+    "engine": "vox-audio-core",
+    "seed_path": "WNX5OQKPh4uaV7mW.wav",
+    "voice_prompt": "A weary but sharp-eyed scholar with a quick wit, his voice carries the weight of countless tomes and the fire of unquenched curiosity.",
+    "is_archetype": false,
+    "archetype_key": "human_male_british",
+    "created_at": "2026-06-10T17:47:02"
   }
 }
