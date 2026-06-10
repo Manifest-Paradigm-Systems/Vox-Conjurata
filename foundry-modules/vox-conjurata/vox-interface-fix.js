@@ -38,7 +38,10 @@ Hooks.on("renderChatLog", (app, html, data) => {
     micBtn.style.lineHeight = '18px';
 
     const startVoxMic = (e) => {
-        if (e) e.preventDefault();
+        if (e) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+        }
         if (micBtn.classList.contains('active')) return;
         micBtn.classList.add('active');
         micBtn.style.background = '#8b0000';
@@ -99,7 +102,10 @@ Hooks.on("renderChatLog", (app, html, data) => {
     };
 
     const stopVoxMic = (e) => {
-        if (e) e.preventDefault();
+        if (e) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+        }
         if (!micBtn.classList.contains('active')) return;
         micBtn.classList.remove('active');
         micBtn.style.background = '';

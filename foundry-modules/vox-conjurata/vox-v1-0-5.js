@@ -558,6 +558,8 @@ function registerKeybindings() {
         const code = event.code;
         
         if (code === "KeyY" || code === "KeyH" || code === "KeyI") {
+            event.preventDefault();
+            event.stopImmediatePropagation();
             activeKeys.add(code);
             console.log(`🎙️ Vox: Hotkey ${code} pressed (PTT OPEN)`);
             
@@ -618,6 +620,8 @@ function registerKeybindings() {
     window.addEventListener("keyup", (event) => {
         const code = event.code;
         if (activeKeys.has(code)) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
             activeKeys.delete(code);
             console.log(`🎙️ Vox: Hotkey ${code} released (PTT CLOSED)`);
             
