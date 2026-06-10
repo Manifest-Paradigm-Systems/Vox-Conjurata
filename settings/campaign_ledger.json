@@ -2,7 +2,7 @@
   "campaign_pool": 10.0,
   "stripe_customer_id": null,
   "personal_wallets": {
-    "gm": 999.8409999999977
+    "gm": 999.8319999999976
   },
   "session_allowances": {
     "G3SJW9rRHe7J3AOH": 0.0
@@ -11,7 +11,7 @@
     "G3SJW9rRHe7J3AOH": 0.0
   },
   "session_spent": {
-    "gm": 0.15900000000000009,
+    "gm": 0.1680000000000001,
     "G3SJW9rRHe7J3AOH": 0.0
   },
   "transactions": [
@@ -339,6 +339,24 @@
       "amount": 0.003,
       "description": "Voice Forging for Xulgath Warrior",
       "timestamp": 1781126548.3509712
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Juvenile Horned Dragon",
+      "timestamp": 1781126568.3648772
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Juvenile Horned Dragon",
+      "timestamp": 1781126576.7522388
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Skeleton Guard",
+      "timestamp": 1781126592.2635202
     }
   ]
 }

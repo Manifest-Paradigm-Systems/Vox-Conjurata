@@ -42,18 +42,18 @@
   "5vBG8a8dnJfmVd3Y": {
     "engine": "vox-audio-core",
     "seed_path": "5vBG8a8dnJfmVd3Y.wav",
-    "voice_prompt": "A towering, hulking brute with jagged teeth and menacing eyes, his rough hide glistens with sweat as he wields a massive blade.",
+    "voice_prompt": "A towering, hulking brute with jagged teeth and menacing eyes, his deep, guttural growl echoes through the caverns as he charges into battle.",
     "is_archetype": false,
     "archetype_key": "monster_beast",
-    "created_at": "2026-06-10T17:47:27"
+    "created_at": "2026-06-10T21:22:48"
   },
   "WPsgrCUSFCqgDvJi": {
     "engine": "vox-audio-core",
     "seed_path": "WPsgrCUSFCqgDvJi.wav",
-    "voice_prompt": "A young, fiery creature with jagged horns and scales that shimmer in shades of emerald and onyx, its voice a raspy hiss tinged with the promise of future might.",
+    "voice_prompt": "A young, fiery creature with jagged horns and scales that shimmer in the light of its own nascent flames.",
     "is_archetype": false,
     "archetype_key": "monster_dragon",
-    "created_at": "2026-06-10T17:47:40"
+    "created_at": "2026-06-10T21:23:12"
   },
   "trchDxbDR2TiPMxT": {
     "engine": "vox-audio-core",
