@@ -64,7 +64,7 @@ class VoxEventQueueHUD extends Application {
                     
                     <div class="vox-stealth-wallet ${isDry ? 'force-reveal' : ''}" style="display: flex; gap: 8px; align-items: center; cursor: pointer; position: relative;">
                         <span class="vox-balance-label ${flashClass}" style="font-size: 10px; color: ${statusColor}; font-weight: bold; transition: all 0.3s ease; ${(isDry || isLow) ? '' : 'opacity: 0; width: 0; overflow: hidden;'}">
-                            $${balance.total_available.toFixed(6)}
+                            $${(balance.total_available ?? 0).toFixed(6)}
                         </span>
                         <i class="fas fa-coins vox-wallet-icon" style="color: ${statusColor}; font-size: 12px; filter: drop-shadow(0 0 2px ${statusColor});" title="Hover to view balance"></i>
                         
@@ -86,11 +86,11 @@ class VoxEventQueueHUD extends Application {
                 
                 <div class="vox-sub-balances" style="display: flex; gap: 5px; margin-bottom: 10px; font-size: 8px; color: #666; ${(isDry || isLow) ? '' : 'display: none;'}">
                     <div style="flex: 1; background: rgba(255,255,255,0.03); padding: 3px 6px; border-radius: 3px; display: flex; justify-content: space-between;">
-                        <span>Grant: $${balance.session_grant.toFixed(6)}</span>
+                        <span>Grant: $${(balance.session_grant ?? 0).toFixed(6)}</span>
                         ${balance.session_grant > 0 ? `<i class="fas fa-undo vox-return-grant" style="cursor: pointer; margin-left: 4px;" title="Return to pool"></i>` : ''}
                     </div>
                     <div style="flex: 1; background: rgba(255,255,255,0.03); padding: 3px 6px; border-radius: 3px; display: flex; justify-content: space-between;">
-                        <span>Wallet: $${balance.personal_wallet.toFixed(6)}</span>
+                        <span>Wallet: $${(balance.personal_wallet ?? 0).toFixed(6)}</span>
                         ${balance.personal_wallet > 0 ? `<i class="fas fa-hand-holding-usd vox-return-personal" style="cursor: pointer; margin-left: 4px;" title="Return to pool"></i>` : ''}
                     </div>
                 </div>
@@ -201,7 +201,7 @@ class VoxEventQueueHUD extends Application {
                                     })
                                 });
                                 if (resp.ok) {
-                                    ui.notifications.info(`🎁 Gift of $${amount.toFixed(6)} sent successfully!`);
+                                    ui.notifications.info(`🎁 Gift of $${(amount ?? 0).toFixed(6)} sent successfully!`);
                                     this.render(true);
                                 } else {
                                     const err = await resp.json();
@@ -871,7 +871,7 @@ class VoxEngineConfigApp extends Application {
                 <div style="flex: 1; background: #222; padding: 12px; border-radius: 8px; text-align: center; border: 1px solid #444;">
                     <div style="font-size: 10px; color: #888; text-transform: uppercase;">Your Allowance</div>
                     <div style="font-size: 20px; font-weight: bold; color: #ff6400;">$${(data.ledger.individual_allowance ?? 0).toFixed(6)}</div>
-                    <div style="font-size: 9px; color: #666; margin-top: 5px;">Cap: $${((data.ledger.individual_cap ?? 0) ?? 0).toFixed(6)}</div>
+                    <div style="font-size: 9px; color: #666; margin-top: 5px;">Cap: $${(data.ledger.individual_cap ?? 0).toFixed(6)}</div>
                 </div>
             </div>
 
@@ -923,7 +923,7 @@ class VoxEngineConfigApp extends Application {
                     body: JSON.stringify({userId: game.user.id, amount: amount})
                 });
                 if (resp.ok) {
-                    ui.notifications.info(`✅ Session budget updated to $${amount.toFixed(6)}`);
+                    ui.notifications.info(`✅ Session budget updated to $${(amount ?? 0).toFixed(6)}`);
                     this.render(true);
                 } else {
                     const err = await resp.json();
