@@ -1271,7 +1271,7 @@ Hooks.on("getSceneControlButtons", (controls) => {
                 icon: "fa-solid fa-microphone-lines",
                 button: true,
                 visible: true,
-                onClick: () => globalThis.voxLivePanel.render(true),
+                onClick: () => { try { globalThis.voxLivePanel.render(true); } catch(err) { console.error("🎙️ Vox | Failed to open Live Panel:", err); } },
                 order: 51
             });
             addTool({
