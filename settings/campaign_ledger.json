@@ -4,10 +4,15 @@
   "personal_wallets": {
     "gm": 999.8529999999979
   },
-  "session_allowances": {},
-  "session_caps": {},
+  "session_allowances": {
+    "G3SJW9rRHe7J3AOH": 0.0
+  },
+  "session_caps": {
+    "G3SJW9rRHe7J3AOH": 0.0
+  },
   "session_spent": {
-    "gm": 0.14700000000000008
+    "gm": 0.14700000000000008,
+    "G3SJW9rRHe7J3AOH": 0.0
   },
   "transactions": [
     {
