@@ -487,10 +487,23 @@ function resolveActiveToken(isGM) {
     if (!navigator.mediaDevices?.getUserMedia) return;
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const recorder = new MediaRecorder(stream);
+        
+        // Clone the stream to isolate Vox recording from Foundry's internal A/V
+        const voxStream = new MediaStream(stream.getAudioTracks().map(track => track.clone()));
+        
+        const recorder = new MediaRecorder(voxStream);
         globalThis.voxState.mediaRecorder = recorder;
-        recorder.ondataavailable = (e) => { if (e.data.size > 0) globalThis.voxState.audioChunks.push(e.data); };
-        recorder.onstop = async () => { await processAndSendAudio(); };
+        recorder.ondataavailable = (e) => { 
+            if (e.data.size > 0) {
+                globalThis.voxState.audioChunks.push(e.data);
+                console.log(`🎙️ Vox | Received audio chunk: ${e.data.size} bytes`);
+            }
+        };
+        recorder.onstop = async () => { 
+            console.log("🎙️ Vox | Recording stopped. Processing audio...");
+            await processAndSendAudio(); 
+        };
+        console.log("✅ Vox Audio Engine: Isolated stream initialized.");
     } catch (err) { console.error("❌ Vox Audio Fail:", err); }
 })();
 
