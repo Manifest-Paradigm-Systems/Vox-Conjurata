@@ -2,6 +2,7 @@
  * vox-conjurata: Main Foundry Module Entry Point
  * Consolidates Telemetry, Chat Skinning, Hardware PTT, and Live Panel.
  */
+const $ = globalThis.jQuery;
 console.log("🚀 Vox-Conjurata: Script evaluation started.");
 
 // ==========================================
