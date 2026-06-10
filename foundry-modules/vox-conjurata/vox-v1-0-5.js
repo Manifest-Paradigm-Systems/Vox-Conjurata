@@ -3,6 +3,10 @@
  * Consolidates Telemetry, Chat Skinning, Hardware PTT, and Live Panel.
  */
 const $ = globalThis.jQuery;
+const getSafeSetting = (scope, key, fallback = false) => {
+    try { return game.settings.get(scope, key); }
+    catch (e) { return fallback; }
+};
 console.log("🚀 Vox-Conjurata: Script evaluation started.");
 
 // ==========================================
@@ -816,10 +820,10 @@ class VoxEngineConfigApp extends Application {
                 <h3 style="font-size: 14px; margin-top: 0; color: #00ffcc;"><i class="fas fa-mask"></i> Audio Suppression (Puppeteer Mode)</h3>
                 <p style="font-size: 10px; color: #888; margin-bottom: 10px;">Automatically mutes your raw voice in Foundry A/V while holding these hotkeys, so players only hear the AI.</p>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                    <label style="font-size: 12px;"><input type="checkbox" class="vox-suppress-toggle" data-cat="narrator" ${game.settings.get("vox-conjurata", "suppressRawVoice_narrator") ? "checked" : ""}> Narrator [Y]</label>
-                    <label style="font-size: 12px;"><input type="checkbox" class="vox-suppress-toggle" data-cat="character" ${game.settings.get("vox-conjurata", "suppressRawVoice_character") ? "checked" : ""}> Character [I]</label>
-                    <label style="font-size: 12px;"><input type="checkbox" class="vox-suppress-toggle" data-cat="npc" ${game.settings.get("vox-conjurata", "suppressRawVoice_npc") ? "checked" : ""}> NPC Puppet [H]</label>
-                    <label style="font-size: 12px;"><input type="checkbox" class="vox-suppress-toggle" data-cat="monster" ${game.settings.get("vox-conjurata", "suppressRawVoice_monster") ? "checked" : ""}> Monster Puppet [H]</label>
+                    <label style="font-size: 12px;"><input type="checkbox" class="vox-suppress-toggle" data-cat="narrator" ${getSafeSetting("vox-conjurata", "suppressRawVoice_narrator") ? "checked" : ""}> Narrator [Y]</label>
+                    <label style="font-size: 12px;"><input type="checkbox" class="vox-suppress-toggle" data-cat="character" ${getSafeSetting("vox-conjurata", "suppressRawVoice_character") ? "checked" : ""}> Character [I]</label>
+                    <label style="font-size: 12px;"><input type="checkbox" class="vox-suppress-toggle" data-cat="npc" ${getSafeSetting("vox-conjurata", "suppressRawVoice_npc") ? "checked" : ""}> NPC Puppet [H]</label>
+                    <label style="font-size: 12px;"><input type="checkbox" class="vox-suppress-toggle" data-cat="monster" ${getSafeSetting("vox-conjurata", "suppressRawVoice_monster") ? "checked" : ""}> Monster Puppet [H]</label>
                 </div>
             </div>
 
