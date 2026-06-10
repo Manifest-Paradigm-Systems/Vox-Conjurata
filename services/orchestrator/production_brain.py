@@ -818,6 +818,17 @@ async def parse_combat_intent(req: IntentRequest):
         logger.error(f"Failed to parse intent: {e}")
         return {"status": "ignored"}
 
+class AnimationLibrarySync(BaseModel):
+    library: dict
+
+@app.post("/api/v1/library/sync-animations")
+async def sync_animation_library(req: AnimationLibrarySync):
+    """Updates the orchestrator's knowledge of available visual assets."""
+    # In production, this would update a persistent mapping dictionary
+    logger.info(f"Received animation library sync: {len(req.library)} entries.")
+    # For now, we just acknowledge the receipt
+    return {"status": "success", "count": len(req.library)}
+
 @app.post("/api/v1/combat/resolve")
 async def resolve_combat_action(req: ActionResolutionRequest):
     cached = ANTICIPATED_ACTIONS.get(req.userId)
