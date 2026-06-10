@@ -1280,7 +1280,7 @@ Hooks.on("getSceneControlButtons", (controls) => {
                 icon: "fa-solid fa-brain",
                 button: true,
                 visible: true,
-                onClick: () => new VoxEngineConfigApp().render(true),
+                onClick: () => { try { new VoxEngineConfigApp().render(true); } catch(err) { console.error("🎙️ Vox | Failed to open Engine Config:", err); ui.notifications.error("Vox: Failed to open Engine Config. Check console."); } },
                 order: 52
             });
         }
