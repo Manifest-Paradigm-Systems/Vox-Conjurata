@@ -54,6 +54,7 @@
     "scripts": [
         "vox-v1-0-5.js",
         "vox-interface-fix.js",
-        "vox-combat-hook.js"
+        "vox-combat-hook.js",
+        "vox-asset-scanner.js"
     ]
 }
