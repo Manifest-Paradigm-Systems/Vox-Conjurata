@@ -811,6 +811,17 @@ class VoxEngineConfigApp extends Application {
             </h2>
             <p style="font-size: 11px; color: #888; margin-bottom: 20px;">Offload text token costs and context KV memory chains directly to your local hardware.</p>
 
+            <div class="form-group-box" style="background: rgba(0, 150, 255, 0.05); padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #004d40;">
+                <h3 style="font-size: 14px; margin-top: 0; color: #00ffcc;"><i class="fas fa-mask"></i> Audio Suppression (Puppeteer Mode)</h3>
+                <p style="font-size: 10px; color: #888; margin-bottom: 10px;">Automatically mutes your raw voice in Foundry A/V while holding these hotkeys, so players only hear the AI.</p>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <label style="font-size: 12px;"><input type="checkbox" class="vox-suppress-toggle" data-cat="narrator" ${game.settings.get("vox-conjurata", "suppressRawVoice_narrator") ? "checked" : ""}> Narrator [Y]</label>
+                    <label style="font-size: 12px;"><input type="checkbox" class="vox-suppress-toggle" data-cat="character" ${game.settings.get("vox-conjurata", "suppressRawVoice_character") ? "checked" : ""}> Character [I]</label>
+                    <label style="font-size: 12px;"><input type="checkbox" class="vox-suppress-toggle" data-cat="npc" ${game.settings.get("vox-conjurata", "suppressRawVoice_npc") ? "checked" : ""}> NPC Puppet [H]</label>
+                    <label style="font-size: 12px;"><input type="checkbox" class="vox-suppress-toggle" data-cat="monster" ${game.settings.get("vox-conjurata", "suppressRawVoice_monster") ? "checked" : ""}> Monster Puppet [H]</label>
+                </div>
+            </div>
+
             <div class="form-group-box" style="background: rgba(255,100,0,0.05); padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #333;">
                 <label style="display: block; font-weight: bold; margin-bottom: 8px;"><i class="fas fa-network-wired"></i> Text Orchestration Pathway</label>
                 <select name="llm_pathway_mode" id="vox-llm-mode-select" style="width: 100%; background: #222; color: #eee; border: 1px solid #444; height: 32px; border-radius: 4px;">
@@ -889,6 +900,13 @@ class VoxEngineConfigApp extends Application {
 
         html.find(".badge-btn").click(ev => {
             html.find("#vox-model-tag-input").val(ev.currentTarget.dataset.tag);
+        });
+
+        html.find(".vox-suppress-toggle").change(async (ev) => {
+            const cat = ev.currentTarget.dataset.cat;
+            const val = ev.currentTarget.checked;
+            await game.settings.set("vox-conjurata", `suppressRawVoice_${cat}`, val);
+            ui.notifications.info(`✅ Suppression for ${cat.toUpperCase()} set to ${val ? "ON" : "OFF"}`);
         });
 
         html.find(".set-allowance-btn").click(async () => {
