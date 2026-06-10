@@ -129,6 +129,21 @@ class CancelRequest(BaseModel):
 class TopUpRequest(BaseModel):
     amount: float
 
+class AdminCreditRequest(BaseModel):
+    targetUserId: str
+    amount: float
+    description: Optional[str] = "Admin Adjustment"
+
+@app.post("/api/v1/admin/modify-credits")
+async def admin_modify_credits(req: AdminCreditRequest):
+    ledger.admin_modify_credits(req.targetUserId, req.amount, req.description)
+    return {"status": "success", "new_balance": ledger.state.personal_wallets.get(req.targetUserId, 0.0)}
+
+@app.post("/api/v1/admin/set-pool")
+async def admin_set_pool(req: TopUpRequest):
+    ledger.admin_set_pool(req.amount)
+    return {"status": "success", "new_balance": ledger.state.campaign_pool}
+
 class AdminAdjustmentRequest(BaseModel):
     targetUserId: str
     amount: float
