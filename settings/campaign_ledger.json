@@ -2,7 +2,7 @@
   "campaign_pool": 20.0,
   "stripe_customer_id": null,
   "personal_wallets": {
-    "gm": 999.757999999997,
+    "gm": 999.7549999999969,
     "G3SJW9rRHe7J3AOH": 299.99425
   },
   "session_allowances": {
@@ -12,7 +12,7 @@
     "G3SJW9rRHe7J3AOH": 0.0
   },
   "session_spent": {
-    "gm": 0.24200000000000016,
+    "gm": 0.24500000000000016,
     "G3SJW9rRHe7J3AOH": 0.00575
   },
   "transactions": [
@@ -541,6 +541,12 @@
       "amount": 0.0035,
       "description": "TTS Generation for Juvenile Horned Dragon",
       "timestamp": 1781142799.3231153
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Scene Load & Scan for test_audio_01",
+      "timestamp": 1781153495.8268476
     }
   ]
 }
