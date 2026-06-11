@@ -248,6 +248,7 @@ PALETTE_DEFINITIONS: dict[str, str] = {
     "monster_dragon":  "[extreme immense ancient deep rumble, commanding resonant heavy echo] You stand before a power that predates your civilization.",
     "monster_demon":   "[Arabic accent, extreme demonic multi-layered distortion, infernal guttural growl] The shadows of the abyss are infinite.",
     "monster_goblin":  "[extreme high-pitched nasally screech, manic chittering rapid-fire] Look what we found! A shiny toy for the pot!",
+    "narrator":        "[Deep cinematic male narrator, neutral accent, clear, authoritative, slightly resonant] The world was young once, and the stars were bright.",
 }
 
 def resolve_archetype(actor_data: ActorMetadata, vocal_profile: dict) -> str:
