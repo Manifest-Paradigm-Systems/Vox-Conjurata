@@ -808,8 +808,17 @@ async def _anticipate_action(user_id: str, intent_data: dict):
             if resp_miss.status_code == 200:
                 (TEMP_DIR / f"{intent_id}_miss.webp").write_bytes(resp_miss.content)
 
-            # TODO: Generate real SFX via vox-audio-generation-sfx
-            # For now, we continue using placeholders for SFX
+            # 3. Generate real SFX via vox-audio-generation-sfx
+            logger.info(f"Generating real SFX for {intent_id}...")
+            # Hit SFX
+            hit_sfx_resp = await client.post(f"{TTS_SFX_URL}/generate", json={"prompt": f"Sound of {intent_data.get("action")} hitting a {intent_data.get("target")}, cinematic, high fidelity", "duration": 3})
+            if hit_sfx_resp.status_code == 200:
+                (TEMP_DIR / f"{intent_id}_hit_sfx.webm").write_bytes(await transcode_to_opus(hit_sfx_resp.content))
+            
+            # Miss SFX
+            miss_sfx_resp = await client.post(f"{TTS_SFX_URL}/generate", json={"prompt": f"Sound of {intent_data.get("action")} whistling past and missing, fizzle, whoosh", "duration": 3})
+            if miss_sfx_resp.status_code == 200:
+                (TEMP_DIR / f"{intent_id}_miss_sfx.webm").write_bytes(await transcode_to_opus(miss_sfx_resp.content))
 
         except Exception as e:
             logger.error(f"Predictive rendering failed for {intent_id}: {e}")
