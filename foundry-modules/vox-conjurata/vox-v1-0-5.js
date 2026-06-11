@@ -164,14 +164,14 @@ class VoxEventQueueHUD extends Application {
                     <div style="padding: 10px; font-family: 'Signika', sans-serif;">
                         <div class="form-group" style="margin-bottom: 12px;">
                             <label>Source Bucket:</label>
-                            <select id="vox-transfer-source" style="width: 100%; background: #222; color: #eee; border: 1px solid #444;">
+                            <select id="vox-transfer-source" style="width: 160px; background: #222; color: #eee; border: 1px solid #444;">
                                 <option value="personal">My Persistent Wallet</option>
                                 <option value="session">My Session Grant</option>
                             </select>
                         </div>
                         <div class="form-group" style="margin-bottom: 12px;">
                             <label>Recipient:</label>
-                            <select id="vox-transfer-target" style="width: 100%; background: #222; color: #eee; border: 1px solid #444;">
+                            <select id="vox-transfer-target" style="width: 160px; background: #222; color: #eee; border: 1px solid #444;">
                                 ${userOptions}
                             </select>
                         </div>
@@ -835,7 +835,7 @@ class VoxEngineConfigApp extends Application {
 
             <div class="form-group-box" style="background: rgba(255,100,0,0.05); padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #333;">
                 <label style="display: block; font-weight: bold; margin-bottom: 8px;"><i class="fas fa-network-wired"></i> Text Orchestration Pathway</label>
-                <select name="llm_pathway_mode" id="vox-llm-mode-select" style="width: 100%; background: #222; color: #eee; border: 1px solid #444; height: 32px; border-radius: 4px;">
+                <select name="llm_pathway_mode" id="vox-llm-mode-select" style="width: 160px; background: #222; color: #eee; border: 1px solid #444; height: 32px; border-radius: 4px;">
                     <option value="optimal_cloud" ${data.llmPathway === 'optimal_cloud' ? 'selected' : ''}>Vox Hosted Optimal Tier (Cloud API Base + Fee)</option>
                     <option value="byo_local_brain" ${data.llmPathway === 'byo_local_brain' ? 'selected' : ''}>Bring Your Own Brain (Localhost Loopback - Fee Only)</option>
                 </select>
@@ -888,7 +888,7 @@ class VoxEngineConfigApp extends Application {
                 <div style="display: flex; gap: 10px; align-items: flex-end;">
                     <div style="flex: 1;">
                         <label style="font-size: 11px; color: #aaa; display: block; margin-bottom: 4px;">Admin: Target Account</label>
-                        <select id="admin-inline-target" style="width: 100%; background: #222; color: #eee; border: 1px solid #444; height: 28px; border-radius: 4px;">
+                        <select id="admin-inline-target" style="width: 160px; background: #222; color: #eee; border: 1px solid #444; height: 28px; border-radius: 4px;">
                             <option value="${game.user.id}">Personal Wallet (DM)</option>
                             <option value="POOL">Shared Campaign Pool</option>
                         </select>
