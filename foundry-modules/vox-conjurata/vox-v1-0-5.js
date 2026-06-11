@@ -465,7 +465,7 @@ globalThis.voxState = globalThis.voxState || {
     narratorActive: false, puppetActive: false, playerActive: false,
     activeSpeakerName: "", activeMicType: "", activeActorId: "", activeIsMonster: false,
     mediaRecorder: null, audioChunks: [],
-    voiceConversionEndpoint: "/api/voice-conversion", ingestEndpoint: "/api/ingest-actor"
+    voiceConversionEndpoint: "/api/voice-conversion", ingestEndpoint: "/api/ingest-actor", targetVoxVoice: true
 };
 
 function resolveIsMonster(actor) {
@@ -1599,10 +1599,7 @@ async function processAndSendAudio() {
     } catch (e) {}
 
     const blob = new Blob(chunks, { type: "audio/webm" });
-    const { 
-        activeMicType, activeActorId, activeSpeakerName, activeIsMonster,
-        useVoxVoice, isAutonomousTrigger, targetActorId, targetVoxVoice 
-    } = globalThis.voxState;
+    const { activeMicType, activeActorId, activeSpeakerName, activeIsMonster, useVoxVoice, isAutonomousTrigger, targetActorId, targetVoxVoice = true = true } = globalThis.voxState;
     
     // 1. Extract DSP presets from actor flags
     let dsp_presets = {};
