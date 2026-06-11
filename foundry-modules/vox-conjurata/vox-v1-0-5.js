@@ -569,7 +569,7 @@ function registerKeybindings() {
     });
 
         game.keybindings.register("vox-conjurata", "toggleVocalMask", {
-        name: "Toggle Vocal Mask", editable: [{ key: "KeyV", modifiers: [KeyboardManager.MODIFIER_KEYS.CONTROL, KeyboardManager.MODIFIER_KEYS.SHIFT] }],
+        name: "Toggle Vocal Mask", editable: [{ key: "KeyV", modifiers: [foundry.helpers.interaction.KeyboardManager.MODIFIER_KEYS.CONTROL, foundry.helpers.interaction.KeyboardManager.MODIFIER_KEYS.SHIFT] }],
         onDown: () => { globalThis.voxLivePanel.isBypass = !globalThis.voxLivePanel.isBypass; globalThis.voxLivePanel.updateBackend(); globalThis.voxLivePanel.render(); }
     });
 
@@ -1316,20 +1316,20 @@ async function captureAndScanMap() {
 }
 
 Hooks.on("getSceneControlButtons", (controls) => {
-    console.log("🎙️ Vox | getSceneControlButtons called. Controls structure:", controls);
+    
     
     // Foundry v14 Build 363 Compatibility: controls is now a Record/Object
     const tokenControls = Array.isArray(controls) ? controls.find(c => c.name === "token") : (controls.token || controls.tokens);
     
     if (tokenControls) {
-        console.log("🎙️ Vox | Found Token Controls:", tokenControls);
+        
         const tools = Array.isArray(tokenControls.tools) ? tokenControls.tools : null;
         const addTool = (tool) => {
             if (tools) {
-                console.log(`🎙️ Vox | Adding tool ${tool.name} to Array`);
+                
                 tools.push(tool);
             } else {
-                console.log(`🎙️ Vox | Adding tool ${tool.name} to Record`);
+                
                 tokenControls.tools[tool.name] = tool;
             }
         };
