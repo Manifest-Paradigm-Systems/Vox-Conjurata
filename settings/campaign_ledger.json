@@ -2,7 +2,7 @@
   "campaign_pool": 20.0,
   "stripe_customer_id": null,
   "personal_wallets": {
-    "gm": 999.8082499999973,
+    "gm": 999.8047499999973,
     "G3SJW9rRHe7J3AOH": 300.0
   },
   "session_allowances": {
@@ -12,7 +12,7 @@
     "G3SJW9rRHe7J3AOH": 0.0
   },
   "session_spent": {
-    "gm": 0.19175000000000011,
+    "gm": 0.19525000000000012,
     "G3SJW9rRHe7J3AOH": 0.0
   },
   "transactions": [
@@ -427,6 +427,12 @@
       "amount": 0.00225,
       "description": "AI Orchestration Fee: Narrator",
       "timestamp": 1781141362.5254395
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.0035,
+      "description": "TTS Generation for Narrator",
+      "timestamp": 1781141379.0405455
     }
   ]
 }
