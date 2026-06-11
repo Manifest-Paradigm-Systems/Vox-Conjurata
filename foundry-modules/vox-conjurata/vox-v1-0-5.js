@@ -887,10 +887,10 @@ class VoxEngineConfigApp extends Application {
                 <p style="font-size: 10px; color: #888; margin-bottom: 15px;">Inject test credits directly into your wallet or the campaign pool to bypass billing for testing.</p>
                 <div style="display: flex; gap: 10px; align-items: flex-end;">
                     <div style="flex: 1;">
-                        <label style="font-size: 11px; color: #aaa; display: block; margin-bottom: 4px;">Target Account</label>
+                        <label style="font-size: 11px; color: #aaa; display: block; margin-bottom: 4px;">Admin: Target Account</label>
                         <select id="admin-inline-target" style="width: 100%; background: #222; color: #eee; border: 1px solid #444; height: 28px; border-radius: 4px;">
-                            <option value="${game.user.id}">My Wallet (${game.user.name})</option>
-                            <option value="POOL">Campaign Pool (Global)</option>
+                            <option value="${game.user.id}">Personal Wallet (DM)</option>
+                            <option value="POOL">Shared Campaign Pool</option>
                         </select>
                     </div>
                     <div style="width: 100px;">
