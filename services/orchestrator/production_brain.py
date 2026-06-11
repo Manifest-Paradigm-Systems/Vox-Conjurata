@@ -456,6 +456,18 @@ class SpeechPipelineFactory:
 
 pipeline_factory = SpeechPipelineFactory()
 
+async def safe_post(url, json_data, timeout=30.0, max_retries=3):
+    for i in range(max_retries):
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                resp = await client.post(url, json=json_data)
+                if resp.status_code == 200: return resp
+                logger.warning(f"Attempt {i+1} failed for {url}: {resp.status_code}")
+        except Exception as e:
+            logger.warning(f"Attempt {i+1} exception for {url}: {e}")
+        await asyncio.sleep(2)
+    return None
+
 async def transcode_to_opus(wav_bytes: bytes) -> bytes:
     """Converts WAV bytes to high-quality Opus (WebM) audio bytes."""
     if not wav_bytes: return wav_bytes
