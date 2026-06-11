@@ -2,7 +2,7 @@
   "campaign_pool": 20.0,
   "stripe_customer_id": null,
   "personal_wallets": {
-    "gm": 999.7989999999972,
+    "gm": 999.7944999999972,
     "G3SJW9rRHe7J3AOH": 300.0
   },
   "session_allowances": {
@@ -12,7 +12,7 @@
     "G3SJW9rRHe7J3AOH": 0.0
   },
   "session_spent": {
-    "gm": 0.20100000000000012,
+    "gm": 0.20550000000000013,
     "G3SJW9rRHe7J3AOH": 0.0
   },
   "transactions": [
@@ -445,6 +445,18 @@
       "amount": 0.0035,
       "description": "TTS Generation for Xulgath Warrior",
       "timestamp": 1781141440.5551183
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.00225,
+      "description": "AI Orchestration Fee: Narrator",
+      "timestamp": 1781141532.3845978
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.00225,
+      "description": "AI Orchestration Fee: Xulgath Warrior",
+      "timestamp": 1781141544.357598
     }
   ]
 }
