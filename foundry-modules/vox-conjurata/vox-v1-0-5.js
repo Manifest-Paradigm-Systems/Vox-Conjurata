@@ -1656,7 +1656,9 @@ async function processAndSendAudio() {
         console.log(`🎙️ Vox | Pipeline Response: ${r.status}`);
         const d = await r.json();
         if (d.status === "success") {
-            const { transcription, audio_data, engine, voxType, ai_reply } = d;
+                        const { transcription, audio_data, engine, voxType, ai_reply } = d;
+            console.log(`🎙️ Vox | Received transcription: ${transcription}`);
+            console.log(`🎙️ Vox | Audio Data present: ${!!audio_data}`);
             
             const deliveryMode = game.settings.get("vox-conjurata", "narratorDeliveryMode");
             const isNarrator = activeActorId === 'narrator';
