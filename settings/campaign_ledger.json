@@ -3,7 +3,7 @@
   "stripe_customer_id": null,
   "personal_wallets": {
     "gm": 999.769499999997,
-    "G3SJW9rRHe7J3AOH": 299.99775
+    "G3SJW9rRHe7J3AOH": 299.99425
   },
   "session_allowances": {
     "G3SJW9rRHe7J3AOH": 0.0
@@ -13,7 +13,7 @@
   },
   "session_spent": {
     "gm": 0.23050000000000015,
-    "G3SJW9rRHe7J3AOH": 0.00225
+    "G3SJW9rRHe7J3AOH": 0.00575
   },
   "transactions": [
     {
@@ -511,6 +511,12 @@
       "amount": 0.0035,
       "description": "TTS Generation for Xulgath Warrior",
       "timestamp": 1781142710.3892653
+    },
+    {
+      "user_id": "G3SJW9rRHe7J3AOH",
+      "amount": 0.0035,
+      "description": "TTS Generation for Ezren",
+      "timestamp": 1781142727.6451268
     }
   ]
 }
