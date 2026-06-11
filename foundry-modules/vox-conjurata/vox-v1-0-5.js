@@ -568,6 +568,11 @@ function registerKeybindings() {
         default: "eva-qwen2.5-7b"
     });
 
+        game.keybindings.register("vox-conjurata", "toggleVocalMask", {
+        name: "Toggle Vocal Mask", editable: [{ key: "KeyV", modifiers: [KeyboardManager.MODIFIER_KEYS.CONTROL, KeyboardManager.MODIFIER_KEYS.SHIFT] }],
+        onDown: () => { globalThis.voxLivePanel.isBypass = !globalThis.voxLivePanel.isBypass; globalThis.voxLivePanel.updateBackend(); globalThis.voxLivePanel.render(); }
+    });
+
     // PTT keys are handled via global window listeners in the anonymous function below
     // to ensure stopImmediatePropagation() works reliably across the whole session.
 }
@@ -1759,12 +1764,7 @@ Hooks.on("controlToken", (token, selected) => {
 
 
 
-Hooks.once("ready", () => {
-    game.keybindings.register("vox-conjurata", "toggleVocalMask", {
-        name: "Toggle Vocal Mask", editable: [{ key: "KeyV", modifiers: [KeyboardManager.MODIFIER_KEYS.CONTROL, KeyboardManager.MODIFIER_KEYS.SHIFT] }],
-        onDown: () => { globalThis.voxLivePanel.isBypass = !globalThis.voxLivePanel.isBypass; globalThis.voxLivePanel.updateBackend(); globalThis.voxLivePanel.render(); }
-    });
-});
+
 
 globalThis.startRecording = startRecording; globalThis.stopRecording = stopRecording; globalThis.statusMessage = statusMessage; globalThis.playAudio = playAudio; globalThis.resolveActiveToken = resolveActiveToken; globalThis.resolveIsMonster = resolveIsMonster;
 
