@@ -644,6 +644,7 @@ function registerKeybindings() {
                 if (targetActor && targetActor.type !== "character") {
                     globalThis.voxState.isAutonomousTrigger = targetActor.getFlag("vox-conjurata", "vox-actor") ?? true;
                     globalThis.voxState.targetActorId = targetActor.id;
+                    globalThis.voxState.targetVoxVoice = targetActor.getFlag("vox-conjurata", "vox-voice") ?? true;
                     if (globalThis.voxState.isAutonomousTrigger) {
                         statusMessage(`Character Mic [I]: Target ${targetActor.name} [AUTONOMOUS]`, true);
                     }
@@ -1588,7 +1589,7 @@ async function processAndSendAudio() {
     const blob = new Blob(chunks, { type: "audio/webm" });
     const { 
         activeMicType, activeActorId, activeSpeakerName, activeIsMonster,
-        useVoxVoice, isAutonomousTrigger, targetActorId 
+        useVoxVoice, isAutonomousTrigger, targetActorId, targetVoxVoice 
     } = globalThis.voxState;
     
     // 1. Extract DSP presets from actor flags
