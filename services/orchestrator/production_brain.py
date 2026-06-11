@@ -684,7 +684,7 @@ async def scene_load(req: BattlemapScanRequest):
 
     if ambient_path.exists() and combat_path.exists() and victory_path.exists():
         logger.info(f"Music cache HIT for scene {scene_name}. No generation needed.")
-        SCENE_CONTEXT["current_environment"] = f"Cached context for scene {scene_name}"
+        SCENE_CONTEXT['current_environment'] = f"Cached context for scene {scene_name}"
         return {"status": "success", "message": "Cache hit, music ready.", "ambient_url": f"http://vox-conjurata/music/{scene_name}/ambient.webm"}
 
     cost = ledger.calculate_cost("vision", "optimal")
@@ -696,7 +696,7 @@ async def scene_load(req: BattlemapScanRequest):
     await container_manager.swap_to_warm_scene_load()
     
     try:
-        SCENE_CONTEXT["current_environment"] = f"Analyzed context for scene {scene_name}"
+        SCENE_CONTEXT['current_environment'] = f"Analyzed context for scene {scene_name}"
         logger.info(f"Generating ambient, combat, and victory music for {scene_name}...")
         
         # 1. Perform Geometry Analysis (Walls, Doors, Lights)
@@ -739,17 +739,17 @@ async def scene_load(req: BattlemapScanRequest):
         logger.info(f"Generating real AI music for {scene_name}...")
         async with httpx.AsyncClient(timeout=300.0) as client:
             # Ambient Scene Track
-            amb_resp = await client.post(f"{TTS_MUSIC_URL}/generate", json={"prompt": f"Ambient fantasy soundscape, {SCENE_CONTEXT["current_environment"]}", "duration": 30})
+            amb_resp = await client.post(f"{TTS_MUSIC_URL}/generate", json={"prompt": f"Ambient fantasy soundscape, {SCENE_CONTEXT['current_environment']}", "duration": 30})
             if amb_resp.status_code == 200:
                 ambient_path.write_bytes(await transcode_to_opus(amb_resp.content))
             
             # Combat Drum Loop
-            com_resp = await client.post(f"{TTS_MUSIC_URL}/generate", json={"prompt": f"Tense cinematic combat drums, percussive, {SCENE_CONTEXT["current_environment"]}", "duration": 30})
+            com_resp = await client.post(f"{TTS_MUSIC_URL}/generate", json={"prompt": f"Tense cinematic combat drums, percussive, {SCENE_CONTEXT['current_environment']}", "duration": 30})
             if com_resp.status_code == 200:
                 combat_path.write_bytes(await transcode_to_opus(com_resp.content))
                 
             # Victory/Loot Loop
-            vic_resp = await client.post(f"{TTS_MUSIC_URL}/generate", json={"prompt": f"Triumphant heroic fantasy fanfare, victory, {SCENE_CONTEXT["current_environment"]}", "duration": 15})
+            vic_resp = await client.post(f"{TTS_MUSIC_URL}/generate", json={"prompt": f"Triumphant heroic fantasy fanfare, victory, {SCENE_CONTEXT['current_environment']}", "duration": 15})
             if vic_resp.status_code == 200:
                 victory_path.write_bytes(await transcode_to_opus(vic_resp.content))
                 
