@@ -1768,4 +1768,4 @@ Hooks.on("controlToken", (token, selected) => {
 
 globalThis.startRecording = startRecording; globalThis.stopRecording = stopRecording; globalThis.statusMessage = statusMessage; globalThis.playAudio = playAudio; globalThis.resolveActiveToken = resolveActiveToken; globalThis.resolveIsMonster = resolveIsMonster;
 
-if (typeof game !== 'undefined' && game.keybindings) registerKeybindings(); else Hooks.once("init", registerKeybindings);
+Hooks.once('init', registerKeybindings);
