@@ -735,11 +735,25 @@ async def scene_load(req: BattlemapScanRequest):
         else:
             logger.warning(f"Could not find or process map at {full_image_path} for geometry analysis.")
 
-        # 2. Generate ambient, combat, and victory tracks (Mocking with transcode call)
-        ambient_path.write_bytes(await transcode_to_opus(b"dummy_ambient_audio"))
-        combat_path.write_bytes(await transcode_to_opus(b"dummy_combat_audio"))
-        victory_path.write_bytes(await transcode_to_opus(b"dummy_victory_audio"))
-        logger.info(f"Generated and cached music for {scene_name}")
+        # 2. Generate ambient, combat, and victory tracks
+        logger.info(f"Generating real AI music for {scene_name}...")
+        async with httpx.AsyncClient(timeout=300.0) as client:
+            # Ambient Scene Track
+            amb_resp = await client.post(f"{TTS_MUSIC_URL}/generate", json={"prompt": f"Ambient fantasy soundscape, {SCENE_CONTEXT[current_environment]}", "duration": 30})
+            if amb_resp.status_code == 200:
+                ambient_path.write_bytes(await transcode_to_opus(amb_resp.content))
+            
+            # Combat Drum Loop
+            com_resp = await client.post(f"{TTS_MUSIC_URL}/generate", json={"prompt": f"Tense cinematic combat drums, percussive, {SCENE_CONTEXT[current_environment]}", "duration": 30})
+            if com_resp.status_code == 200:
+                combat_path.write_bytes(await transcode_to_opus(com_resp.content))
+                
+            # Victory/Loot Loop
+            vic_resp = await client.post(f"{TTS_MUSIC_URL}/generate", json={"prompt": f"Triumphant heroic fantasy fanfare, victory, {SCENE_CONTEXT[current_environment]}", "duration": 15})
+            if vic_resp.status_code == 200:
+                victory_path.write_bytes(await transcode_to_opus(vic_resp.content))
+                
+        logger.info(f"Generated and cached real AI music for {scene_name}")
     except Exception as e:
         logger.error(f"Failed during scene load processing: {e}")
     finally:
