@@ -2,7 +2,7 @@
   "campaign_pool": 20.0,
   "stripe_customer_id": null,
   "personal_wallets": {
-    "gm": 999.769499999997,
+    "gm": 999.767249999997,
     "G3SJW9rRHe7J3AOH": 299.99425
   },
   "session_allowances": {
@@ -12,7 +12,7 @@
     "G3SJW9rRHe7J3AOH": 0.0
   },
   "session_spent": {
-    "gm": 0.23050000000000015,
+    "gm": 0.23275000000000015,
     "G3SJW9rRHe7J3AOH": 0.00575
   },
   "transactions": [
@@ -517,6 +517,12 @@
       "amount": 0.0035,
       "description": "TTS Generation for Ezren",
       "timestamp": 1781142727.6451268
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.00225,
+      "description": "AI Orchestration Fee: Narrator",
+      "timestamp": 1781142773.3319826
     }
   ]
 }
