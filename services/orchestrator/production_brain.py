@@ -1039,7 +1039,7 @@ async def _execute_voice_conversion_pipeline(task_id: str, audio_bytes: bytes, a
                     ledger.charge("gm", cost_reply, f"Autonomous NPC Reply: {meta.npc_context.name}")
                     
                     wav = await engine.generate(std_reply, meta.targetActorId, client, {})
-                    if wav: ai_audio = f"data:audio/ogg;base64,{base64.b64encode(await transcode_to_opus(wav)).decode('utf-8')}"
+                    if wav: ai_audio = f"data:audio/webm;base64,{base64.b64encode(await transcode_to_opus(wav)).decode('utf-8')}"
                 ai_reply_obj = AIReply(transcription=std_reply, audio_data=ai_audio)
 
             if meta.useVoxVoice:
@@ -1049,7 +1049,7 @@ async def _execute_voice_conversion_pipeline(task_id: str, audio_bytes: bytes, a
                 
                 target_text = enriched.monster_text if meta.isMonster else enriched.instruct_text
                 wav = await engine.generate(target_text, meta.actorId, client, meta.dsp_presets)
-                if wav: audio_data = f"data:audio/ogg;base64,{base64.b64encode(await transcode_to_opus(wav)).decode('utf-8')}"
+                if wav: audio_data = f"data:audio/webm;base64,{base64.b64encode(await transcode_to_opus(wav)).decode('utf-8')}"
 
         return {"status": "success", "transcription": transcription, "enrichment": enriched.model_dump(), "voxType": "player", "audio_data": audio_data, "engine": "VoxAudioCore", "ai_reply": ai_reply_obj.model_dump() if ai_reply_obj else None}
 
