@@ -2,7 +2,7 @@
   "campaign_pool": 20.0,
   "stripe_customer_id": null,
   "personal_wallets": {
-    "gm": 999.7519999999969,
+    "gm": 999.7489999999968,
     "G3SJW9rRHe7J3AOH": 299.99425
   },
   "session_allowances": {
@@ -12,7 +12,7 @@
     "G3SJW9rRHe7J3AOH": 0.0
   },
   "session_spent": {
-    "gm": 0.24800000000000016,
+    "gm": 0.25100000000000017,
     "G3SJW9rRHe7J3AOH": 0.00575
   },
   "transactions": [
@@ -553,6 +553,12 @@
       "amount": 0.003,
       "description": "Scene Load & Scan for test_audio_03",
       "timestamp": 1781153988.9454675
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Scene Load & Scan for test_fireball_scene",
+      "timestamp": 1781189067.0790784
     }
   ]
 }
