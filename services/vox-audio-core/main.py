@@ -66,9 +66,21 @@ async def generate_audio(request: DialogueRequest):
     then applies mathematical DSP filters for custom monstrous textures.
     """
     try:
+        # Check standard seed path
         seed_path = os.path.join(SEED_DIR, f"{request.npc_id}.wav")
-        if not os.path.exists(seed_path):
-            raise HTTPException(status_code=404, detail=f"Seed for NPC {request.npc_id} not found. Please initialize first.")
+        # Check palette fallback for system archetypes and narrator
+        palette_path = os.path.join(SEED_DIR, "_palette", f"{request.npc_id}.wav")
+        
+        final_seed = None
+        if os.path.exists(seed_path):
+            final_seed = seed_path
+        elif os.path.exists(palette_path):
+            final_seed = palette_path
+            
+        if not final_seed:
+            raise HTTPException(status_code=404, detail=f"Seed for NPC {request.npc_id} not found. Checked: {seed_path} and {palette_path}")
+
+        seed_path = final_seed # For the rest of the function
 
         sample_rate = vox_engine.tts_model.sample_rate  # Native 48000Hz
         
