@@ -42,8 +42,9 @@ class ImageRequest(BaseModel):
     lora_multiplier: float = 1.0
     width: int = 1024
     height: int = 1024
-    steps: int = 20
-    cfg_scale: float = 7.0
+    steps: int = 4
+    cfg_scale: float = 1.0
+    sample_method: str = "euler"
 
 @app.get("/")
 async def root():
@@ -56,13 +57,6 @@ async def generate_image(request: ImageRequest):
 
     logger.info(f"Prompt: {request.prompt[:50]}...")
     
-    lora_path = ""
-    if request.lora_name:
-        lora_path = os.path.join(LORA_DIR, f"{request.lora_name}.safetensors")
-        if not os.path.exists(lora_path):
-            raise HTTPException(status_code=404, detail=f"LoRA '{request.lora_name}' not found.")
-        logger.info(f"Patching LoRA weights from: {lora_path} at strength {request.lora_multiplier}")
-
     try:
         images = sd_model.generate_image(
             prompt=request.prompt,
@@ -71,7 +65,7 @@ async def generate_image(request: ImageRequest):
             height=request.height,
             sample_steps=request.steps,
             cfg_scale=request.cfg_scale,
-            sample_method="euler_a",
+            sample_method=request.sample_method,
             scheduler="discrete"
         )
         

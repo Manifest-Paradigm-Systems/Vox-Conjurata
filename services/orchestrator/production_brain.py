@@ -801,21 +801,21 @@ async def _anticipate_action(user_id: str, intent_data: dict):
         try:
             # Generate Action Image (Shared for both branches)
             resp = await safe_post(f"{IMAGE_GEN_URL}/generate", {
-                "prompt": action_prompt, "width": 1344, "height": 768, "steps": 4, "cfg_scale": 1.5
+                "prompt": action_prompt, "width": 1344, "height": 768, "steps": 4, "cfg_scale": 1.0, "sample_method": "euler"
             })
             if resp.status_code == 200:
                 (TEMP_DIR / f"{intent_id}_action.webp").write_bytes(resp.content)
 
             # Generate Hit Branch
             resp_hit = await safe_post(f"{IMAGE_GEN_URL}/generate", {
-                "prompt": hit_prompt, "width": 1344, "height": 768, "steps": 4, "cfg_scale": 1.5
+                "prompt": hit_prompt, "width": 1344, "height": 768, "steps": 4, "cfg_scale": 1.0, "sample_method": "euler"
             })
             if resp_hit.status_code == 200:
                 (TEMP_DIR / f"{intent_id}_hit.webp").write_bytes(resp_hit.content)
 
             # Generate Miss Branch
             resp_miss = await safe_post(f"{IMAGE_GEN_URL}/generate", {
-                "prompt": miss_prompt, "width": 1344, "height": 768, "steps": 4, "cfg_scale": 1.5
+                "prompt": miss_prompt, "width": 1344, "height": 768, "steps": 4, "cfg_scale": 1.0, "sample_method": "euler"
             })
             if resp_miss.status_code == 200:
                 (TEMP_DIR / f"{intent_id}_miss.webp").write_bytes(resp_miss.content)
