@@ -2,7 +2,7 @@
   "campaign_pool": 20.0,
   "stripe_customer_id": null,
   "personal_wallets": {
-    "gm": 999.767249999997,
+    "gm": 999.757999999997,
     "G3SJW9rRHe7J3AOH": 299.99425
   },
   "session_allowances": {
@@ -12,7 +12,7 @@
     "G3SJW9rRHe7J3AOH": 0.0
   },
   "session_spent": {
-    "gm": 0.23275000000000015,
+    "gm": 0.24200000000000016,
     "G3SJW9rRHe7J3AOH": 0.00575
   },
   "transactions": [
@@ -523,6 +523,24 @@
       "amount": 0.00225,
       "description": "AI Orchestration Fee: Narrator",
       "timestamp": 1781142773.3319826
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.0035,
+      "description": "TTS Generation for Narrator",
+      "timestamp": 1781142782.8633785
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.00225,
+      "description": "AI Orchestration Fee: Juvenile Horned Dragon",
+      "timestamp": 1781142783.6409836
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.0035,
+      "description": "TTS Generation for Juvenile Horned Dragon",
+      "timestamp": 1781142799.3231153
     }
   ]
 }
