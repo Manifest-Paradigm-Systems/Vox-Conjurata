@@ -751,17 +751,17 @@ async def scene_load(req: BattlemapScanRequest):
         logger.info(f"Generating real AI music for {scene_name}...")
         async with httpx.AsyncClient(timeout=300.0) as client:
             # Ambient Scene Track
-            amb_resp = await client.post(f"{TTS_MUSIC_URL}/generate", json={"prompt": f"Ambient fantasy soundscape, {SCENE_CONTEXT['current_environment']}", "duration": 30})
+            amb_resp = await safe_post(f"{TTS_MUSIC_URL}/generate", {"prompt": f"Ambient fantasy soundscape, {SCENE_CONTEXT['current_environment']}", "duration": 30}, timeout=120.0)
             if amb_resp.status_code == 200:
                 ambient_path.write_bytes(await transcode_to_opus(amb_resp.content))
             
             # Combat Drum Loop
-            com_resp = await client.post(f"{TTS_MUSIC_URL}/generate", json={"prompt": f"Tense cinematic combat drums, percussive, {SCENE_CONTEXT['current_environment']}", "duration": 30})
+            com_resp = await safe_post(f"{TTS_MUSIC_URL}/generate", {"prompt": f"Tense cinematic combat drums, percussive, {SCENE_CONTEXT['current_environment']}", "duration": 30}, timeout=120.0)
             if com_resp.status_code == 200:
                 combat_path.write_bytes(await transcode_to_opus(com_resp.content))
                 
             # Victory/Loot Loop
-            vic_resp = await client.post(f"{TTS_MUSIC_URL}/generate", json={"prompt": f"Triumphant heroic fantasy fanfare, victory, {SCENE_CONTEXT['current_environment']}", "duration": 15})
+            vic_resp = await safe_post(f"{TTS_MUSIC_URL}/generate", {"prompt": f"Triumphant heroic fantasy fanfare, victory, {SCENE_CONTEXT['current_environment']}", "duration": 15}, timeout=120.0)
             if vic_resp.status_code == 200:
                 victory_path.write_bytes(await transcode_to_opus(vic_resp.content))
                 
@@ -800,21 +800,21 @@ async def _anticipate_action(user_id: str, intent_data: dict):
     async with httpx.AsyncClient(timeout=120.0) as client:
         try:
             # Generate Action Image (Shared for both branches)
-            resp = await client.post(f"{IMAGE_GEN_URL}/generate", json={
+            resp = await safe_post(f"{IMAGE_GEN_URL}/generate", {
                 "prompt": action_prompt, "width": 1344, "height": 768, "steps": 4, "cfg_scale": 1.5
             })
             if resp.status_code == 200:
                 (TEMP_DIR / f"{intent_id}_action.webp").write_bytes(resp.content)
 
             # Generate Hit Branch
-            resp_hit = await client.post(f"{IMAGE_GEN_URL}/generate", json={
+            resp_hit = await safe_post(f"{IMAGE_GEN_URL}/generate", {
                 "prompt": hit_prompt, "width": 1344, "height": 768, "steps": 4, "cfg_scale": 1.5
             })
             if resp_hit.status_code == 200:
                 (TEMP_DIR / f"{intent_id}_hit.webp").write_bytes(resp_hit.content)
 
             # Generate Miss Branch
-            resp_miss = await client.post(f"{IMAGE_GEN_URL}/generate", json={
+            resp_miss = await safe_post(f"{IMAGE_GEN_URL}/generate", {
                 "prompt": miss_prompt, "width": 1344, "height": 768, "steps": 4, "cfg_scale": 1.5
             })
             if resp_miss.status_code == 200:
@@ -823,12 +823,12 @@ async def _anticipate_action(user_id: str, intent_data: dict):
             # 3. Generate real SFX via vox-audio-generation-sfx
             logger.info(f"Generating real SFX for {intent_id}...")
             # Hit SFX
-            hit_sfx_resp = await client.post(f"{TTS_SFX_URL}/generate", json={"prompt": f"Sound of {intent_data.get('action')} hitting a {intent_data.get('target')}, cinematic, high fidelity", "duration": 3})
+            hit_sfx_resp = await safe_post(f"{TTS_SFX_URL}/generate", {"prompt": f"Sound of {intent_data.get('action')} hitting a {intent_data.get('target')}, cinematic, high fidelity", "duration": 3})
             if hit_sfx_resp.status_code == 200:
                 (TEMP_DIR / f"{intent_id}_hit_sfx.webm").write_bytes(await transcode_to_opus(hit_sfx_resp.content))
             
             # Miss SFX
-            miss_sfx_resp = await client.post(f"{TTS_SFX_URL}/generate", json={"prompt": f"Sound of {intent_data.get('action')} whistling past and missing, fizzle, whoosh", "duration": 3})
+            miss_sfx_resp = await safe_post(f"{TTS_SFX_URL}/generate", {"prompt": f"Sound of {intent_data.get('action')} whistling past and missing, fizzle, whoosh", "duration": 3})
             if miss_sfx_resp.status_code == 200:
                 (TEMP_DIR / f"{intent_id}_miss_sfx.webm").write_bytes(await transcode_to_opus(miss_sfx_resp.content))
 
