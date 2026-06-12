@@ -18,6 +18,10 @@
         .status-up { color: #4caf50; }
         .status-exited { color: #f44336; }
         .lora-controls { padding: 10px; background: #252525; border-radius: 4px; margin-top: 10px; border: 1px dashed #444; }
+        .btn-control { font-size: 0.7rem; font-weight: bold; padding: 2px 8px; margin-right: 5px; border: none; border-radius: 3px; }
+        .btn-start { background-color: #4caf50; color: white; }
+        .btn-stop { background-color: #f44336; color: white; }
+        .btn-idle { background-color: #ff9800; color: black; }
     </style>
 </head>
 <body>
@@ -86,8 +90,13 @@
     </div>
 
     <script>
-        function renderControls(name) {
+        function renderControls(name, actualName) {
             return `
+                <div class="d-flex mb-2">
+                    <button class="btn-control btn-start" onclick="controlContainer('${actualName}', 'start')">START</button>
+                    <button class="btn-control btn-stop" onclick="controlContainer('${actualName}', 'stop')">STOP</button>
+                    <button class="btn-control btn-idle" onclick="controlContainer('${actualName}', 'stop')">IDLE</button>
+                </div>
                 <div class="lora-controls">
                     <label class="form-label small">LoRA Influence (Global)</label>
                     <input type="range" class="form-range lora-slider" min="0" max="1" step="0.1" value="0.5">
@@ -96,6 +105,18 @@
                 <button class="btn btn-sm btn-query" onclick="queryService('${name}')">EXECUTE REQUEST</button>
                 <div class="mt-2 small text-info" id="result-${name}"></div>
             `;
+        }
+
+        async function controlContainer(name, action) {
+            try {
+                const resp = await fetch(`/api/container/${name}/${action}`, {method: 'POST'});
+                const data = await resp.json();
+                if (data.status === 'success') {
+                    fetchContainers(); 
+                } else {
+                    alert("Error: " + data.error);
+                }
+            } catch (e) { alert("Network error: " + e.message); }
         }
 
         async function fetchContainers() {
@@ -120,7 +141,7 @@
                                     <p class="mb-1"><small>Stack: ${c.stack} | Image: ${c.image}</small></p>
                                     <p class="mb-2 badge-status" id="status-${safeName}">${c.status}</p>
                                     <div id="controls-${safeName}">
-                                        ${isUp ? renderControls(safeName) : '<p class="text-muted small">Container stopped. Start to interact.</p>'}
+                                        ${renderControls(safeName, c.name)}
                                     </div>
                                 </div>
                             </div>
@@ -131,14 +152,6 @@
                         if (statusEl.innerText !== c.status) {
                             statusEl.innerText = c.status;
                             statusEl.className = `mb-2 badge-status ${isUp ? 'status-up' : 'status-exited'}`;
-                            
-                            const controlsEl = document.getElementById(`controls-${safeName}`);
-                            const hasPrompt = !!document.getElementById(`prompt-${safeName}`);
-                            if (isUp && !hasPrompt) {
-                                controlsEl.innerHTML = renderControls(safeName);
-                            } else if (!isUp && hasPrompt) {
-                                controlsEl.innerHTML = '<p class="text-muted small">Container stopped. Start to interact.</p>';
-                            }
                         }
                         
                         const vramEl = document.getElementById(`vram-${safeName}`);
