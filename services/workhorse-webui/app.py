@@ -38,6 +38,8 @@ async def track_vram_spikes():
     """Background task to poll VRAM and record spikes."""
     global vram_state
     vram_path = "/sys/class/drm/card1/device/mem_info_vram_used"
+    oom_threshold = 0.92 * vram_state["total"]  # 92% of 32GB is ~29.4GB
+    
     while True:
         try:
             if os.path.exists(vram_path):
@@ -45,8 +47,19 @@ async def track_vram_spikes():
                     used = int(f.read().strip())
                     vram_state["current_used"] = used
                     
+                    # OOM Safety Protocol
+                    if used > oom_threshold:
+                        logger.warning(f"CRITICAL VRAM SPIKE DETECTED ({used / (1024**3):.2f} GB). INITIATING EMERGENCY SHUTDOWN OF HEAVY CONTAINERS.")
+                        subprocess.run(["podman", "stop", "vox-audio-generation-music", "vox-vision-gen"], capture_output=True)
+                        
+                        # Add a distinct marker to the UI logs
+                        vram_state["peaks"].append({
+                            "timestamp": datetime.now().strftime("%H:%M:%S") + " (OOM SHUTDOWN)",
+                            "value": used
+                        })
+                    
                     # Record a spike if it's significantly higher than the last recorded peak
-                    if not vram_state["peaks"] or used > vram_state["peaks"][-1]["value"] + 100 * 1024 * 1024:
+                    elif not vram_state["peaks"] or used > vram_state["peaks"][-1]["value"] + 100 * 1024 * 1024:
                          vram_state["peaks"].append({
                             "timestamp": datetime.now().strftime("%H:%M:%S"),
                             "value": used
