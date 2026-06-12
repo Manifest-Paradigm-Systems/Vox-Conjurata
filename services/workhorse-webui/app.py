@@ -8,8 +8,9 @@ import os
 import json
 import httpx
 import asyncio
+from datetime import datetime
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 app = FastAPI(title="Vox Workhorse WebUI")
 
@@ -21,6 +22,45 @@ LORA_DIR = "/var/home/EvokeStudio/vox-conjurata/loras"
 MODEL_DATA_DIR = "/var/home/EvokeStudio/.local/share/containers/storage/volumes/vox-conjurata_model_storage/_data"
 
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
+
+# VRAM Telemetry State
+vram_state = {
+    "current_used": 0,
+    "total": 34208743424, # 32GB approx
+    "peaks": [] # List of {"timestamp": "...", "value": 123}
+}
+
+async def track_vram_spikes():
+    """Background task to poll VRAM and record spikes."""
+    global vram_state
+    vram_path = "/sys/class/drm/card1/device/mem_info_vram_used"
+    while True:
+        try:
+            if os.path.exists(vram_path):
+                with open(vram_path, "r") as f:
+                    used = int(f.read().strip())
+                    vram_state["current_used"] = used
+                    
+                    # Record a spike if it's significantly higher than the last recorded peak
+                    if not vram_state["peaks"] or used > vram_state["peaks"][-1]["value"] + 100 * 1024 * 1024:
+                         vram_state["peaks"].append({
+                            "timestamp": datetime.now().strftime("%H:%M:%S"),
+                            "value": used
+                        })
+                    
+                    # Keep only last 10 peaks
+                    vram_state["peaks"] = sorted(vram_state["peaks"], key=lambda x: x["value"], reverse=True)[:10]
+        except Exception as e:
+            pass
+        await asyncio.sleep(2)
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(track_vram_spikes())
+
+@app.get("/api/telemetry")
+async def get_telemetry():
+    return vram_state
 
 # Service URLs from Orchestrator config logic
 SERVICES = {
