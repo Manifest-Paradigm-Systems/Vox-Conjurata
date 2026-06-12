@@ -40,8 +40,8 @@ class ImageRequest(BaseModel):
     negative_prompt: str = ""
     lora_name: str | None = None
     lora_multiplier: float = 1.0
-    width: int = 1024
-    height: int = 1024
+    width: int = 1920
+    height: int = 1080
     steps: int = 4
     cfg_scale: float = 1.0
     sample_method: str = "euler"
