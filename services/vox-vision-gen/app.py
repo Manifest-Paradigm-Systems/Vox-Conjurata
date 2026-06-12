@@ -34,6 +34,10 @@ def load_clean_radeon_pipeline():
     
     # This prevents the UNet from trying to grab massive 6GB+ contiguous blocks of VRAM during generation
     pipe.enable_attention_slicing(1)
+    
+    # Force VAE to stay in FP16 to prevent the 6.75GB decoding spike
+    pipe.upcast_vae = False
+    pipe.vae.to(dtype=torch.float16)
 
     # 3. Apply standard Lightning scheduler
     pipe.scheduler = EulerDiscreteScheduler.from_config(
