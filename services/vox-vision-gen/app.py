@@ -28,9 +28,12 @@ def load_clean_radeon_pipeline():
         variant="fp16"
     ).to("cuda")
 
-    # 2. Optimized VAE
+    # 2. Optimized VAE & Memory Flattening
     pipe.enable_vae_slicing()
     pipe.enable_vae_tiling()
+    
+    # This prevents the UNet from trying to grab massive 6GB+ contiguous blocks of VRAM during generation
+    pipe.enable_attention_slicing(1)
 
     # 3. Apply standard Lightning scheduler
     pipe.scheduler = EulerDiscreteScheduler.from_config(
