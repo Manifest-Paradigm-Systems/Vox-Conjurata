@@ -7,3 +7,4 @@ diffusers
 transformers
 accelerate
 safetensors
+bitsandbytes
