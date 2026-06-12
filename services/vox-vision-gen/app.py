@@ -6,6 +6,7 @@ import os
 import tempfile
 import torch
 import gc
+from PIL import Image
 from diffusers import StableDiffusionXLPipeline, EulerDiscreteScheduler
 
 logging.basicConfig(level=logging.INFO)
@@ -43,8 +44,8 @@ def load_clean_radeon_pipeline():
 class ImageRequest(BaseModel):
     prompt: str
     negative_prompt: str = ""
-    width: int = 1920
-    height: int = 1080
+    width: int = 1344
+    height: int = 768
     steps: int = 4
     cfg_scale: float = 2.0  # Turbo/Lightning usually prefer lower CFG, user hinted at 2.0 earlier for DreamShaper
 
@@ -69,6 +70,11 @@ async def generate_image(request: ImageRequest):
                 width=request.width,
                 height=request.height
             ).images[0]
+        
+        # Upscale to 1080p as per user request
+        if image.width != 1920 or image.height != 1080:
+            logger.info(f"Upscaling from {image.width}x{image.height} to 1920x1080")
+            image = image.resize((1920, 1080), Image.LANCZOS)
         
         fd, output_path = tempfile.mkstemp(suffix=".webp")
         os.close(fd)
