@@ -223,7 +223,16 @@
                     body: JSON.stringify({service: name.replace(/_/g, '-'), prompt: prompt})
                 });
                 const data = await resp.json();
-                resultDiv.innerText = JSON.stringify(data, null, 2);
+                
+                if (data.status === "media") {
+                    if (data.type === "audio") {
+                        resultDiv.innerHTML = `<audio controls src="data:${data.mime};base64,${data.data}" class="mt-2 w-100"></audio>`;
+                    } else if (data.type === "image") {
+                        resultDiv.innerHTML = `<img src="data:${data.mime};base64,${data.data}" class="img-fluid mt-2 rounded" style="max-height: 400px;"/>`;
+                    }
+                } else {
+                    resultDiv.innerText = JSON.stringify(data, null, 2);
+                }
             } catch (e) {
                 resultDiv.innerText = "Error: " + e.message;
             }

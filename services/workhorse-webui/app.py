@@ -155,6 +155,8 @@ async def manage_container(name: str, action: str):
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
+import base64
+
 @app.post("/api/query")
 async def query_service(req: QueryRequest):
     url = SERVICES.get(req.service)
@@ -172,11 +174,26 @@ async def query_service(req: QueryRequest):
                     "max_tokens": 100,
                     **req.params
                 }
+            elif "audio-core" in req.service:
+                # Mock a request for vox-audio-core since it expects specific fields
+                payload = {"npc_id": "test", "dialogue_text": req.prompt, "dsp_presets": {}}
             else:
                 payload = {"prompt": req.prompt, **req.params}
                 
             resp = await client.post(f"{url}{endpoint}", json=payload)
-            return resp.json() if resp.headers.get("content-type") == "application/json" else {"status": "success", "message": "Binary data received"}
+            
+            content_type = resp.headers.get("content-type", "")
+            if "application/json" in content_type:
+                return resp.json()
+            elif "audio" in content_type:
+                b64_audio = base64.b64encode(resp.content).decode('utf-8')
+                return {"status": "media", "type": "audio", "mime": content_type, "data": b64_audio}
+            elif "image" in content_type:
+                b64_image = base64.b64encode(resp.content).decode('utf-8')
+                return {"status": "media", "type": "image", "mime": content_type, "data": b64_image}
+            else:
+                return {"status": "success", "message": f"Binary data received: {content_type}"}
+                
         except Exception as e:
             logger.error(f"Query error: {repr(e)}")
             return JSONResponse(status_code=500, content={"error": repr(e)})
