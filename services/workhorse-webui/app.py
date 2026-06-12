@@ -174,7 +174,8 @@ async def query_service(req: QueryRequest):
             resp = await client.post(f"{url}{endpoint}", json=payload)
             return resp.json() if resp.headers.get("content-type") == "application/json" else {"status": "success", "message": "Binary data received"}
         except Exception as e:
-            return JSONResponse(status_code=500, content={"error": str(e)})
+            logger.error(f"Query error: {repr(e)}")
+            return JSONResponse(status_code=500, content={"error": repr(e)})
 
 if __name__ == "__main__":
     import uvicorn
