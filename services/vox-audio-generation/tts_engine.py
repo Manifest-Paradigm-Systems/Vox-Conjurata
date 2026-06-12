@@ -70,7 +70,7 @@ async def generate_audio(request: AudioRequest):
         fd, output_path = tempfile.mkstemp(suffix=".wav")
         os.close(fd)
         import scipy.io.wavfile
-        scipy.io.wavfile.write(output_path, active_pipe.vae.sampling_rate, audio.T.cpu().numpy())
+        scipy.io.wavfile.write(output_path, active_pipe.vae.sampling_rate, audio.T.cpu().to(torch.float32).numpy())
         return FileResponse(output_path, media_type="audio/wav")
             
     except Exception as e:
