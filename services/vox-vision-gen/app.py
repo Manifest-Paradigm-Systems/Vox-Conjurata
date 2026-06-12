@@ -4,75 +4,76 @@ from pydantic import BaseModel
 import logging
 import os
 import tempfile
+import torch
 import gc
-
-from stable_diffusion_cpp import StableDiffusion
+from diffusers import StableDiffusionXLPipeline, EulerDiscreteScheduler
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("sdxl-gguf-service")
+logger = logging.getLogger("dreamshaper-xl-service")
 
-app = FastAPI(title="SDXL GGUF LoRA Gen")
+app = FastAPI(title="DreamShaper XL Vision Gen")
 
-MODEL_PATH = os.getenv("MODEL_PATH", "/models/stable-diffusion-xl-base-1.0-Q4_0.gguf")
-CLIP_L_PATH = os.getenv("CLIP_L_PATH", "/models/clip/clip_l.safetensors")
-CLIP_G_PATH = os.getenv("CLIP_G_PATH", "/models/clip/clip_g.safetensors")
-VAE_PATH = os.getenv("VAE_PATH", "/models/vae/xlVAEC_c91.safetensors")
-LORA_DIR = os.getenv("LORA_DIR", "/loras")
-THREADS = int(os.getenv("THREADS", "8"))
+pipe = None
 
-try:
-    logger.info(f"Loading SDXL Components (HOT). UNet: {MODEL_PATH}")
-    sd_model = StableDiffusion(
-        model_path=MODEL_PATH,
-        clip_l_path=CLIP_L_PATH,
-        clip_g_path=CLIP_G_PATH,
-        vae_path=VAE_PATH,
-        wtype="q4_0",
-        n_threads=THREADS,
+@app.on_event("startup")
+def load_clean_radeon_pipeline():
+    global pipe
+    logger.info("Loading DreamShaper XL Turbo Pipeline (FP16)...")
+    
+    # 1. Standard FP16 loader
+    pipe = StableDiffusionXLPipeline.from_pretrained(
+        "Lykon/dreamshaper-xl-v2-turbo", 
+        torch_dtype=torch.float16, 
+        variant="fp16"
+    ).to("cuda") # ROCm translates "cuda" straight to your Radeon card
+
+    # 2. Let SDPA handle the UNet automatically (leave it stock)
+    # But tightly compress the heavy image-rendering VAE step:
+    pipe.enable_vae_slicing()
+    pipe.enable_vae_tiling()
+
+    # 3. Apply standard Lightning scheduler
+    pipe.scheduler = EulerDiscreteScheduler.from_config(
+        pipe.scheduler.config, 
+        timestep_spacing="trailing"
     )
-    logger.info("SDXL Base + Text Encoders + Custom VAE loaded successfully in VRAM.")
-except Exception as e:
-    logger.error(f"Failed to load base model: {e}")
-    sd_model = None
+    
+    logger.info("Stable Diffusion Pipeline Ready (SDPA + VAE Optimizations Active)")
 
 class ImageRequest(BaseModel):
     prompt: str
     negative_prompt: str = ""
-    lora_name: str | None = None
-    lora_multiplier: float = 1.0
     width: int = 1920
     height: int = 1080
     steps: int = 4
-    cfg_scale: float = 1.0
-    sample_method: str = "euler"
+    cfg_scale: float = 2.0  # Turbo/Lightning usually prefer lower CFG, user hinted at 2.0 earlier for DreamShaper
 
 @app.get("/")
 async def root():
-    return {"service": "vox-vision-gen", "status": "running" if sd_model else "failed"}
+    return {"service": "vox-vision-gen", "status": "running" if pipe else "loading"}
 
 @app.post("/generate")
 async def generate_image(request: ImageRequest):
-    if sd_model is None:
-        raise HTTPException(status_code=500, detail="Base model not initialized.")
+    if pipe is None:
+        raise HTTPException(status_code=500, detail="Model not loaded.")
 
     logger.info(f"Prompt: {request.prompt[:50]}...")
     
     try:
-        images = sd_model.generate_image(
-            prompt=request.prompt,
-            negative_prompt=request.negative_prompt,
-            width=request.width,
-            height=request.height,
-            sample_steps=request.steps,
-            cfg_scale=request.cfg_scale,
-            sample_method=request.sample_method,
-            scheduler="discrete"
-        )
+        with torch.inference_mode():
+            image = pipe(
+                prompt=request.prompt,
+                negative_prompt=request.negative_prompt,
+                num_inference_steps=request.steps,
+                guidance_scale=request.cfg_scale,
+                width=request.width,
+                height=request.height
+            ).images[0]
         
         fd, output_path = tempfile.mkstemp(suffix=".webp")
         os.close(fd)
         
-        images[0].save(output_path, format="WEBP", quality=85)
+        image.save(output_path, format="WEBP", quality=85)
         
         return FileResponse(output_path, media_type="image/webp")
         
@@ -81,6 +82,8 @@ async def generate_image(request: ImageRequest):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
 if __name__ == "__main__":
     import uvicorn
