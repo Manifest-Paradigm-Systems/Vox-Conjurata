@@ -37,53 +37,34 @@ async def root():
 pipe = None
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-if ENGINE_TYPE == "sfx":
-    logger.info(f"Pre-loading Stable Audio SFX model {MODEL_ID} to VRAM...")
-    pipe = StableAudioPipeline.from_pretrained(MODEL_ID, torch_dtype=torch.float16).to(device)
-    logger.info(f"Stable Audio SFX model loaded and resident in VRAM.")
-else:
-    logger.info(f"Stable Audio Music engine ready for JIT loading.")
+logger.info(f"Pre-loading Stable Audio {ENGINE_TYPE} model {MODEL_ID} to VRAM...")
+pipe = StableAudioPipeline.from_pretrained(MODEL_ID, torch_dtype=torch.float16).to(device)
+logger.info(f"Stable Audio {ENGINE_TYPE} model loaded and resident in VRAM.")
 
 @app.post("/generate")
 async def generate_audio(request: AudioRequest):
     global pipe
     logger.info(f"Generating {ENGINE_TYPE} audio for prompt: '{request.prompt[:50]}...'")
     
-    active_pipe = pipe
-    jit_mode = False
-    
     try:
-        if ENGINE_TYPE == "music":
-            logger.info(f"JIT Loading Music model {MODEL_ID}...")
-            active_pipe = StableAudioPipeline.from_pretrained(MODEL_ID, torch_dtype=torch.float16).to(device)
-            jit_mode = True
-            
-        if active_pipe is None:
+        if pipe is None:
             raise HTTPException(status_code=500, detail=f"Pipeline not loaded for {ENGINE_TYPE}")
 
         prompt_prefix = "TrackType: Music, VocalType: Instrumental, " if ENGINE_TYPE == "music" else "TrackType: SFX, "
         formatted_prompt = f"{prompt_prefix}{request.prompt}"
         
         with torch.inference_mode():
-            audio = active_pipe(prompt=formatted_prompt, audio_end_in_s=request.duration_seconds).audios[0]
+            audio = pipe(prompt=formatted_prompt, audio_end_in_s=request.duration_seconds).audios[0]
             
         fd, output_path = tempfile.mkstemp(suffix=".wav")
         os.close(fd)
         import scipy.io.wavfile
-        scipy.io.wavfile.write(output_path, active_pipe.vae.sampling_rate, audio.T.cpu().to(torch.float32).numpy())
+        scipy.io.wavfile.write(output_path, pipe.vae.sampling_rate, audio.T.cpu().to(torch.float32).numpy())
         return FileResponse(output_path, media_type="audio/wav")
             
     except Exception as e:
         logger.error(f"Stable Audio Gen ({ENGINE_TYPE}) error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        if jit_mode and active_pipe is not None:
-            logger.info("Evicting JIT Music model from VRAM...")
-            del active_pipe
-            gc.collect()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-            logger.info("JIT Eviction complete.")
 
 if __name__ == "__main__":
     import uvicorn

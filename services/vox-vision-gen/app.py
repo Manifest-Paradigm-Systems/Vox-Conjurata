@@ -19,20 +19,16 @@ pipe = None
 @app.on_event("startup")
 def load_clean_radeon_pipeline():
     global pipe
-    logger.info("Loading DreamShaper XL Turbo Pipeline (FP16 with Sequential Offload)...")
+    logger.info("Loading DreamShaper XL Turbo Pipeline (Fully Resident FP16)...")
     
-    # 1. Standard FP16 loader (bitsandbytes 4-bit is highly unstable on ROCm)
+    # 1. Standard FP16 loader 
     pipe = StableDiffusionXLPipeline.from_pretrained(
         "Lykon/dreamshaper-xl-v2-turbo", 
         torch_dtype=torch.float16, 
         variant="fp16"
-    )
+    ).to("cuda")
 
-    # 2. Aggressive VRAM Management: Model CPU Offload
-    # This keeps idle VRAM at 0 and only moves components to the GPU when calculating.
-    pipe.enable_model_cpu_offload()
-
-    # 3. Optimized VAE
+    # 2. Optimized VAE
     pipe.enable_vae_slicing()
     pipe.enable_vae_tiling()
 
