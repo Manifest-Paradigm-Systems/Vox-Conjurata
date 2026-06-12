@@ -161,6 +161,8 @@ services:
     - seccomp=unconfined
     environment:
     - HSA_OVERRIDE_GFX_VERSION=12.0.1
+    - ROCR_VISIBLE_DEVICES=1
+    - HIP_VISIBLE_DEVICES=1
     - CUDA_VISIBLE_DEVICES=""
     - PYTHONUNBUFFERED=1
     networks:

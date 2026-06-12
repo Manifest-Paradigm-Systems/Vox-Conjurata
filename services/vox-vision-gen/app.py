@@ -19,17 +19,17 @@ pipe = None
 @app.on_event("startup")
 def load_clean_radeon_pipeline():
     global pipe
-    logger.info("Loading DreamShaper XL Turbo Pipeline (FP16)...")
+    logger.info("Loading DreamShaper XL Turbo Pipeline (4-bit)...")
     
-    # 1. Standard FP16 loader
+    # 1. 4-bit Precision Loader
     pipe = StableDiffusionXLPipeline.from_pretrained(
         "Lykon/dreamshaper-xl-v2-turbo", 
         torch_dtype=torch.float16, 
-        variant="fp16"
-    ).to("cuda") # ROCm translates "cuda" straight to your Radeon card
+        variant="fp16",
+        load_in_4bit=True
+    ).to("cuda") 
 
-    # 2. Let SDPA handle the UNet automatically (leave it stock)
-    # But tightly compress the heavy image-rendering VAE step:
+    # 2. Optimized VAE
     pipe.enable_vae_slicing()
     pipe.enable_vae_tiling()
 
