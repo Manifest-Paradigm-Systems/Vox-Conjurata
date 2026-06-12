@@ -135,6 +135,21 @@ async def list_models():
                 
     return {"models": models, "loras": loras}
 
+@app.post("/api/container/{name}/{action}")
+async def manage_container(name: str, action: str):
+    if action not in ["start", "stop", "restart"]:
+        raise HTTPException(status_code=400, detail="Invalid action")
+    
+    try:
+        # Podman actions for start/stop/restart
+        cmd = ["podman", action, name]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            return JSONResponse(status_code=500, content={"error": result.stderr})
+        return {"status": "success", "message": f"Container {name} {action}ed"}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
 @app.post("/api/query")
 async def query_service(req: QueryRequest):
     url = SERVICES.get(req.service)
