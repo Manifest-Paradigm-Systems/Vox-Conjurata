@@ -8,9 +8,13 @@ import os
 import json
 import httpx
 import asyncio
+import logging
 from datetime import datetime
 from pydantic import BaseModel
 from typing import List, Optional, Dict
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("workhorse-webui")
 
 app = FastAPI(title="Vox Workhorse WebUI")
 
