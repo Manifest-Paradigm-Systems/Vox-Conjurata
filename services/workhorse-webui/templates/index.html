@@ -85,82 +85,94 @@
     </div>
 
     <script>
+        function renderControls(name) {
+            return `
+                <div class="lora-controls">
+                    <label class="form-label small">LoRA Influence (Global)</label>
+                    <input type="range" class="form-range lora-slider" min="0" max="1" step="0.1" value="0.5">
+                </div>
+                <textarea class="prompt-box" id="prompt-${name}" placeholder="Enter manual query/prompt for ${name}..."></textarea>
+                <button class="btn btn-sm btn-query" onclick="queryService('${name}')">EXECUTE REQUEST</button>
+                <div class="mt-2 small text-info" id="result-${name}"></div>
+            `;
+        }
+
         async function fetchContainers() {
-            const resp = await fetch('/api/containers');
-            const data = await resp.json();
-            const list = document.getElementById('container-list');
-            list.innerHTML = '';
-            
-            data.forEach(c => {
-                const isUp = c.status.toLowerCase().includes('up');
-                const card = `
-                    <div class="card">
-                        <div class="card-header d-flex justify-content-between align-items-center">
-                            <span>${c.name} <small class="text-muted">(${c.role})</small></span>
-                            <span class="badge badge-vram">${c.vram}</span>
-                        </div>
-                        <div class="card-body">
-                            <p class="mb-1"><small>Stack: ${c.stack} | Image: ${c.image}</small></p>
-                            <p class="mb-2 badge-status ${isUp ? 'status-up' : 'status-exited'}">${c.status}</p>
-                            
-                            ${isUp ? `
-                                <div class="lora-controls">
-                                    <label class="form-label small">LoRA Influence (Global)</label>
-                                    <input type="range" class="form-range lora-slider" min="0" max="1" step="0.1" value="0.5">
+            try {
+                const resp = await fetch('/api/containers');
+                const data = await resp.json();
+                const list = document.getElementById('container-list');
+                
+                data.forEach(c => {
+                    const safeName = c.name.replace(/[^a-zA-Z0-9]/g, '_');
+                    let card = document.getElementById(`card-${safeName}`);
+                    const isUp = c.status.toLowerCase().includes('up');
+                    
+                    if (!card) {
+                        const cardHtml = `
+                            <div class="card" id="card-${safeName}">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <span>${c.name} <small class="text-muted">(${c.role})</small></span>
+                                    <span class="badge badge-vram" id="vram-${safeName}">${c.vram}</span>
                                 </div>
-                                <textarea class="prompt-box" id="prompt-${c.name}" placeholder="Enter manual query/prompt for ${c.name}..."></textarea>
-                                <button class="btn btn-sm btn-query" onclick="queryService('${c.name}')">EXECUTE REQUEST</button>
-                                <div class="mt-2 small text-info" id="result-${c.name}"></div>
-                            ` : '<p class="text-muted small">Container stopped. Start to interact.</p>'}
-                        </div>
-                    </div>
-                `;
-                list.innerHTML += card;
-            });
+                                <div class="card-body">
+                                    <p class="mb-1"><small>Stack: ${c.stack} | Image: ${c.image}</small></p>
+                                    <p class="mb-2 badge-status" id="status-${safeName}">${c.status}</p>
+                                    <div id="controls-${safeName}">
+                                        ${isUp ? renderControls(safeName) : '<p class="text-muted small">Container stopped. Start to interact.</p>'}
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                        list.insertAdjacentHTML('beforeend', cardHtml);
+                    } else {
+                        const statusEl = document.getElementById(`status-${safeName}`);
+                        if (statusEl.innerText !== c.status) {
+                            statusEl.innerText = c.status;
+                            statusEl.className = `mb-2 badge-status ${isUp ? 'status-up' : 'status-exited'}`;
+                            
+                            const controlsEl = document.getElementById(`controls-${safeName}`);
+                            const hasPrompt = !!document.getElementById(`prompt-${safeName}`);
+                            if (isUp && !hasPrompt) {
+                                controlsEl.innerHTML = renderControls(safeName);
+                            } else if (!isUp && hasPrompt) {
+                                controlsEl.innerHTML = '<p class="text-muted small">Container stopped. Start to interact.</p>';
+                            }
+                        }
+                        
+                        const vramEl = document.getElementById(`vram-${safeName}`);
+                        if (vramEl.innerText !== c.vram) vramEl.innerText = c.vram;
+                    }
+                });
+            } catch (e) { console.error("Container fetch error", e); }
         }
 
         async function fetchAssets() {
-            const resp = await fetch('/api/models');
-            const data = await resp.json();
-            
-            const modelList = document.getElementById('model-list');
-            modelList.innerHTML = '';
-            data.models.forEach(m => {
-                modelList.innerHTML += `<li class="list-group-item bg-transparent text-light border-secondary small">${m.name}</li>`;
-            });
-
-            const loraList = document.getElementById('lora-list');
-            if (data.loras.length > 0) {
-                loraList.innerHTML = '';
-                data.loras.forEach(l => {
-                    loraList.innerHTML += `
-                        <div class="mb-3">
-                            <label class="form-label small d-flex justify-content-between">
-                                ${l.name} <span>0.8</span>
-                            </label>
-                            <input type="range" class="form-range lora-slider" min="0" max="2" step="0.05" value="0.8">
-                        </div>
-                    `;
-                });
-            }
-        }
-
-        async function queryService(name) {
-            const prompt = document.getElementById(`prompt-${name}`).value;
-            const resultDiv = document.getElementById(`result-${name}`);
-            resultDiv.innerText = "Processing...";
-            
             try {
-                const resp = await fetch('/api/query', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({service: name, prompt: prompt})
-                });
+                const resp = await fetch('/api/models');
                 const data = await resp.json();
-                resultDiv.innerText = JSON.stringify(data, null, 2);
-            } catch (e) {
-                resultDiv.innerText = "Error: " + e.message;
-            }
+                
+                const modelList = document.getElementById('model-list');
+                modelList.innerHTML = '';
+                data.models.forEach(m => {
+                    modelList.innerHTML += `<li class="list-group-item bg-transparent text-light border-secondary small">${m.name}</li>`;
+                });
+
+                const loraList = document.getElementById('lora-list');
+                if (data.loras.length > 0) {
+                    loraList.innerHTML = '';
+                    data.loras.forEach(l => {
+                        loraList.innerHTML += `
+                            <div class="mb-3">
+                                <label class="form-label small d-flex justify-content-between">
+                                    ${l.name} <span>0.8</span>
+                                </label>
+                                <input type="range" class="form-range lora-slider" min="0" max="2" step="0.05" value="0.8">
+                            </div>
+                        `;
+                    });
+                }
+            } catch (e) { console.error("Asset fetch error", e); }
         }
 
         async function fetchTelemetry() {
@@ -169,7 +181,6 @@
                 const data = await resp.json();
                 
                 const usedGB = (data.current_used / (1024 ** 3)).toFixed(2);
-                const totalGB = (data.total / (1024 ** 3)).toFixed(0);
                 const percent = ((data.current_used / data.total) * 100).toFixed(1);
                 
                 document.getElementById('vram-percent').innerText = `${percent}%`;
@@ -185,11 +196,29 @@
             } catch (e) { console.error("Telemetry error", e); }
         }
 
+        async function queryService(name) {
+            const prompt = document.getElementById(`prompt-${name}`).value;
+            const resultDiv = document.getElementById(`result-${name}`);
+            resultDiv.innerText = "Processing...";
+            
+            try {
+                const resp = await fetch('/api/query', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({service: name.replace(/_/g, '-'), prompt: prompt})
+                });
+                const data = await resp.json();
+                resultDiv.innerText = JSON.stringify(data, null, 2);
+            } catch (e) {
+                resultDiv.innerText = "Error: " + e.message;
+            }
+        }
+
         fetchContainers();
         fetchAssets();
         fetchTelemetry();
-        setInterval(fetchContainers, 5000); // Auto-refresh status
-        setInterval(fetchTelemetry, 2000);  // High-frequency VRAM tracking
+        setInterval(fetchContainers, 5000); 
+        setInterval(fetchTelemetry, 2000);  
     </script>
 </body>
 </html>
