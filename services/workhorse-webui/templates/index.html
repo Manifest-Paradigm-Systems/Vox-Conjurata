@@ -37,6 +37,7 @@
                             <div class="col-md-3 text-center">
                                 <h2 id="vram-percent">0%</h2>
                                 <p class="small text-muted mb-0">TOTAL ALLOCATION</p>
+                                <p class="small text-info mb-0" id="vram-last-sync" style="font-size: 0.6rem;"></p>
                             </div>
                             <div class="col-md-6">
                                 <div class="progress" style="height: 30px; background-color: #333;">
@@ -186,6 +187,7 @@
                 document.getElementById('vram-percent').innerText = `${percent}%`;
                 document.getElementById('vram-used').innerText = `${usedGB} GB`;
                 document.getElementById('vram-progress').style.width = `${percent}%`;
+                document.getElementById('vram-last-sync').innerText = `SYNC: ${new Date().toLocaleTimeString()}`;
                 
                 const peaksList = document.getElementById('vram-peaks');
                 peaksList.innerHTML = '';
