@@ -280,6 +280,7 @@ services:
     - CUDA_VISIBLE_DEVICES=0
     - VRAM_LIMIT=12.00GB
     - HF_TOKEN=${HF_TOKEN}
+    - PYTORCH_ALLOC_CONF=expandable_segments:True
     volumes:
     - ./cache/huggingface:/root/.cache/huggingface:z
     networks:
