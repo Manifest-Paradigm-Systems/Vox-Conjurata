@@ -230,6 +230,9 @@
                     } else if (data.type === "image") {
                         resultDiv.innerHTML = `<img src="data:${data.mime};base64,${data.data}" class="img-fluid mt-2 rounded" style="max-height: 400px;"/>`;
                     }
+                } else if (data.choices && data.choices[0] && data.choices[0].message) {
+                    // Render LLM chat completion response cleanly
+                    resultDiv.innerHTML = `<div class="p-2 border border-secondary rounded" style="background: #111;">${data.choices[0].message.content}</div>`;
                 } else {
                     resultDiv.innerText = JSON.stringify(data, null, 2);
                 }
