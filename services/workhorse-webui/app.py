@@ -45,32 +45,37 @@ async def get_containers():
         # Get container stats from Podman
         cmd = ["podman", "ps", "-a", "--format", "json"]
         result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            logger.error(f"Podman error: {result.stderr}")
+            return JSONResponse(status_code=500, content={"error": result.stderr})
+        
         containers = json.loads(result.stdout)
         
-        # Enrich with VRAM info (extracted from env or labels in a real scenario)
-        # For this prototype, we'll use a static mapping based on the research
+        # Enrich with VRAM info
         vram_map = {
             "vox-vision-gen": "12.00GB",
             "vox-audio-core": "4.20GB",
             "vox-audio-generation-sfx": "0.80GB",
             "vox-vision-reader": "4.80GB",
-            "vox-llm-llama": "Shared/Auto", # llama-cpp usually fills what it can
+            "vox-llm-llama": "Shared/Auto",
         }
         
         enriched = []
         for c in containers:
-            name = c["Names"][0] if isinstance(c["Names"], list) else c["Names"]
+            names = c.get("Names")
+            name = names[0] if isinstance(names, list) and len(names) > 0 else (names if isinstance(names, str) else "Unknown")
             enriched.append({
-                "id": c["ID"][:12],
+                "id": c.get("ID", "N/A")[:12],
                 "name": name,
-                "status": c["Status"],
-                "image": c["Image"],
+                "status": c.get("Status", "N/A"),
+                "image": c.get("Image", "N/A"),
                 "vram": vram_map.get(name, "N/A"),
                 "stack": "vox-conjurata" if "vox-" in name or "foundry" in name else "External",
                 "role": name.replace("vox-", "").replace("-", " ").title()
             })
         return enriched
     except Exception as e:
+        logger.exception("Error in get_containers")
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 @app.get("/api/models")
