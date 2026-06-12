@@ -68,6 +68,7 @@ SERVICES = {
     "vox-vision-gen": "http://vox-vision-gen:8003",
     "vox-audio-core": "http://vox-audio-core:8000",
     "vox-audio-generation-sfx": "http://vox-audio-generation-sfx:8000",
+    "vox-audio-generation-music": "http://vox-audio-generation-music:8000",
 }
 
 class QueryRequest(BaseModel):
