@@ -178,7 +178,7 @@ async def query_service(req: QueryRequest):
     
     endpoint = "/v1/chat/completions" if "llm" in req.service else "/generate"
     
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with httpx.AsyncClient(timeout=300.0) as client:
         try:
             # Construct payload based on service type
             if "llm" in req.service:
