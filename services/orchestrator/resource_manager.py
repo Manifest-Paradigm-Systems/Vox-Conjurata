@@ -339,67 +339,6 @@ class ResourceManager:
                 ledger.refund(user_id, cost, "Music Gen Failed")
                 raise RuntimeError(f"Music Gen failed: {resp.status_code}")
 
-    async def _restore_default_if_needed(self):
-        """Reverts to vox-vision-reader if it's not already running and no burst tasks are left."""
-        if not self.client: return
-        
-        try:
-            reader = self.client.containers.get("vox-vision-reader")
-            if reader.status == "running": return
-            
-            # Stop any burst services first
-            for burst in self.burst_services:
-                try:
-                    cont = self.client.containers.get(burst)
-                    if cont.status == "running":
-                        logger.info(f"🛑 Cleaning up burst service: {burst}")
-                        cont.stop(timeout=2)
-                except: pass
-            
-            logger.info("🔄 Restoring vox-vision-reader to resident status...")
-            reader.start()
-        except Exception as e:
-            logger.error(f"Restore failed: {e}")
-
-    async def _ensure_exclusive_container(self, target: str, task: Task):
-        """Low-level Docker control to swap containers."""
-        if not self.client:
-            return
-
-        # If target is already UP, just return
-        try:
-            container = self.client.containers.get(target)
-            if container.status == "running":
-                return
-        except:
-            pass
-
-        task.status = "swapping"
-        task.progress = 0.1
-        logger.info(f"🔄 Hot-Swap: Swapping to {target}...")
-
-        # 1. Stop clashing services
-        # If we are starting a burst service, stop the reader
-        if target in self.burst_services:
-            try:
-                reader = self.client.containers.get("vox-vision-reader")
-                if reader.status == "running":
-                    logger.info("🛑 Stopping vox-vision-reader...")
-                    reader.stop(timeout=2)
-            except:
-                pass
-        
-        # 2. Start target
-        try:
-            target_cont = self.client.containers.get(target)
-            target_cont.start()
-            logger.info(f"🚀 Started {target}.")
-            
-            # 3. Poll for readiness (simplified)
-            await asyncio.sleep(3) 
-        except Exception as e:
-            logger.error(f"Failed to start {target}: {e}")
-
 # Singleton instance
 resource_manager = ResourceManager()
 # resource_manager.start_worker() # Must be called inside a running event loop (e.g. app startup)
