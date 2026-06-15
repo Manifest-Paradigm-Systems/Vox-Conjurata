@@ -27,8 +27,7 @@ try:
         "clip_l_path": CLIP_L_PATH,
         "clip_g_path": CLIP_G_PATH,
         "wtype": "q4_0",
-        "n_threads": THREADS,
-        "keep_vae_on_cpu": True
+        "n_threads": THREADS
     }
     if VAE_PATH:
         kwargs["vae_path"] = VAE_PATH
