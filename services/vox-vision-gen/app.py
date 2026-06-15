@@ -16,21 +16,24 @@ app = FastAPI(title="SDXL GGUF LoRA Gen")
 MODEL_PATH = os.getenv("MODEL_PATH", "/models/stable-diffusion-xl-base-1.0-Q4_0.gguf")
 CLIP_L_PATH = os.getenv("CLIP_L_PATH", "/models/clip/clip_l.safetensors")
 CLIP_G_PATH = os.getenv("CLIP_G_PATH", "/models/clip/clip_g.safetensors")
-VAE_PATH = os.getenv("VAE_PATH", "/models/vae/xlVAEC_c91.safetensors")
+VAE_PATH = os.getenv("VAE_PATH", "")
 LORA_DIR = os.getenv("LORA_DIR", "/loras")
 THREADS = int(os.getenv("THREADS", "8"))
 
 try:
     logger.info(f"Loading SDXL Components (HOT). UNet: {MODEL_PATH}")
-    sd_model = StableDiffusion(
-        model_path=MODEL_PATH,
-        clip_l_path=CLIP_L_PATH,
-        clip_g_path=CLIP_G_PATH,
-        vae_path=VAE_PATH,
-        wtype="q4_0",
-        n_threads=THREADS,
-        keep_vae_on_cpu=True
-    )
+    kwargs = {
+        "model_path": MODEL_PATH,
+        "clip_l_path": CLIP_L_PATH,
+        "clip_g_path": CLIP_G_PATH,
+        "wtype": "q4_0",
+        "n_threads": THREADS,
+        "keep_vae_on_cpu": True
+    }
+    if VAE_PATH:
+        kwargs["vae_path"] = VAE_PATH
+        
+    sd_model = StableDiffusion(**kwargs)
     logger.info("SDXL Base + Text Encoders + Custom VAE loaded successfully in VRAM.")
 except Exception as e:
     logger.error(f"Failed to load base model: {e}")
