@@ -281,6 +281,7 @@ services:
     - VRAM_LIMIT=12.00GB
     - HF_TOKEN=${HF_TOKEN}
     - PYTORCH_ALLOC_CONF=expandable_segments:True
+    - ATTENTION_BACKEND=math
     volumes:
     - ./cache/huggingface:/root/.cache/huggingface:z
     networks:
