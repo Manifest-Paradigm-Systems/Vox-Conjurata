@@ -19,22 +19,22 @@ class Task(BaseModel):
 
 class ResourceManager:
     def __init__(self):
-        try:
-            self.client = docker.from_env()
-            logger.info("✅ Resource Manager connected to Docker/Podman daemon.")
-        except Exception as e:
-            logger.error(f"❌ Failed to connect to Docker daemon: {e}")
-            self.client = None
+        # We no longer need to connect to docker for swapping, everything is resident
+        self.client = None
+        logger.info("✅ Resource Manager initialized in 'Always-On' mode. Swapping disabled.")
 
         self.queue: asyncio.Queue = asyncio.Queue()
         self.active_tasks: Dict[str, Task] = {}
         self.dedupe_cache: Dict[str, float] = {}
         self.lock = asyncio.Lock()
-        
-        # State tracking
-        self.current_resident = "vox-vision-reader"
-        self.burst_services = ["vox-vision-gen", "vox-audio-generation-music"]
-        
+
+        # Traffic light to prevent heavy GPU tasks from running at the exact same millisecond
+        self.gpu_compute_lock = asyncio.Lock()
+
+        # State tracking (obsolete but kept for compatibility)
+        self.current_resident = "always-on"
+        self.burst_services = []
+
         # Start background worker
         self.worker_task = None
         self.processing_tasks: Dict[str, asyncio.Task] = {}
