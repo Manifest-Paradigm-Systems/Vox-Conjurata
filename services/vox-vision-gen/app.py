@@ -5,6 +5,7 @@ import logging
 import os
 import tempfile
 import gc
+from PIL import Image
 
 from stable_diffusion_cpp import StableDiffusion
 
@@ -72,10 +73,17 @@ async def generate_image(request: ImageRequest):
             scheduler="discrete"
         )
         
+        image = images[0]
+        
+        # Upscale to 1080p if not already
+        if image.width != 1920 or image.height != 1080:
+            logger.info(f"Upscaling from {image.width}x{image.height} to 1920x1080")
+            image = image.resize((1920, 1080), Image.LANCZOS)
+        
         fd, output_path = tempfile.mkstemp(suffix=".webp")
         os.close(fd)
         
-        images[0].save(output_path, format="WEBP", quality=85)
+        image.save(output_path, format="WEBP", quality=85)
         
         return FileResponse(output_path, media_type="image/webp")
         
