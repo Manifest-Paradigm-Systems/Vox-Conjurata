@@ -161,8 +161,6 @@ services:
     - seccomp=unconfined
     environment:
     - HSA_OVERRIDE_GFX_VERSION=12.0.1
-    - ROCR_VISIBLE_DEVICES=1
-    - HIP_VISIBLE_DEVICES=1
     - CUDA_VISIBLE_DEVICES=""
     - PYTHONUNBUFFERED=1
     networks:
@@ -278,12 +276,15 @@ services:
     - ROCR_VISIBLE_DEVICES=0
     - HIP_VISIBLE_DEVICES=0
     - CUDA_VISIBLE_DEVICES=0
-    - VRAM_LIMIT=12.00GB
-    - HF_TOKEN=${HF_TOKEN}
-    - PYTORCH_ALLOC_CONF=expandable_segments:True
-    - ATTENTION_BACKEND=math
+    - VRAM_LIMIT=5.50GB
+    - MODEL_PATH=/models/sdxl_lightning_4step_q4_0.gguf
+    - CLIP_L_PATH=/models/clip/clip_l.safetensors
+    - CLIP_G_PATH=/models/clip/clip_g.safetensors
+    - VAE_PATH=/models/vae/xlVAEC_c91.safetensors
+    - LORA_DIR=/loras
     volumes:
-    - ./cache/huggingface:/root/.cache/huggingface:z
+    - model_storage:/models:z
+    - ./loras:/loras:z
     networks:
     - vox-net
     restart: unless-stopped

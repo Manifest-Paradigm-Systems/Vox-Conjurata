@@ -2,9 +2,4 @@ fastapi
 uvicorn
 pydantic
 pillow
-torch
-diffusers
-transformers
-accelerate
-safetensors
-bitsandbytes
+stable-diffusion-cpp-python
