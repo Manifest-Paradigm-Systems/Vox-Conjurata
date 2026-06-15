@@ -123,41 +123,26 @@ class ResourceManager:
                 self.queue.task_done()
 
     async def _process_task(self, task: Task):
-        """Logic for executing a task, including hot-swapping."""
+        """Logic for executing a task with compute serialization."""
         logger.info(f"⚙️ Processing task {task.id} ({task.type})")
         
-        # 1. SFX generation is resident, no swap needed
+        # 1. SFX generation is resident, no swap needed and doesn't need strict GPU lock
         if task.type == "sfx-gen":
             await self._execute_sfx_gen(task)
             return
 
-        # 2. Determine target container and endpoint
-        target_container = None
-        if task.type == "image-gen":
-            target_container = "vox-vision-gen"
-        elif task.type == "music-gen":
-            target_container = "vox-audio-generation-music"
-        elif task.type == "vision-scan":
-            target_container = "vox-vision-reader"
-
-        if not target_container:
-            return
-
-        async with self.lock:
-            # 3. Ensure target is UP and others are DOWN
-            await self._ensure_exclusive_container(target_container, task)
-
-        # 4. Execute payload
+        # 2. Execute heavy payload sequentially via lock
         task.status = "processing"
         task.progress = 0.3
         
         try:
-            if task.type == "image-gen":
-                await self._execute_image_gen(task)
-            elif task.type == "music-gen":
-                await self._execute_music_gen(task)
-            elif task.type == "vision-scan":
-                await self._execute_vision_scan(task)
+            async with self.gpu_compute_lock:
+                if task.type == "image-gen":
+                    await self._execute_image_gen(task)
+                elif task.type == "music-gen":
+                    await self._execute_music_gen(task)
+                elif task.type == "vision-scan":
+                    await self._execute_vision_scan(task)
         except Exception as e:
             logger.error(f"❌ Task {task.id} execution failed: {e}")
             task.status = "failed"
@@ -166,11 +151,6 @@ class ResourceManager:
         task.status = "complete"
         task.progress = 1.0
         logger.info(f"✅ Task {task.id} complete.")
-
-        # 5. Restore Cycle (if queue is empty, restore reader)
-        if self.queue.empty():
-            async with self.lock:
-                await self._restore_default_if_needed()
 
     async def _execute_sfx_gen(self, task: Task):
         """Calls the resident SFX generator with Vault Cache and Pricing Multiplier."""
