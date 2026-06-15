@@ -61,13 +61,16 @@ async def generate_image(request: ImageRequest):
     
     try:
         with torch.inference_mode():
+            # Force standard math attention to bypass ROCm SDPA bug
+            pipe.set_progress_bar_config(disable=True)
             image = pipe(
                 prompt=request.prompt,
                 negative_prompt=request.negative_prompt,
                 num_inference_steps=request.steps,
                 guidance_scale=request.cfg_scale,
                 width=request.width,
-                height=request.height
+                height=request.height,
+                cross_attention_kwargs={"scale": 1.0} # Can help stabilize some attention backends
             ).images[0]
         
         # Upscale to 1080p as per user request
