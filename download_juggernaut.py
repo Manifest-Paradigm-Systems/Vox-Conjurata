@@ -8,22 +8,20 @@ target_filename = "juggernaut_xl_lightning_q4_0.gguf"
 
 print(f"Downloading {filename} from {repo_id}...")
 try:
+    # city96 repo often has the file in a subfolder or root, let's try downloading without renaming first to see path
     path = hf_hub_download(
         repo_id=repo_id,
         filename=filename,
-        local_dir=local_dir,
         token="hf_REDACTED"
     )
     
-    # Rename to match convention
+    # Move to the volume directory
     target_path = os.path.join(local_dir, target_filename)
-    if os.path.exists(target_path) and os.path.abspath(path) != os.path.abspath(target_path):
+    if os.path.exists(target_path):
         os.remove(target_path)
     
-    if os.path.abspath(path) != os.path.abspath(target_path):
-        os.rename(path, target_path)
-        print(f"Renamed model to {target_filename}")
-        
+    import shutil
+    shutil.copy(path, target_path)
     print(f"Download complete. Model saved to {target_path}")
 except Exception as e:
     print(f"Error downloading model: {e}")
