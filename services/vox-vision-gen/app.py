@@ -69,8 +69,7 @@ async def generate_image(request: ImageRequest):
                 num_inference_steps=request.steps,
                 guidance_scale=request.cfg_scale,
                 width=request.width,
-                height=request.height,
-                cross_attention_kwargs={"scale": 1.0} # Can help stabilize some attention backends
+                height=request.height
             ).images[0]
         
         # Upscale to 1080p as per user request
