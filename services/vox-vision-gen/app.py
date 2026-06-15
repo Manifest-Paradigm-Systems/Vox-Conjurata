@@ -7,6 +7,12 @@ import tempfile
 import torch
 import gc
 from PIL import Image
+
+# Force ROCm to use standard math for SDPA to bypass extreme latency bug on non-standard resolutions
+torch.backends.cuda.enable_math_sdp(True)
+torch.backends.cuda.enable_flash_sdp(False)
+torch.backends.cuda.enable_mem_efficient_sdp(False)
+
 from diffusers import StableDiffusionXLPipeline, EulerDiscreteScheduler
 
 logging.basicConfig(level=logging.INFO)
