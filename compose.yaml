@@ -280,7 +280,6 @@ services:
     - MODEL_PATH=/models/sdxl_lightning_4step_q4_0.gguf
     - CLIP_L_PATH=/models/clip/clip_l.safetensors
     - CLIP_G_PATH=/models/clip/clip_g.safetensors
-    - VAE_PATH=/models/vae/xlVAEC_c91.safetensors
     - LORA_DIR=/loras
     volumes:
     - model_storage:/models:z
