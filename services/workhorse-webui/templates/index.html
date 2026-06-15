@@ -245,6 +245,7 @@
                     body: JSON.stringify({service: name.replace(/_/g, '-'), prompt: prompt})
                 });
                 const data = await resp.json();
+                
                 if (data.status === "media") {
                     if (data.type === "audio") {
                         resultDiv.innerHTML = `<audio controls src="data:${data.mime};base64,${data.data}" class="mt-2 w-100"></audio>`;
@@ -255,19 +256,6 @@
                                                     onclick="openOverlay(this.src)"/>`;
                     }
                 } else if (data.choices && data.choices[0] && data.choices[0].message) {
-                ...
-                function openOverlay(src) {
-                document.getElementById('overlay-img').src = src;
-                document.getElementById('image-overlay').style.display = 'flex';
-                document.body.style.overflow = 'hidden'; // Prevent scrolling
-                }
-
-                function closeOverlay() {
-                document.getElementById('image-overlay').style.display = 'none';
-                document.body.style.overflow = 'auto';
-                }
-
-                fetchContainers();
                     resultDiv.innerHTML = `<div class="p-2 border border-secondary rounded" style="background: #111;">${data.choices[0].message.content}</div>`;
                 } else {
                     resultDiv.innerText = JSON.stringify(data, null, 2);
@@ -275,6 +263,17 @@
             } catch (e) {
                 resultDiv.innerText = "Error: " + e.message;
             }
+        }
+
+        function openOverlay(src) {
+            document.getElementById('overlay-img').src = src;
+            document.getElementById('image-overlay').style.display = 'flex';
+            document.body.style.overflow = 'hidden'; 
+        }
+
+        function closeOverlay() {
+            document.getElementById('image-overlay').style.display = 'none';
+            document.body.style.overflow = 'auto';
         }
 
         fetchContainers();
