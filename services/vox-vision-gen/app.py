@@ -29,6 +29,7 @@ try:
         vae_path=VAE_PATH,
         wtype="q4_0",
         n_threads=THREADS,
+        keep_vae_on_cpu=True
     )
     logger.info("SDXL Base + Text Encoders + Custom VAE loaded successfully in VRAM.")
 except Exception as e:
