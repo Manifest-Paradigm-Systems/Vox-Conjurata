@@ -111,7 +111,7 @@ async def get_containers():
         
         # Enrich with VRAM info
         vram_map = {
-            "vox-vision-gen": "12.00GB",
+            "vox-vision-gen": "5.50GB",
             "vox-audio-core": "4.20GB",
             "vox-audio-generation-sfx": "0.80GB",
             "vox-vision-reader": "4.80GB",
