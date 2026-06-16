@@ -1,8 +1,8 @@
 import os
 from huggingface_hub import hf_hub_download
 
-repo_id = "bartowski/Juggernaut-XL-Lightning-GGUF"
-filename = "Juggernaut-XL-Lightning-Q4_0.gguf"
+repo_id = "hum-ma/SDXL-models-GGUF"
+filename = "juggernautXL_juggXIByRundiffusion-Q4_0.gguf"
 local_dir = "/var/home/EvokeStudio/.local/share/containers/storage/volumes/vox-conjurata_model_storage/_data"
 target_filename = "juggernaut_xl_lightning_q4_0.gguf"
 
