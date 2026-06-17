@@ -100,7 +100,8 @@ services:
     restart: unless-stopped
 
   vox-llm-vllm:
-    image: ghcr.io/abetlen/llama-cpp-python:latest
+    build:
+      context: ./services/vox-llm-llama
     container_name: vox-llm-llama
     command: >
       python3 -m llama_cpp.server
