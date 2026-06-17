@@ -100,19 +100,16 @@ services:
     restart: unless-stopped
 
   vox-llm-vllm:
-    build:
-      context: ./services/vox-llm-llama
+    image: ghcr.io/ggml-org/llama.cpp:server-rocm
     container_name: vox-llm-llama
     command: >
-      python3 -m llama_cpp.server
-      --model /models/14B-Qwen2.5-Kunou-v1.Q4_K_M.gguf
-      --n_gpu_layers -1
-      --n_ctx 32768
-      --cache True
-      --cache_type ram
-      --type_k 2
-      --type_v 2
-      --flash_attn True
+      /llama-server
+      -m /models/14B-Qwen2.5-Kunou-v1.Q4_K_M.gguf
+      -ngl 99
+      -c 32768
+      --cache-type-k q4_0
+      --cache-type-v q4_0
+      -fa
       --host 0.0.0.0
       --port 8000
     devices:
