@@ -108,7 +108,7 @@ services:
       -c 32768
       --cache-type-k q4_0
       --cache-type-v q4_0
-      -fa
+      -fa on
       --host 0.0.0.0
       --port 8000
     devices:
