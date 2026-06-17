@@ -103,7 +103,6 @@ services:
     image: ghcr.io/ggml-org/llama.cpp:server-rocm
     container_name: vox-llm-llama
     command: >
-      /llama-server
       -m /models/14B-Qwen2.5-Kunou-v1.Q4_K_M.gguf
       -ngl 99
       -c 32768
