@@ -50,8 +50,8 @@ class ImageRequest(BaseModel):
     lora_multiplier: float = 1.0
     width: int = 1024
     height: int = 1024
-    steps: int = 20
-    cfg_scale: float = 7.0
+    steps: int = 4
+    cfg_scale: float = 2.0
     sample_method: str = "euler"
 
 @app.get("/")
