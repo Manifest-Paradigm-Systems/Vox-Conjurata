@@ -1,0 +1,15 @@
+FROM docker.io/rocm/dev-ubuntu-22.04:latest
+
+ENV HSA_OVERRIDE_GFX_VERSION=12.0.1
+ENV DEBIAN_FRONTEND=noninteractive
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y python3 python3-pip git cmake build-essential && rm -rf /var/lib/apt/lists/*
+
+# Install llama-cpp-python with ROCm support
+RUN CMAKE_ARGS="-DGGML_HIPBLAS=ON -DAMDGPU_TARGETS=gfx1201" pip3 install llama-cpp-python[server]
+
+EXPOSE 8000
+
+# The command will be provided by compose.yaml
