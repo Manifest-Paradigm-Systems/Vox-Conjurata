@@ -124,7 +124,9 @@ services:
     - seccomp=unconfined
     environment:
     - HSA_OVERRIDE_GFX_VERSION=12.0.1
-    - CUDA_VISIBLE_DEVICES=""
+    - ROCR_VISIBLE_DEVICES=0
+    - HIP_VISIBLE_DEVICES=0
+    - CUDA_VISIBLE_DEVICES=0
     volumes:
     - /var/home/EvokeStudio/models/Sao10K-14B-Kunou:/models:z
     networks:
