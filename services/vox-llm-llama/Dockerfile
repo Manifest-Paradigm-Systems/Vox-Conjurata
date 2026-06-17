@@ -8,7 +8,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y python3 python3-pip git cmake build-essential ninja-build && rm -rf /var/lib/apt/lists/*
 
 # Install llama-cpp-python with ROCm support
-RUN CMAKE_ARGS="-DGGML_HIPBLAS=ON -DAMDGPU_TARGETS=gfx1201" pip3 install llama-cpp-python[server]
+RUN CMAKE_ARGS="-DGGML_HIPBLAS=ON -DCMAKE_C_COMPILER=hipcc -DCMAKE_CXX_COMPILER=hipcc -DAMDGPU_TARGETS=gfx1201" pip3 install llama-cpp-python[server]
 
 EXPOSE 8000
 
