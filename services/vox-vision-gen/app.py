@@ -12,6 +12,10 @@ from stable_diffusion_cpp import StableDiffusion
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("sdxl-gguf-service")
 
+# System-level injection configuration for CyberRealisticPony
+SYSTEM_POSITIVE_PREFIX = "score_9, score_8_up, score_7_up, source_anime, cinematic photo, dark fantasy atmospheric,"
+SYSTEM_NEGATIVE_PREFIX = "score_4, score_5, score_6, 3d render, vector graphic, low quality, distorted anatomy, bright, vibrant, neon,"
+
 app = FastAPI(title="SDXL GGUF LoRA Gen")
 
 MODEL_PATH = os.getenv("MODEL_PATH", "/models/stable-diffusion-xl-base-1.0-Q4_0.gguf")
@@ -46,8 +50,8 @@ class ImageRequest(BaseModel):
     lora_multiplier: float = 1.0
     width: int = 1024
     height: int = 1024
-    steps: int = 4
-    cfg_scale: float = 1.0
+    steps: int = 20
+    cfg_scale: float = 7.0
     sample_method: str = "euler"
 
 @app.get("/")
@@ -59,12 +63,16 @@ async def generate_image(request: ImageRequest):
     if sd_model is None:
         raise HTTPException(status_code=500, detail="Base model not initialized.")
 
-    logger.info(f"Prompt: {request.prompt[:50]}...")
+    # Combine the baked container tags with the dynamic DM prompt
+    final_positive_prompt = f"{SYSTEM_POSITIVE_PREFIX} {request.prompt}"
+    final_negative_prompt = f"{SYSTEM_NEGATIVE_PREFIX} {request.negative_prompt}"
+
+    logger.info(f"Final Prompt: {final_positive_prompt[:100]}...")
     
     try:
         images = sd_model.generate_image(
-            prompt=request.prompt,
-            negative_prompt=request.negative_prompt,
+            prompt=final_positive_prompt,
+            negative_prompt=final_negative_prompt,
             width=request.width,
             height=request.height,
             sample_steps=request.steps,
