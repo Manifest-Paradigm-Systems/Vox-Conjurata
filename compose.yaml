@@ -277,7 +277,7 @@ services:
     - HIP_VISIBLE_DEVICES=0
     - CUDA_VISIBLE_DEVICES=0
     - VRAM_LIMIT=5.50GB
-    - MODEL_PATH=/models/CyberRealisticPony_V12.7-vae_f16-q4_0.gguf
+    - MODEL_PATH=/models/hoseki_lustrousmix_pony_xl_q4.gguf
     - CLIP_L_PATH=/models/clip/clip_l.safetensors
     - CLIP_G_PATH=/models/clip/clip_g.safetensors
     - VAE_PATH=/models/vae/sdxl_vae_fp16_fix.safetensors
