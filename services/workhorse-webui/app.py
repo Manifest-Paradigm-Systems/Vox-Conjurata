@@ -81,7 +81,8 @@ async def get_telemetry():
 
 # Service URLs from Orchestrator config logic
 SERVICES = {
-    "vox-llm-llama": "http://127.0.0.1:11435", # Using the core wrapper since llama is not exposed
+    "vox-llm-llama": "http://127.0.0.1:11435", # Using the core wrapper
+    "vox-llm-core": "http://127.0.0.1:11435", # Direct mapping for the core wrapper
     "vox-vision-gen": "http://127.0.0.1:8003",
     "vox-audio-core": "http://127.0.0.1:8004",
     "vox-audio-generation-sfx": "http://127.0.0.1:8001",
