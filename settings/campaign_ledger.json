@@ -2,7 +2,7 @@
   "campaign_pool": 20.0,
   "stripe_customer_id": null,
   "personal_wallets": {
-    "gm": 999.7459999999968,
+    "gm": 999.7402499999968,
     "G3SJW9rRHe7J3AOH": 299.99425
   },
   "session_allowances": {
@@ -12,7 +12,7 @@
     "G3SJW9rRHe7J3AOH": 0.0
   },
   "session_spent": {
-    "gm": 0.25400000000000017,
+    "gm": 0.25975000000000015,
     "G3SJW9rRHe7J3AOH": 0.00575
   },
   "transactions": [
@@ -565,6 +565,18 @@
       "amount": 0.003,
       "description": "AI Orchestration Fee: Narrator",
       "timestamp": 1781759767.6558483
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.00225,
+      "description": "AI Orchestration Fee: Test",
+      "timestamp": 1781759789.302994
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.0035,
+      "description": "Autonomous NPC Reply: Orc",
+      "timestamp": 1781759795.2390454
     }
   ]
 }
