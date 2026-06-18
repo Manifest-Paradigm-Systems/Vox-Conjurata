@@ -1,9 +1,9 @@
 {
-  "campaign_pool": 0.0,
+  "campaign_pool": 1.0,
   "stripe_customer_id": null,
   "personal_wallets": {
     "gm": 999.7102499999966,
-    "G3SJW9rRHe7J3AOH": 199.97400000000002
+    "G3SJW9rRHe7J3AOH": 198.97400000000002
   },
   "session_allowances": {
     "G3SJW9rRHe7J3AOH": 0.0,
@@ -713,6 +713,14 @@
       "amount": 0.0035,
       "description": "TTS Generation for Xulgath Warrior",
       "timestamp": 1781764738.0312757
+    },
+    {
+      "user_id": "G3SJW9rRHe7J3AOH",
+      "target_user_id": "POOL",
+      "amount": 1.0,
+      "description": "GIFT: G3SJW9rRHe7J3AOH -> POOL",
+      "timestamp": 1781764937.0808425,
+      "is_gift": true
     }
   ]
 }
