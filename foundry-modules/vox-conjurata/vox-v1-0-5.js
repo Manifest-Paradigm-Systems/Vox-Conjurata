@@ -1599,7 +1599,7 @@ async function processAndSendAudio() {
     } catch (e) {}
 
     const blob = new Blob(chunks, { type: "audio/webm" });
-    const { activeMicType, activeActorId, activeSpeakerName, activeIsMonster, useVoxVoice, isAutonomousTrigger, targetActorId, targetVoxVoice = true = true } = globalThis.voxState;
+    const { activeMicType, activeActorId, activeSpeakerName, activeIsMonster, useVoxVoice, isAutonomousTrigger, targetActorId, targetVoxVoice = true } = globalThis.voxState;
     
     // 1. Extract DSP presets from actor flags
     let dsp_presets = {};
