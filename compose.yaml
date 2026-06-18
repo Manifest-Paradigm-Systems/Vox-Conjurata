@@ -139,7 +139,7 @@ services:
     environment:
     - PORT=8081
     - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-    - LOCAL_SGLANG_URL=http://vox-llm-vllm:8000
+    - LOCAL_SGLANG_URL=http://vox-llm-llama:8000
     networks:
     - vox-net
     restart: unless-stopped
