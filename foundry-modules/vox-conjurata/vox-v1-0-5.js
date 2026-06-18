@@ -1675,7 +1675,7 @@ async function processAndSendAudio() {
 
             // Scenario C: Manual Override / Scenario B: Puppeteer
             // Backend will return null audio_data if useVoxVoice was false
-            if (audio_data && !shouldWhisper) playAudio(audio_data, 1.0);
+            if (audio_data && !shouldWhisper) await playAudio(audio_data, 1.0);
             
             const chatData = { 
                 content: transcription,
@@ -1697,7 +1697,7 @@ async function processAndSendAudio() {
                     speaker: { actor: targetActorId, alias: npc_context.name },
                     flags: { "vox-conjurata": { type: "npc-reply", audioUrl: ai_reply.audio_data, engine: ai_reply.engine } }
                 });
-                if (ai_reply.audio_data) playAudio(ai_reply.audio_data, 1.0);
+                if (ai_reply.audio_data) await playAudio(ai_reply.audio_data, 1.0);
                 if (npcMessage && canvas.ready) {
                     const token = canvas.tokens.placeables.find(t => t.actor?.id === targetActorId);
                     if (token && typeof canvas.bubbles?.say === 'function') canvas.bubbles.say(token, ai_reply.transcription);
