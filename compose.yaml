@@ -40,8 +40,8 @@ services:
     - ./settings:/app/settings:z
     - /sys:/sys:ro
     - /run/user/1000/podman/podman.sock:/var/run/docker.sock:rw
-    - /home/EvokeStudio/manifest-paradigm/foundry/data/Data:/foundry_data:rw,z
-    - /home/EvokeStudio/manifest-paradigm/foundry/data/Data/audio/sfx:/sfx_out:rw,z
+    - /home/EvokeStudio/foundry/data/Data:/foundry_data:rw,z
+    - /home/EvokeStudio/foundry/data/Data/audio/sfx:/sfx_out:rw,z
     networks:
     - vox-net
 
@@ -50,8 +50,8 @@ services:
     container_name: foundry-vtt
     working_dir: /app
     volumes:
-      - /home/EvokeStudio/manifest-paradigm/foundry/app:/app:z
-      - /home/EvokeStudio/manifest-paradigm/foundry/data:/data:z
+      - /home/EvokeStudio/foundry/app:/app:z
+      - /home/EvokeStudio/foundry/data:/data:z
       - /var/home/EvokeStudio/vox-conjurata:/var/home/EvokeStudio/vox-conjurata:ro,z
     command: ["node", "main.js", "--dataPath=/data"]
     networks:
