@@ -7,7 +7,6 @@ It measures timing at each stage and provides specific optimization recommendati
 
 import time
 import json
-import requests
 import logging
 from pathlib import Path
 from typing import Dict, List, Optional, Any
@@ -487,28 +486,6 @@ class VoiceResponseProfiler:
         print(f"💾 Results saved to: {output_path}")
         return output_path
 
-    async def run_profiling_session(self):
-        """Run the complete profiling session"""
-        try:
-            results = await self.run_comprehensive_profiling()
-
-            # Offer to save results
-            save_choice = input("\n💾 Save detailed results to JSON file? (y/n): ").strip().lower()
-            if save_choice == 'y':
-                filename = input(f"📁 Enter filename (default: performance_profiling_results.json): ").strip()
-                if not filename:
-                    filename = "performance_profiling_results.json"
-
-                self.save_results(results, filename)
-                print(f"✅ Results saved successfully!")
-
-            print(f"\n🔬 Profiling session completed!")
-            print(f"📊 Review the detailed reports above for optimization recommendations.")
-
-        except Exception as e:
-            print(f"❌ Profiling session failed: {e}")
-            logger.error(f"Profiling session failed: {e}")
-
 async def main():
     """Main entry point for the performance profiler"""
     print("🚀 Starting Vox Conjurata - Deep Performance Profiler")
@@ -529,7 +506,7 @@ async def main():
     profiler = VoiceResponseProfiler()
 
     try:
-        await profiler.run_profiling_session()
+        await profiler.run_comprehensive_profiling()
     except KeyboardInterrupt:
         print(f"\n⏹ Profiling interrupted by user")
     except Exception as e:
@@ -537,5 +514,4 @@ async def main():
         logger.error(f"Profiling failed: {e}")
 
 if __name__ == "__main__":
-    # Run the performance profiler
     asyncio.run(main())
