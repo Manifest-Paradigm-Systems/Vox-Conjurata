@@ -342,12 +342,7 @@ def standardize_speech_text(text: str, engine_type: str, emotion: str) -> str:
         clean_text = re.sub(r'\*(.*?)\*', r'<\1>', clean_text)
     else:
         clean_text = re.sub(r'\*.*?\*', '', clean_text)
-    if engine_type == "monster":
-        clean_text = f"[{emotion.lower()}] {clean_text}"
-    elif engine_type == "humanoid":
-        clean_text = f"({emotion.lower()}) {clean_text}"
-    else:
-        clean_text = re.sub(r'\w+:\s*', '', clean_text)
+    clean_text = re.sub(r'\w+:\s*', '', clean_text)
     clean_text = re.sub(r'\s+', ' ', clean_text).strip()
     return clean_text
 
