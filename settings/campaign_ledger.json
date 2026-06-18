@@ -2,8 +2,8 @@
   "campaign_pool": 1.0,
   "stripe_customer_id": null,
   "personal_wallets": {
-    "gm": 999.7102499999966,
-    "G3SJW9rRHe7J3AOH": 198.97400000000002
+    "gm": 989.7102499999966,
+    "G3SJW9rRHe7J3AOH": 208.97400000000002
   },
   "session_allowances": {
     "G3SJW9rRHe7J3AOH": 0.0,
@@ -720,6 +720,14 @@
       "amount": 1.0,
       "description": "GIFT: G3SJW9rRHe7J3AOH -> POOL",
       "timestamp": 1781764937.0808425,
+      "is_gift": true
+    },
+    {
+      "user_id": "gm",
+      "target_user_id": "G3SJW9rRHe7J3AOH",
+      "amount": 10.0,
+      "description": "GIFT: gm -> G3SJW9rRHe7J3AOH",
+      "timestamp": 1781765104.3510718,
       "is_gift": true
     }
   ]
