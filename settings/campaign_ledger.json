@@ -1,5 +1,5 @@
 {
-  "campaign_pool": 120.0,
+  "campaign_pool": 100.0,
   "stripe_customer_id": null,
   "personal_wallets": {
     "gm": 999.7102499999966,
