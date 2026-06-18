@@ -1067,9 +1067,6 @@ async def _execute_voice_conversion_pipeline(task_id: str, audio_bytes: bytes, a
 
         if not transcription: return {"status": "empty"}
 
-        # Safety window for cancellation
-        await asyncio.sleep(1.0) 
-
         # Logic: If useVoxActor is False (Puppeteer mode), we should suppress any 
         # autonomous secondary effects that might be triggered by downstream systems.
         # Here we just log it; downstream parsing would check this flag.
