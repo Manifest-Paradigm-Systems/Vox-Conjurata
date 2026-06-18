@@ -198,29 +198,27 @@ class VoiceResponseProfiler:
             raise
 
     def _record_stage(self, timings: List[PipelineTiming], stage: PipelineStage,
-                     end_time: float, **kwargs) -> float:
+                     end_time: float, **kwargs) -> None:
         """Record timing for a pipeline stage"""
-        current_time = end_time
 
         # Create timing entry with appropriate start time for each stage
         if stage == PipelineStage.VOICE_CONVERSION_START:
-            start_time = current_time
+            start_time = end_time
         else:
             # For other stages, use the previous stage's end time or current time
             prev_timing = timings[-1] if timings else None
-            start_time = prev_timing.end_time if prev_timing else current_time
+            start_time = prev_timing.end_time if prev_timing else end_time
 
         # Create timing entry
         timing = PipelineTiming(
             stage=stage,
             start_time=start_time,
-            end_time=current_time,
-            duration=current_time - start_time,
+            end_time=end_time,
+            duration=end_time - start_time,
             **kwargs
         )
 
         timings.append(timing)
-        return current_time
 
     def _identify_bottlenecks(self, timings: List[PipelineTiming]) -> List[str]:
         """Identify the biggest bottlenecks in the pipeline"""
