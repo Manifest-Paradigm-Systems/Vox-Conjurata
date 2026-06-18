@@ -94,7 +94,7 @@ async def generate_audio(request: DialogueRequest):
             text=request.dialogue_text,
             reference_wav_path=seed_path,
             cfg_value=2.0,
-            inference_timesteps=10  # Optimized for sub-200ms local delivery
+            inference_timesteps=4  # Aggressively optimized for real-time delivery
         )
         
         # Pull preset values
