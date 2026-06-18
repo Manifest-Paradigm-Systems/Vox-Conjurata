@@ -617,10 +617,10 @@ function registerKeybindings() {
                 globalThis.voxState.activeSpeakerName = "Narrator"; 
                 globalThis.voxState.activeActorId = "narrator"; 
                 globalThis.voxState.activeIsMonster = false;
-                globalThis.voxState.useVoxVoice = true; 
+                globalThis.voxState.useVoxVoice = game.settings.get("vox-conjurata", "suppressRawVoice_narrator") ?? true; 
                 globalThis.voxState.useVoxActor = true; 
                 startRecording("vox-conjurata-gm-narrate-mic"); 
-                statusMessage("Narrator Mic [Y]: OPEN (Triggers Active)", true);
+                statusMessage(`Narrator Mic [Y]: OPEN [Voice: ${globalThis.voxState.useVoxVoice ? 'AI' : 'RAW'}] (Triggers Active)`, true);
             } 
             else if (code === "KeyH" && game.user.isGM) {
                 const t = resolveActiveToken(true);
@@ -642,6 +642,7 @@ function registerKeybindings() {
                 globalThis.voxState.activeSpeakerName = a?.name || game.user.name; 
                 globalThis.voxState.activeActorId = a?.id || game.user.id; 
                 globalThis.voxState.activeIsMonster = !!resolveIsMonster(a);
+                globalThis.voxState.useVoxVoice = game.settings.get("vox-conjurata", "suppressRawVoice_character") ?? true;
                 globalThis.voxState.useVoxActor = true; 
 
                 const target = game.user.targets.first();
