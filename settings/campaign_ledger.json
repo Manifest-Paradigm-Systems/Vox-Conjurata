@@ -2,7 +2,7 @@
   "campaign_pool": 120.0,
   "stripe_customer_id": null,
   "personal_wallets": {
-    "gm": 999.7287499999967,
+    "gm": 999.7207499999967,
     "G3SJW9rRHe7J3AOH": 199.98625
   },
   "session_allowances": {
@@ -12,7 +12,7 @@
     "G3SJW9rRHe7J3AOH": 0.0
   },
   "session_spent": {
-    "gm": 0.2712500000000001,
+    "gm": 0.27925000000000005,
     "G3SJW9rRHe7J3AOH": 0.01375
   },
   "transactions": [
@@ -627,6 +627,24 @@
       "amount": 0.00225,
       "description": "AI Orchestration Fee: Gamemaster",
       "timestamp": 1781764031.5111926
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.00225,
+      "description": "AI Orchestration Fee: Xulgath Warrior",
+      "timestamp": 1781764042.8350616
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.0035,
+      "description": "Autonomous NPC Reply: Xulgath Warrior",
+      "timestamp": 1781764048.2247384
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.00225,
+      "description": "AI Orchestration Fee: Xulgath Warrior",
+      "timestamp": 1781764069.532859
     }
   ]
 }
