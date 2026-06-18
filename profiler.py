@@ -71,22 +71,15 @@ class VoiceResponseProfiler:
 
         # Track timing for each stage
         timings: List[PipelineTiming] = []
-        current_time = time.time()
 
         try:
             # Stage 1: Prepare request
-            current_time = self._record_stage(
-                timings, PipelineStage.VOICE_CONVERSION_START,
-                current_time, actor_id=actor_id
-            )
+            self._record_stage(timings, PipelineStage.VOICE_CONVERSION_START, time.time(), actor_id=actor_id)
 
             # Stage 2: Audio preprocessing (if we had actual audio)
             # Simulate preprocessing delay
             await asyncio.sleep(0.5)  # Simulating audio checksum/validation
-            current_time = self._record_stage(
-                timings, PipelineStage.AUDIO_PREPROCESSING,
-                time.time(), actor_id=actor_id
-            )
+            self._record_stage(timings, PipelineStage.AUDIO_PREPROCESSING, time.time(), actor_id=actor_id)
 
             # Stage 3: Speech-to-Text (STT)
             stt_start = time.time()
@@ -99,29 +92,23 @@ class VoiceResponseProfiler:
                     stt_latency = 5.0 + (hash(response_text) % 300) / 100  # Simulate 5-8 seconds
                     self.session_cache[cache_key] = {"stt": stt_start}
 
-                current_time = self._record_stage(
+                self._record_stage(
                     timings, PipelineStage.STT_TRANSCRIPTION,
                     time.time(), actor_id=actor_id,
                     metadata={"stt_latency": stt_latency}
                 )
             except Exception as e:
                 logger.warning(f"STT simulation failed: {e}")
-                current_time = self._record_stage(
+                self._record_stage(
                     timings, PipelineStage.STT_TRANSCRIPTION,
                     time.time(), actor_id=actor_id,
                     metadata={"error": str(e)}
                 )
 
             # Stage 4: LLM Enrichment
-            current_time = self._record_stage(
-                timings, PipelineStage.LLM_ENRICHMENT,
-                time.time(), actor_id=actor_id
-            )
+            self._record_stage(timings, PipelineStage.LLM_ENRICHMENT, time.time(), actor_id=actor_id)
             await asyncio.sleep(2.0)  # Simulate LLM processing (2 seconds)
-            current_time = self._record_stage(
-                timings, PipelineStage.LLM_ENRICHMENT,
-                time.time(), actor_id=actor_id
-            )
+            self._record_stage(timings, PipelineStage.LLM_ENRICHMENT, time.time(), actor_id=actor_id)
 
             # Stage 5: Voice Seed Lookup (THE CACHING PART)
             seed_lookup_start = time.time()
@@ -139,14 +126,14 @@ class VoiceResponseProfiler:
                     # Cached lookup
                     seed_latency = 0.01  # Very fast
 
-                current_time = self._record_stage(
+                self._record_stage(
                     timings, PipelineStage.VOICE_SEED_LOOKUP,
                     time.time(), actor_id=actor_id,
                     metadata={"seed_latency": seed_latency}
                 )
             except Exception as e:
                 logger.warning(f"Seed lookup simulation failed: {e}")
-                current_time = self._record_stage(
+                self._record_stage(
                     timings, PipelineStage.VOICE_SEED_LOOKUP,
                     time.time(), actor_id=actor_id,
                     metadata={"error": str(e)}
@@ -161,41 +148,29 @@ class VoiceResponseProfiler:
                 generation_latency = base_latency + (complexity_factor * 20.0)  # 15-35 seconds
 
                 await asyncio.sleep(generation_latency)
-                current_time = self._record_stage(
+                self._record_stage(
                     timings, PipelineStage.VOICE_GENERATION,
                     time.time(), actor_id=actor_id,
                     metadata={"generation_latency": generation_latency}
                 )
             except Exception as e:
                 logger.warning(f"Voice generation simulation failed: {e}")
-                current_time = self._record_stage(
+                self._record_stage(
                     timings, PipelineStage.VOICE_GENERATION,
                     time.time(), actor_id=actor_id,
                     metadata={"error": str(e)}
                 )
 
             # Stage 7: DSP Processing
-            current_time = self._record_stage(
-                timings, PipelineStage.DSP_PROCESSING,
-                time.time(), actor_id=actor_id
-            )
+            self._record_stage(timings, PipelineStage.DSP_PROCESSING, time.time(), actor_id=actor_id)
             await asyncio.sleep(0.3)  # Simulate DSP effects
-            current_time = self._record_stage(
-                timings, PipelineStage.DSP_PROCESSING,
-                time.time(), actor_id=actor_id
-            )
+            self._record_stage(timings, PipelineStage.DSP_PROCESSING, time.time(), actor_id=actor_id)
 
             # Stage 8: Audio Post-processing
-            current_time = self._record_stage(
-                timings, PipelineStage.AUDIO_POSTPROCESSING,
-                time.time(), actor_id=actor_id
-            )
+            self._record_stage(timings, PipelineStage.AUDIO_POSTPROCESSING, time.time(), actor_id=actor_id)
 
             # Stage 9: Endpoint response
-            current_time = self._record_stage(
-                timings, PipelineStage.ENDPOINT_RESPONSE,
-                time.time(), actor_id=actor_id
-            )
+            self._record_stage(timings, PipelineStage.ENDPOINT_RESPONSE, time.time(), actor_id=actor_id)
 
             # Calculate total time
             total_time = timings[-1].end_time - timings[0].start_time
