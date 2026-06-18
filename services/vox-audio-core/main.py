@@ -58,45 +58,48 @@ async def initialize_npc(request: NPCIdentityRequest):
         
         sf.write(seed_path, raw_wav, vox_engine.tts_model.sample_rate)
         return {"status": "success", "seed_path": seed_path}
-    except Exception as e:
-        logger.error(f"Failed to initialize NPC {request.npc_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    class DialogueRequest(BaseModel):
+        npc_id: str
+        dialogue_text: str
+        dsp_presets: Optional[dict] = {}
+        control_instruction: Optional[str] = "A natural, expressive voice."
 
-@app.post("/generate")
-async def generate_audio(request: DialogueRequest):
-    """
-    PHASE 2: LIVE RUNTIME.
-    Processes dynamic sentences using the locked seed file,
-    then applies mathematical DSP filters for custom monstrous textures.
-    """
-    try:
-        # Check standard seed path
-        seed_path = os.path.join(SEED_DIR, f"{request.npc_id}.wav")
-        # Check palette fallback for system archetypes and narrator
-        palette_path = os.path.join(SEED_DIR, "_palette", f"{request.npc_id}.wav")
-        
-        final_seed = None
-        if os.path.exists(seed_path):
-            final_seed = seed_path
-        elif os.path.exists(palette_path):
-            final_seed = palette_path
-            
-        if not final_seed:
-            raise HTTPException(status_code=404, detail=f"Seed for NPC {request.npc_id} not found. Checked: {seed_path} and {palette_path}")
+    @app.post("/generate")
+    async def generate_audio(request: DialogueRequest):
+        """
+        PHASE 2: LIVE RUNTIME.
+        Processes dynamic sentences using the locked seed file,
+        then applies mathematical DSP filters for custom monstrous textures.
+        """
+        try:
+            # Check standard seed path
+            seed_path = os.path.join(SEED_DIR, f"{request.npc_id}.wav")
+            # Check palette fallback for system archetypes and narrator
+            palette_path = os.path.join(SEED_DIR, "_palette", f"{request.npc_id}.wav")
 
-        seed_path = final_seed # For the rest of the function
+            final_seed = None
+            if os.path.exists(seed_path):
+                final_seed = seed_path
+            elif os.path.exists(palette_path):
+                final_seed = palette_path
 
-        sample_rate = vox_engine.tts_model.sample_rate  # Native 48000Hz
-        
-        logger.info(f"Generating dialogue for NPC: {request.npc_id}")
-        # Execute high-fidelity cloning from the fixed master anchor
-        clean_audio = vox_engine.generate(
-            text=request.dialogue_text,
-            reference_wav_path=seed_path,
-            cfg_value=2.0,
-            inference_timesteps=4  # Aggressively optimized for real-time delivery
-        )
-        
+            if not final_seed:
+                raise HTTPException(status_code=404, detail=f"Seed for NPC {request.npc_id} not found. Checked: {seed_path} and {palette_path}")
+
+            seed_path = final_seed # For the rest of the function
+
+            sample_rate = vox_engine.tts_model.sample_rate  # Native 48000Hz
+
+            logger.info(f"Generating dialogue for NPC: {request.npc_id} with tone: {request.control_instruction}")
+            # Execute high-fidelity cloning from the fixed master anchor
+            clean_audio = vox_engine.generate(
+                text=request.dialogue_text,
+                reference_wav_path=seed_path,
+                control_instruction=request.control_instruction,
+                cfg_value=2.0,
+                inference_timesteps=4  # Aggressively optimized for real-time delivery
+            )
+
         # Pull preset values
         fx = request.dsp_presets
         
