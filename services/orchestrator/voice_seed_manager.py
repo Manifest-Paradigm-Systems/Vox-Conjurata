@@ -362,8 +362,7 @@ class VoiceSeedManager:
             with self.memory_cache_lock:
                 cache_entry = CacheEntry(
                     seed_path=str(seed_path),
-                    timestamp=time.time(),
-                    file_size=file_size,
+                    timestamp=time.time(),n                    file_size=file_size,
                     source="generated"
                 )
                 self.memory_cache[actor_id] = cache_entry
