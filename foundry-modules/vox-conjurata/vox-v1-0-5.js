@@ -1539,13 +1539,17 @@ if (typeof game !== 'undefined' && game.ready) onReady(); else Hooks.once("ready
 Hooks.on("canvasReady", async () => { if (game.user.isGM) await scanActiveSceneTokens(); });
 
 function playAudio(url, vol = 1.0) {
-    if (!url) return;
-    console.log("🎙️ Vox | Playing audio...");
-    const a = new Audio(url);
-    a.volume = vol;
-    a.play().catch(err => {
-        console.warn("🎙️ Vox | Audio playback blocked or failed:", err);
-        // Fallback: If blocked, we might need a UI interaction to unlock audio context
+    return new Promise((resolve) => {
+        if (!url) return resolve();
+        console.log("🎙️ Vox | Playing audio...");
+        const a = new Audio(url);
+        a.volume = vol;
+        a.onended = () => resolve();
+        a.onerror = () => resolve();
+        a.play().catch(err => {
+            console.warn("🎙️ Vox | Audio playback blocked or failed:", err);
+            resolve();
+        });
     });
 }
 
