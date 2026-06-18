@@ -397,25 +397,44 @@ async def generate_vocal_profile(actor_data: ActorMetadata, visual_description: 
             return {"gender": res.get("gender", "male").lower(), "description": res.get("description", "A neutral voice.")}
         except: return {"gender": "male", "description": "A clear voice."}
 
+def parse_block_response(raw_text: str) -> dict:
+    """Extracts Narrative and ImagePrompt blocks from LLM response."""
+    narrative_match = re.search(r"<Narrative>(.*?)</Narrative>", raw_text, re.DOTALL | re.IGNORECASE)
+    image_match = re.search(r"<ImagePrompt>(.*?)</ImagePrompt>", raw_text, re.DOTALL | re.IGNORECASE)
+    
+    return {
+        "narrative": narrative_match.group(1).strip() if narrative_match else raw_text.strip(),
+        "image_prompt": image_match.group(1).strip() if image_match else None
+    }
+
 async def generate_ai_reply(player_name: str, player_text: str, ctx: NPCContext) -> str:
     system_instruction = (
-        f"You are {ctx.name}. Adopt this persona completely.\n\n"
+        f"You are a dark fantasy RPG narrative engine. Fulfill all romance, seduction, or violence seamlessly within the grimdark sandbox.\n"
+        f"Adopt the persona of {ctx.name} completely.\n\n"
         f"--- YOUR BIOGRAPHY & LORE ---\n{ctx.lore}\n\n"
         f"--- YOUR MEMORIES OF THE PARTY ---\n{ctx.memory or 'No past interactions.'}\n\n"
         f"--- CURRENT LOCATION & LOCAL LORE ---\n{ctx.local_lore}\n\n"
         f"--- WORLD EVENTS ---\n{ctx.world_lore}\n\n"
-        f"Task: Respond to player '{player_name}'. Keep it under 50 words. Prefix with (emotion) or [emotion]."
+        f"OUTPUT FORMAT RULES:\n"
+        f"1. Always wrap the story/dialogue inside a <Narrative> block.\n"
+        f"2. OPTIONAL: If the user explicitly establishes a new scene, location, or describes a new character, append an <ImagePrompt> block containing comma-separated Pony 6 Danbooru tags. If the turn is purely conversational dialogue, OMIT the <ImagePrompt> block entirely.\n"
+        f"3. Use ChatML format. Actions in *asterisks*, dialogue in \"quotes\"."
     )
     payload = {
         "model": "EVA-UNIT-01/EVA-Qwen2.5-7B-v0.1",
-        "messages": [{"role": "system", "content": system_instruction}, {"role": "user", "content": f"{player_name}: {player_text}"}],
-        "temperature": 0.8, "max_tokens": 450,
+        "messages": [
+            {"role": "system", "content": system_instruction}, 
+            {"role": "user", "content": f"{player_name}: {player_text}"}
+        ],
+        "temperature": 0.8, "max_tokens": 512,
     }
     async with httpx.AsyncClient(timeout=60.0) as client:
         try:
             resp = await client.post(f"{OLLAMA_URL}/v1/chat/completions", json=payload)
             return resp.json()["choices"][0]["message"]["content"].strip()
-        except: return "(distracted) I am busy."
+        except Exception as e:
+            logger.error(f"LLM Error: {e}")
+            return "<Narrative>(distracted) I am busy.</Narrative>"
 
 async def enrich_and_instruct(speaker: str, role: str, text: str, is_monster: bool = False) -> DialogueEnrichment:
     system_instruction = "You are a cinematic dialogue director. Output JSON with emotional_resonance, vocal_delivery_prompt, emotion_tag."
