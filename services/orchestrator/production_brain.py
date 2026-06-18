@@ -1086,7 +1086,11 @@ async def _execute_voice_conversion_pipeline(task_id: str, audio_bytes: bytes, a
         async with httpx.AsyncClient(timeout=300.0) as client:
             if meta.isAutonomousTrigger and meta.npc_context:
                 # Autonomous NPC reply is ALWAYS billed to DM
-                reply_text = await generate_ai_reply(meta.activeSpeakerName, transcription, meta.npc_context)
+                raw_reply = await generate_ai_reply(meta.activeSpeakerName, transcription, meta.npc_context)
+                parsed_reply = parse_block_response(raw_reply)
+                reply_text = parsed_reply["narrative"]
+                image_prompt = parsed_reply["image_prompt"]
+                
                 target_engine = "monster" if meta.npc_context.is_monster else "humanoid"
                 std_reply = standardize_speech_text(reply_text, target_engine, "neutral")
                 ai_audio = None
@@ -1097,7 +1101,7 @@ async def _execute_voice_conversion_pipeline(task_id: str, audio_bytes: bytes, a
                     
                     wav = await engine.generate(std_reply, meta.targetActorId, client, {})
                     if wav: ai_audio = f"data:audio/webm;base64,{base64.b64encode(await transcode_to_opus(wav)).decode('utf-8')}"
-                ai_reply_obj = AIReply(transcription=std_reply, audio_data=ai_audio)
+                ai_reply_obj = AIReply(transcription=std_reply, audio_data=ai_audio, image_prompt=image_prompt)
 
             if meta.useVoxVoice:
                 # 3. TTS Generation

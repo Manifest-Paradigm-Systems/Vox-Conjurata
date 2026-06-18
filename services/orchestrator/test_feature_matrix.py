@@ -114,19 +114,19 @@ def test_enrich_and_instruct_monster_tagging(mock_post):
 def test_npc_brain_response_generation(mock_post):
     """Verify prompt assembly and response generation for NPC Brain."""
     async def run_test():
-        # Mock LLM response for NPC Reply
+        # Mock LLM response for NPC Reply with Narrative block
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
             "choices": [{
                 "message": {
-                    "content": "(sneering) You talk too much, mortal."
+                    "content": "<Narrative>*He sneers at you.* \"You talk too much, mortal.\"</Narrative><ImagePrompt>gritty tavern, dark knight, sneering face</ImagePrompt>"
                 }
             }]
         }
         mock_post.return_value = mock_response
 
-        from production_brain import generate_ai_reply, NPCContext
+        from production_brain import generate_ai_reply, NPCContext, parse_block_response
         ctx = NPCContext(
             name="Sir Aldric",
             lore="A cynical knight.",
@@ -135,10 +135,12 @@ def test_npc_brain_response_generation(mock_post):
             local_lore="The city of Oakhaven."
         )
         
-        reply = await generate_ai_reply("Player1", "Hello there!", ctx)
+        raw_reply = await generate_ai_reply("Player1", "Hello there!", ctx)
+        parsed = parse_block_response(raw_reply)
         
-        assert "sneering" in reply
-        assert "mortal" in reply
+        assert "sneers" in parsed["narrative"]
+        assert "mortal" in parsed["narrative"]
+        assert "tavern" in parsed["image_prompt"]
         
     asyncio.run(run_test())
 
