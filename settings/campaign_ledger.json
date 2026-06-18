@@ -7,14 +7,14 @@
   },
   "session_allowances": {
     "G3SJW9rRHe7J3AOH": 0.0,
-    "gm": 99.99775
+    "gm": 99.99425
   },
   "session_caps": {
     "G3SJW9rRHe7J3AOH": 0.0,
     "gm": 100.0
   },
   "session_spent": {
-    "gm": 0.00225,
+    "gm": 0.00575,
     "G3SJW9rRHe7J3AOH": 0.026
   },
   "transactions": [
@@ -695,6 +695,12 @@
       "amount": 0.00225,
       "description": "AI Orchestration Fee: Xulgath Warrior",
       "timestamp": 1781764649.7010367
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.0035,
+      "description": "TTS Generation for Xulgath Warrior",
+      "timestamp": 1781764651.2867134
     }
   ]
 }
