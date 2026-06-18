@@ -225,12 +225,20 @@ class VoiceResponseProfiler:
     def _record_stage(self, timings: List[PipelineTiming], stage: PipelineStage,
                      end_time: float, **kwargs) -> float:
         """Record timing for a pipeline stage"""
-        current_time = end_time if stage != PipelineStage.ENDPOINT_RESPONSE else end_time
+        current_time = end_time
+
+        # Create timing entry with appropriate start time for each stage
+        if stage == PipelineStage.VOICE_CONVERSION_START:
+            start_time = current_time
+        else:
+            # For other stages, use the previous stage's end time or current time
+            prev_timing = timings[-1] if timings else None
+            start_time = prev_timing.end_time if prev_timing else current_time
 
         # Create timing entry
         timing = PipelineTiming(
             stage=stage,
-            start_time=current_time,
+            start_time=start_time,
             end_time=current_time,
             duration=current_time - start_time,
             **kwargs
