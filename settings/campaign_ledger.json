@@ -7,14 +7,14 @@
   },
   "session_allowances": {
     "G3SJW9rRHe7J3AOH": 0.0,
-    "gm": 99.99775
+    "gm": 99.99199999999999
   },
   "session_caps": {
     "G3SJW9rRHe7J3AOH": 0.0,
     "gm": 100.0
   },
   "session_spent": {
-    "gm": 0.00225,
+    "gm": 0.008,
     "G3SJW9rRHe7J3AOH": 0.026
   },
   "transactions": [
@@ -735,6 +735,18 @@
       "amount": 0.00225,
       "description": "AI Orchestration Fee: Test",
       "timestamp": 1781765445.7034442
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.00225,
+      "description": "AI Orchestration Fee: Test",
+      "timestamp": 1781765517.1909866
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.0035,
+      "description": "Autonomous NPC Reply: Orc",
+      "timestamp": 1781765520.6798656
     }
   ]
 }
