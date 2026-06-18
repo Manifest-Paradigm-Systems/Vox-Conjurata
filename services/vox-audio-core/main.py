@@ -5,6 +5,7 @@ import json
 import soundfile as sf
 import numpy as np
 import io
+import torch
 from voxcpm import VoxCPM
 from pedalboard import Pedalboard, PitchShift, Distortion, Chorus, Reverb, HighpassFilter
 import logging
@@ -13,6 +14,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("vox-audio-core")
 
 app = FastAPI(title="Vox Conjurata Core Audio Engine")
+
+# Enable TF32 for much faster matrix multiplication on supported GPUs
+torch.set_float32_matmul_precision('high')
 
 # Initialize the 2B Tokenizer-Free Diffusion Model (bfloat16)
 # Set load_denoiser=False to keep VRAM at exactly 4.2 GB
