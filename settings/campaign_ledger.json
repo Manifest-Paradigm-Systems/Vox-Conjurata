@@ -3,19 +3,19 @@
   "stripe_customer_id": null,
   "personal_wallets": {
     "gm": 999.7102499999966,
-    "G3SJW9rRHe7J3AOH": 199.97975000000002
+    "G3SJW9rRHe7J3AOH": 199.97400000000002
   },
   "session_allowances": {
     "G3SJW9rRHe7J3AOH": 0.0,
-    "gm": 100.0
+    "gm": 99.99775
   },
   "session_caps": {
     "G3SJW9rRHe7J3AOH": 0.0,
     "gm": 100.0
   },
   "session_spent": {
-    "gm": 0.0,
-    "G3SJW9rRHe7J3AOH": 0.02025
+    "gm": 0.00225,
+    "G3SJW9rRHe7J3AOH": 0.026
   },
   "transactions": [
     {
@@ -677,6 +677,24 @@
       "amount": 0.0035,
       "description": "TTS Generation for Ezren",
       "timestamp": 1781764515.6808271
+    },
+    {
+      "user_id": "G3SJW9rRHe7J3AOH",
+      "amount": 0.00225,
+      "description": "AI Orchestration Fee: Ezren",
+      "timestamp": 1781764628.6512542
+    },
+    {
+      "user_id": "G3SJW9rRHe7J3AOH",
+      "amount": 0.0035,
+      "description": "TTS Generation for Ezren",
+      "timestamp": 1781764630.4894125
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.00225,
+      "description": "AI Orchestration Fee: Xulgath Warrior",
+      "timestamp": 1781764649.7010367
     }
   ]
 }
