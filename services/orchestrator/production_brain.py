@@ -193,6 +193,7 @@ class AIReply(BaseModel):
     transcription: str
     audio_data: Optional[str] = None
     engine: str = "VoxAudioCore"
+    image_prompt: Optional[str] = None
 
 # ---------------------------------------------------------------------------
 # Helpers
