@@ -7,14 +7,14 @@
   },
   "session_allowances": {
     "G3SJW9rRHe7J3AOH": 0.0,
-    "gm": 100.0
+    "gm": 99.99775
   },
   "session_caps": {
     "G3SJW9rRHe7J3AOH": 0.0,
     "gm": 100.0
   },
   "session_spent": {
-    "gm": 0.0,
+    "gm": 0.00225,
     "G3SJW9rRHe7J3AOH": 0.026
   },
   "transactions": [
@@ -729,6 +729,12 @@
       "description": "GIFT: gm -> G3SJW9rRHe7J3AOH",
       "timestamp": 1781765104.3510718,
       "is_gift": true
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.00225,
+      "description": "AI Orchestration Fee: Test",
+      "timestamp": 1781765445.7034442
     }
   ]
 }
