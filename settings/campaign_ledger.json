@@ -1,5 +1,5 @@
 {
-  "campaign_pool": 50.98849999999999,
+  "campaign_pool": 0.9884999999999877,
   "stripe_customer_id": null,
   "personal_wallets": {
     "gm": 989.7102499999966,
@@ -7,11 +7,11 @@
   },
   "session_allowances": {
     "G3SJW9rRHe7J3AOH": 0.0,
-    "gm": 50.0
+    "gm": 100.0
   },
   "session_caps": {
     "G3SJW9rRHe7J3AOH": 0.0,
-    "gm": 50.0
+    "gm": 100.0
   },
   "session_spent": {
     "gm": 0.0,
