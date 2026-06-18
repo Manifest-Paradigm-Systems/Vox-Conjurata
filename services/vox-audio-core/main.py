@@ -46,24 +46,19 @@ async def initialize_npc(request: NPCIdentityRequest):
     """
     try:
         seed_path = os.path.join(SEED_DIR, f"{request.npc_id}.wav")
-        
+
         # Use VoxCPM2 Voice Design block notation
         birth_prompt = f"({request.voice_description}) System voice alignment sequence active. Timbre matrix locked."
-        
+
         logger.info(f"Generating birth clip for NPC: {request.npc_id}")
         raw_wav = vox_engine.generate(
             text=birth_prompt,
             cfg_value=2.5,          # Forces model adherence to text criteria
             inference_timesteps=12
         )
-        
+
         sf.write(seed_path, raw_wav, vox_engine.tts_model.sample_rate)
         return {"status": "success", "seed_path": seed_path}
-    class DialogueRequest(BaseModel):
-        npc_id: str
-        dialogue_text: str
-        dsp_presets: Optional[dict] = {}
-        control_instruction: Optional[str] = "A natural, expressive voice."
 
     @app.post("/generate")
     async def generate_audio(request: DialogueRequest):
