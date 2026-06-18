@@ -3,7 +3,7 @@
   "stripe_customer_id": null,
   "personal_wallets": {
     "gm": 999.7287499999967,
-    "G3SJW9rRHe7J3AOH": 199.98850000000002
+    "G3SJW9rRHe7J3AOH": 199.98625
   },
   "session_allowances": {
     "G3SJW9rRHe7J3AOH": 0.0
@@ -13,7 +13,7 @@
   },
   "session_spent": {
     "gm": 0.2712500000000001,
-    "G3SJW9rRHe7J3AOH": 0.0115
+    "G3SJW9rRHe7J3AOH": 0.01375
   },
   "transactions": [
     {
@@ -621,6 +621,12 @@
       "amount": 0.0035,
       "description": "TTS Generation for Narrator",
       "timestamp": 1781761217.6174126
+    },
+    {
+      "user_id": "G3SJW9rRHe7J3AOH",
+      "amount": 0.00225,
+      "description": "AI Orchestration Fee: Gamemaster",
+      "timestamp": 1781764031.5111926
     }
   ]
 }
