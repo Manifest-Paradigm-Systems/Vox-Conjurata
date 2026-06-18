@@ -29,7 +29,7 @@ class CacheEntry:
     seed_path: str
     timestamp: float
     file_size: int
-    source: str = "generated"  # "generated", "pallete", "filesystem"
+    source: str = "generated"  # "generated", "palette", "filesystem"
     version: int = 1
 
 @dataclass
@@ -188,7 +188,8 @@ class VoiceSeedManager:
         3. Filesystem cache (pre-scanned)
         4. Generate new seed (fallback)
 
-        Returns None if no seed exists and generation fails.
+        Returns:
+            Optional[str]: Path to voice seed file, or None if not found.
         """
         with self.stats_lock:
             self.stats.total_requests += 1
@@ -234,11 +235,11 @@ class VoiceSeedManager:
             logger.debug(f"🎯 Filesystem cache HIT: {actor_id}")
             return seed_path
 
-        # ❌ Layer 4: No seed found - return None
+        # ❌ Layer 4: No seed found
         with self.stats_lock:
             self.stats.cache_misses += 1
 
-        logger.debug(f"❌ No seed found for {actor_id} - will need generation")
+        logger.debug(f"❌ No cached seed found for {actor_id}")
         return None
 
     def _is_cache_valid(self, cache_entry: CacheEntry) -> bool:
@@ -333,15 +334,13 @@ class VoiceSeedManager:
         """
         actor_id = actor_id.lower()
 
-        # Check if generation is allowed (avoid duplicate processing)
+        # Check if we should generate a seed (not already cached or cache expired)
         with self.memory_cache_lock:
             if actor_id in self.memory_cache:
                 cache_entry = self.memory_cache[actor_id]
-                # If cache entry is very old, allow regeneration
-                if time.time() - cache_entry.timestamp > 86400:  # 24 hours
-                    logger.info(f"🔄 Cache expired for {actor_id}, allowing regeneration")
-                else:
-                    logger.info(f"⚠️  Seed already exists for {actor_id}, regeneration prevented")
+                # Only generate if cache entry is very old (24+ hours)
+                if time.time() - cache_entry.timestamp < 86400:
+                    logger.info(f"🔄 Seed already exists for {actor_id}, skipping generation")
                     return False, cache_entry.seed_path
 
         # Generate new seed
@@ -349,15 +348,13 @@ class VoiceSeedManager:
 
         try:
             # This would normally call the VoxCPM2 API
-            # For this implementation, we'll simulate the generation
-            # and store a placeholder seed
-
+            # For implementation, we'll create a placeholder seed file
             seed_filename = f"{actor_id}_seed_generated.wav"
             seed_path = self.seed_dir / seed_filename
 
-            # Simulate seed generation (in real implementation, this would call the actual API)
+            # Simulate seed generation (in real implementation, this would use VoxCPM2)
             with open(seed_path, "wb") as f:
-                # Write minimal valid WAV header
+                # Write minimal valid WAV header (440 bytes = ~0.01 seconds)
                 f.write(b"RIFF\x24\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x80\xbb\x00\x00\x00\xff\x7f\x00\x00\x01\x00\x08\x00data\x00\x00\x00\x00")
 
             file_size = os.path.getsize(seed_path)
@@ -486,7 +483,8 @@ class VoiceSeedManager:
                 "regenerations": stats.regenerations,
                 "memory_cache_size": len(self.memory_cache),
                 "registry_cache_size": len(self.registry_cache),
-                "filesystem_actors": len(self.filesystem_seeds)
+                "filesystem_actors": len(self.filesystem_seeds),
+                "cache_hit_ratio": f"{stats.cache_hits}/{stats.total_requests}" if stats.total_requests > 0 else "0/0"
             }
 
     def cleanup_old_cache_entries(self, max_age_seconds: int = 86400):
