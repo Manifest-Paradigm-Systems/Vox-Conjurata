@@ -417,7 +417,10 @@ async def generate_ai_reply(player_name: str, player_text: str, ctx: NPCContext)
         f"--- WORLD EVENTS ---\n{ctx.world_lore}\n\n"
         f"OUTPUT FORMAT RULES:\n"
         f"1. Always wrap the story/dialogue inside a <Narrative> block.\n"
-        f"2. OPTIONAL: If the user explicitly establishes a new scene, location, or describes a new character, append an <ImagePrompt> block containing comma-separated Pony 6 Danbooru tags. If the turn is purely conversational dialogue, OMIT the <ImagePrompt> block entirely.\n"
+        f"2. DYNAMIC IMAGE GENERATION: You MUST append an <ImagePrompt> block (containing comma-separated Pony 6 Danbooru tags) ONLY in the following cases:\n"
+        f"   - A scene transition occurs or you/the narrator are describing a new location/character in detail.\n"
+        f"   - A combat or spell strike successfully hits a target (NPC or player). Describe the visual impact of the hit.\n"
+        f"   - If the turn is purely conversational dialogue without a major physical event, OMIT the <ImagePrompt> block entirely.\n"
         f"3. Use ChatML format. Actions in *asterisks*, dialogue in \"quotes\"."
     )
     payload = {
