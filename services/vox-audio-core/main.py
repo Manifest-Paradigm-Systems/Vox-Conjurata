@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Optional
 import os
 import json
 import soundfile as sf
@@ -35,6 +35,7 @@ class DialogueRequest(BaseModel):
     npc_id: str
     dialogue_text: str
     dsp_presets: dict
+    control_instruction: Optional[str] = "A natural, expressive voice."
 
 @app.post("/initialize")
 async def initialize_npc(request: NPCIdentityRequest):
