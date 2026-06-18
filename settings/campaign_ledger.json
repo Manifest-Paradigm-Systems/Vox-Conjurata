@@ -1,9 +1,9 @@
 {
-  "campaign_pool": 20.0,
+  "campaign_pool": 120.0,
   "stripe_customer_id": null,
   "personal_wallets": {
     "gm": 999.7402499999968,
-    "G3SJW9rRHe7J3AOH": 299.99425
+    "G3SJW9rRHe7J3AOH": 199.99425000000002
   },
   "session_allowances": {
     "G3SJW9rRHe7J3AOH": 0.0
@@ -577,6 +577,14 @@
       "amount": 0.0035,
       "description": "Autonomous NPC Reply: Orc",
       "timestamp": 1781759795.2390454
+    },
+    {
+      "user_id": "G3SJW9rRHe7J3AOH",
+      "target_user_id": "POOL",
+      "amount": 100.0,
+      "description": "GIFT: G3SJW9rRHe7J3AOH -> POOL",
+      "timestamp": 1781760981.3473504,
+      "is_gift": true
     }
   ]
 }
