@@ -27,7 +27,7 @@ def create_test_audio_file() -> str:
             wf.setsampwidth(2)
             wf.setframerate(16000)
             # Generate some simple audio data (0.5 seconds)
-            for i in range(16000 * 0.5):
+            for i in range(int(16000 * 0.5)):
                 sample = int(1000 * 0.5 * (i % 100) / 100)
                 wf.writeframes(struct.pack('<h', sample))
 

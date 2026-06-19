@@ -26,7 +26,7 @@ class NPCResponseTimeTester:
                 wf.setsampwidth(2)
                 wf.setframerate(16000)
                 # Generate some simple audio data
-                for i in range(16000 * 0.5):  # 0.5 seconds of audio
+                for i in range(int(16000 * 0.5)):  # 0.5 seconds of audio
                     # Generate a simple tone
                     sample = int(1000 * 0.5 * (i % 100) / 100)
                     wf.writeframes(struct.pack('<h', sample))
