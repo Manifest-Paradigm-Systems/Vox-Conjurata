@@ -8,14 +8,14 @@
   },
   "session_allowances": {
     "G3SJW9rRHe7J3AOH": 0.0,
-    "gm": 99.91824999999993
+    "gm": 99.91174999999993
   },
   "session_caps": {
     "G3SJW9rRHe7J3AOH": 0.0,
     "gm": 100.0
   },
   "session_spent": {
-    "gm": 0.08175000000000004,
+    "gm": 0.08825000000000005,
     "G3SJW9rRHe7J3AOH": 0.026,
     "nXnKU6oZYzdg0xSY": 0.04175
   },
@@ -1009,6 +1009,18 @@
       "amount": 0.0035,
       "description": "TTS Generation for Ezren",
       "timestamp": 1781855020.4156258
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "AI Orchestration Fee: Ezren",
+      "timestamp": 1781855266.4000273
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.0035,
+      "description": "Autonomous NPC Reply: Xulgath Warrior",
+      "timestamp": 1781855268.4957805
     }
   ]
 }
