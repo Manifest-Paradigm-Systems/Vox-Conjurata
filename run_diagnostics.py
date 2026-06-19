@@ -132,6 +132,7 @@ def main():
         "vox-voice": 5000,
         "vox-audio-generation-music": 8000,
         "vox-audio-generation-sfx": 8001,
+        "vox-audio-core": 8004,
         "vox-actor": 5020,
         "vox-monster-fish": 5030
     }
