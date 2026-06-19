@@ -1,11 +1,13 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Generator
 import os
 import json
 import soundfile as sf
 import numpy as np
 import io
+import struct
 import torch
 from voxcpm import VoxCPM
 from pedalboard import Pedalboard, PitchShift, Distortion, Chorus, Reverb, HighpassFilter
@@ -41,7 +43,60 @@ class DialogueRequest(BaseModel):
     npc_id: str
     dialogue_text: str
     dsp_presets: dict
-    control_instruction: Optional[str] = "A natural, expressive voice."
+    control_instruction: Optional[str] = None
+
+
+def build_voxcpm_text(dialogue_text: str, control_instruction: Optional[str]) -> str:
+    """
+    VoxCPM2 consumes acting instructions via a (instruction)text prefix.
+    This mirrors the CLI's build_final_text() helper.
+    When no instruction is given, the text is used as-is.
+    """
+    if control_instruction and control_instruction.strip():
+        return f"({control_instruction.strip()}){dialogue_text}"
+    return dialogue_text
+
+
+def apply_dsp(audio: np.ndarray, sample_rate: int, fx: dict) -> np.ndarray:
+    """Assemble and run C++ Pedalboard DSP effects. Returns processed audio."""
+    rack = []
+    if fx.get("pitch_shift", 0) != 0:
+        rack.append(PitchShift(semitones=fx["pitch_shift"]))
+    if fx.get("distortion_db", 0) > 0:
+        rack.append(Distortion(drive_db=fx["distortion_db"]))
+    if fx.get("highpass_hz", 0) > 0:
+        rack.append(HighpassFilter(cutoff_frequency_hz=fx["highpass_hz"]))
+    if fx.get("chorus_depth", 0) > 0:
+        rack.append(Chorus(rate_hz=fx.get("chorus_rate", 1.5), depth=fx["chorus_depth"]))
+    if fx.get("reverb_size", 0) > 0:
+        rack.append(Reverb(room_size=fx["reverb_size"], wet_level=0.3, dry_level=0.7))
+    if rack:
+        return Pedalboard(rack)(audio, sample_rate)
+    return audio
+
+
+def encode_wav_header(sample_rate: int, num_channels: int = 1, bits_per_sample: int = 32) -> bytes:
+    """
+    Returns a WAV header with an unknown data chunk size (0xFFFFFFFF).
+    Required for streaming mode where total length is unknown upfront.
+    """
+    byte_rate = sample_rate * num_channels * (bits_per_sample // 8)
+    block_align = num_channels * (bits_per_sample // 8)
+    # Use 0xFFFFFFFF for unknown chunk sizes (streaming convention)
+    header = struct.pack(
+        "<4sI4s4sIHHIIHH4sI",
+        b"RIFF", 0xFFFFFFFF,          # RIFF chunk (unknown total size)
+        b"WAVE",
+        b"fmt ", 18,                  # fmt subchunk size
+        3,                            # PCM Float audio format
+        num_channels,
+        sample_rate,
+        byte_rate,
+        block_align,
+        bits_per_sample,              # 32-bit float
+        b"data", 0xFFFFFFFF,         # data chunk (unknown size)
+    )
+    return header
 
 @app.post("/initialize")
 async def initialize_npc(request: NPCIdentityRequest):
@@ -96,47 +151,78 @@ async def generate_audio(request: DialogueRequest):
 
         sample_rate = vox_engine.tts_model.sample_rate  # Native 48000Hz
 
-        logger.info(f"Generating dialogue for NPC: {request.npc_id} with tone: {request.control_instruction}")
+        # Build the final text with control instruction prefix: (instruction)text
+        final_text = build_voxcpm_text(request.dialogue_text, request.control_instruction)
+        logger.info(f"Generating dialogue for NPC: {request.npc_id} | text: '{final_text[:80]}...'")
+
         # Execute high-fidelity cloning from the fixed master anchor
         clean_audio = vox_engine.generate(
-            text=request.dialogue_text,
+            text=final_text,
             reference_wav_path=seed_path,
             cfg_value=2.0,
             inference_timesteps=4  # Aggressively optimized for real-time delivery
         )
 
-        # Pull preset values
-        fx = request.dsp_presets
-        
-        # Assemble the C++ Pedalboard Array dynamically
-        rack = []
-        if fx.get("pitch_shift", 0) != 0:
-            rack.append(PitchShift(semitones=fx["pitch_shift"]))
-        if fx.get("distortion_db", 0) > 0:
-            rack.append(Distortion(drive_db=fx["distortion_db"]))
-        if fx.get("highpass_hz", 0) > 0:
-            rack.append(HighpassFilter(cutoff_frequency_hz=fx["highpass_hz"]))
-        if fx.get("chorus_depth", 0) > 0:
-            rack.append(Chorus(rate_hz=fx.get("chorus_rate", 1.5), depth=fx["chorus_depth"]))
-        if fx.get("reverb_size", 0) > 0:
-            rack.append(Reverb(room_size=fx["reverb_size"], wet_level=0.3, dry_level=0.7))
-            
-        # Process the audio matrix instantly
-        if rack:
-            board = Pedalboard(rack)
-            output_audio = board(clean_audio, sample_rate)
-        else:
-            output_audio = clean_audio
-        
-        # Convert to WAV bytes
+        # Apply C++ Pedalboard DSP (monster textures, pitch shift, etc.)
+        output_audio = apply_dsp(clean_audio, sample_rate, request.dsp_presets)
+
+        # Return native WAV — no transcoding overhead
         buffer = io.BytesIO()
         sf.write(buffer, output_audio, sample_rate, format='WAV')
-        
-        from fastapi.responses import Response
         return Response(content=buffer.getvalue(), media_type="audio/wav")
 
     except Exception as e:
         logger.error(f"Failed to generate audio for NPC {request.npc_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/generate_stream")
+async def generate_audio_stream(request: DialogueRequest):
+    """
+    STREAMING MODE: Yields audio as float32 WAV chunks the moment
+    VoxCPM2 produces them. Time-to-first-audio < 3 seconds.
+    The browser can play these chunks using a MediaSource + AudioContext.
+    """
+    try:
+        seed_path = os.path.join(SEED_DIR, f"{request.npc_id}.wav")
+        palette_path = os.path.join(SEED_DIR, "_palette", f"{request.npc_id}.wav")
+
+        final_seed = None
+        if os.path.exists(seed_path):
+            final_seed = seed_path
+        elif os.path.exists(palette_path):
+            final_seed = palette_path
+
+        if not final_seed:
+            raise HTTPException(status_code=404, detail=f"Seed for NPC {request.npc_id} not found.")
+
+        sample_rate = vox_engine.tts_model.sample_rate
+        final_text = build_voxcpm_text(request.dialogue_text, request.control_instruction)
+        logger.info(f"STREAM: Generating dialogue for NPC: {request.npc_id} | text: '{final_text[:80]}...'")
+
+        def wav_chunk_generator() -> Generator[bytes, None, None]:
+            # Emit the WAV header first so the browser knows the format
+            yield encode_wav_header(sample_rate)
+
+            for chunk in vox_engine.generate_streaming(
+                text=final_text,
+                reference_wav_path=final_seed,
+                cfg_value=2.0,
+                inference_timesteps=4,
+            ):
+                # Apply DSP on each chunk (Pedalboard is ~1ms per chunk)
+                processed = apply_dsp(chunk, sample_rate, request.dsp_presets)
+                # Pack as raw float32 little-endian PCM samples
+                yield processed.astype(np.float32).tobytes()
+
+        return StreamingResponse(
+            wav_chunk_generator(),
+            media_type="audio/wav",
+            headers={"X-Accel-Buffering": "no"},  # Disable proxy buffering
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to stream audio for NPC {request.npc_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
