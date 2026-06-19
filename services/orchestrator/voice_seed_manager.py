@@ -114,6 +114,11 @@ class VoiceSeedManager:
             actor_id = seed_file.stem.replace("_seed_", "")
             self.filesystem_seeds.setdefault(actor_id, []).append(str(seed_file))
 
+        # Also scan for VAE latent files if enabled
+        if self.latent_enabled:
+            latent_files = list(self.latent_dir.glob("*.pt")) + list(self.latent_dir.glob("*.pth"))
+            logger.info(f"   🧠 Found {len(latent_files)} VAE latent files")
+
         self.filesystem_scan_time = time.time()
         logger.info(f"   📁 Found {len(self.filesystem_seeds)} actors in filesystem")
 
