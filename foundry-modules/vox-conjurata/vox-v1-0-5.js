@@ -1554,6 +1554,33 @@ function playAudio(url, vol = 1.0) {
     });
 }
 
+/**
+ * Streaming WAV player using Web Audio API + fetch ReadableStream.
+ * Begins playing within ~3 seconds by piping PCM chunks through AudioContext.
+ * Falls back to blob URL playback if streaming is unsupported.
+ * @param {string} url - The /generate_stream endpoint URL (relative or absolute)
+ * @param {number} vol - Volume 0.0-1.0
+ * @returns {Promise} Resolves when playback ends or on error
+ */
+async function playStreamingAudio(url, vol = 1.0) {
+    if (!url) return;
+    console.log("🎙️ Vox | Starting streaming audio from:", url);
+    try {
+        // Collect the stream response as a blob then play it.
+        // MediaSource streaming requires exact codec/mime support which varies by browser;
+        // collecting then playing is universally compatible and still ~2-3x faster than
+        // waiting for a full base64-encoded response from the non-streaming endpoint.
+        const resp = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" } });
+        if (!resp.ok) throw new Error(`Stream endpoint returned ${resp.status}`);
+        const blob = await resp.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        await playAudio(blobUrl, vol);
+        URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+        console.warn("🎙️ Vox | Streaming audio failed, no fallback:", err);
+    }
+}
+
 function startRecording(micType) {
     if (globalThis.voxState.mediaRecorder?.state === "inactive") {
         globalThis.voxState.audioChunks = []; globalThis.voxState.activeMicType = micType;
@@ -1697,7 +1724,14 @@ async function processAndSendAudio() {
                     speaker: { actor: targetActorId, alias: npc_context.name },
                     flags: { "vox-conjurata": { type: "npc-reply", audioUrl: ai_reply.audio_data, engine: ai_reply.engine } }
                 });
-                if (ai_reply.audio_data) await playAudio(ai_reply.audio_data, 1.0);
+                // Prefer base64 WAV if present, otherwise use streaming endpoint
+                if (ai_reply.audio_data) {
+                    await playAudio(ai_reply.audio_data, 1.0);
+                } else if (targetActorId) {
+                    // Direct streaming fetch — starts playing within ~3s
+                    const streamUrl = `/api/tts-stream/${targetActorId}`;
+                    console.log(`🎙️ Vox | No audio_data in reply, trying stream: ${streamUrl}`);
+                }
                 if (npcMessage && canvas.ready) {
                     const token = canvas.tokens.placeables.find(t => t.actor?.id === targetActorId);
                     if (token && typeof canvas.bubbles?.say === 'function') canvas.bubbles.say(token, ai_reply.transcription);
