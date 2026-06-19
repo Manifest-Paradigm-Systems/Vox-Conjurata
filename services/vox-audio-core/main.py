@@ -12,6 +12,8 @@ from pedalboard import Pedalboard, PitchShift, Distortion, Chorus, Reverb, Highp
 import logging
 
 logging.basicConfig(level=logging.INFO)
+from torchao.quantization import quantize_, Int8WeightOnlyConfig
+
 logger = logging.getLogger("vox-audio-core")
 
 app = FastAPI(title="Vox Conjurata Core Audio Engine")
@@ -22,7 +24,10 @@ torch.set_float32_matmul_precision('high')
 # Initialize the 2B Tokenizer-Free Diffusion Model (bfloat16)
 # Set load_denoiser=False to keep VRAM at exactly 4.2 GB
 logger.info("Loading VoxCPM2 model...")
-vox_engine = VoxCPM.from_pretrained("openbmb/VoxCPM2", load_denoiser=False)
+# Load in eager mode to prevent long Inductor compilation overhead of quantized weights
+vox_engine = VoxCPM.from_pretrained("openbmb/VoxCPM2", load_denoiser=False, optimize=False)
+logger.info("Quantizing VoxCPM2 to INT8 Weight-Only...")
+quantize_(vox_engine.tts_model, Int8WeightOnlyConfig())
 logger.info("Model loaded.")
 
 SEED_DIR = os.getenv("SEED_DIR", "/app/seeds/")
