@@ -249,7 +249,12 @@ class VoiceSeedManager:
                 seed_path=seed_path,
                 timestamp=time.time(),
                 file_size=file_size,
-                source=source
+                source=source,
+                latent_path=None,
+                latent_size=0,
+                latent_valid=False,
+                vae_model_version="unknown",
+                vae_generation_timestamp=0.0
             )
         except Exception as e:
             logger.error(f"❌ Failed to create cache entry for {seed_path}: {e}")
