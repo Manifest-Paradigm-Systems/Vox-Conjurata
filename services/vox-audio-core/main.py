@@ -96,7 +96,6 @@ async def generate_audio(request: DialogueRequest):
         clean_audio = vox_engine.generate(
             text=request.dialogue_text,
             reference_wav_path=seed_path,
-            control_instruction=request.control_instruction,
             cfg_value=2.0,
             inference_timesteps=4  # Aggressively optimized for real-time delivery
         )
