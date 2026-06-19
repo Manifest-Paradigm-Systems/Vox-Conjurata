@@ -2,6 +2,11 @@
  * vox-conjurata: Main Foundry Module Entry Point
  * Consolidates Telemetry, Chat Skinning, Hardware PTT, and Live Panel.
  */
+const $ = globalThis.jQuery;
+const getSafeSetting = (scope, key, fallback = false) => {
+    try { return game.settings.get(scope, key); }
+    catch (e) { return fallback; }
+};
 console.log("🚀 Vox-Conjurata: Script evaluation started.");
 
 // ==========================================
@@ -59,7 +64,7 @@ class VoxEventQueueHUD extends Application {
                     
                     <div class="vox-stealth-wallet ${isDry ? 'force-reveal' : ''}" style="display: flex; gap: 8px; align-items: center; cursor: pointer; position: relative;">
                         <span class="vox-balance-label ${flashClass}" style="font-size: 10px; color: ${statusColor}; font-weight: bold; transition: all 0.3s ease; ${(isDry || isLow) ? '' : 'opacity: 0; width: 0; overflow: hidden;'}">
-                            $${balance.total_available.toFixed(6)}
+                            $${(balance.total_available ?? 0).toFixed(6)}
                         </span>
                         <i class="fas fa-coins vox-wallet-icon" style="color: ${statusColor}; font-size: 12px; filter: drop-shadow(0 0 2px ${statusColor});" title="Hover to view balance"></i>
                         
@@ -81,11 +86,11 @@ class VoxEventQueueHUD extends Application {
                 
                 <div class="vox-sub-balances" style="display: flex; gap: 5px; margin-bottom: 10px; font-size: 8px; color: #666; ${(isDry || isLow) ? '' : 'display: none;'}">
                     <div style="flex: 1; background: rgba(255,255,255,0.03); padding: 3px 6px; border-radius: 3px; display: flex; justify-content: space-between;">
-                        <span>Grant: $${balance.session_grant.toFixed(6)}</span>
+                        <span>Grant: $${(balance.session_grant ?? 0).toFixed(6)}</span>
                         ${balance.session_grant > 0 ? `<i class="fas fa-undo vox-return-grant" style="cursor: pointer; margin-left: 4px;" title="Return to pool"></i>` : ''}
                     </div>
                     <div style="flex: 1; background: rgba(255,255,255,0.03); padding: 3px 6px; border-radius: 3px; display: flex; justify-content: space-between;">
-                        <span>Wallet: $${balance.personal_wallet.toFixed(6)}</span>
+                        <span>Wallet: $${(balance.personal_wallet ?? 0).toFixed(6)}</span>
                         ${balance.personal_wallet > 0 ? `<i class="fas fa-hand-holding-usd vox-return-personal" style="cursor: pointer; margin-left: 4px;" title="Return to pool"></i>` : ''}
                     </div>
                 </div>
@@ -126,12 +131,12 @@ class VoxEventQueueHUD extends Application {
         }
 
         html += `</div></div>`;
-        return jQuery(html);
+        return $(html);
     }
 
     activateListeners(html) {
         super.activateListeners(html);
-        html.find(".vox-cancel-btn").click(async (ev) => {
+        $(html).find(".vox-cancel-btn").click(async (ev) => {
             const taskId = ev.currentTarget.dataset.taskId;
             try {
                 const resp = await fetch("/api/v1/orchestrate/cancel", {
@@ -148,7 +153,7 @@ class VoxEventQueueHUD extends Application {
             }
         });
 
-        html.find(".vox-open-transfer").click(async () => {
+        $(html).find(".vox-open-transfer").click(async () => {
             const users = game.users.filter(u => u.active && u.id !== game.user.id);
             let userOptions = users.map(u => `<option value="${u.id}">${u.name}</option>`).join("");
             userOptions = `<option value="POOL">--- Campaign Pool ---</option>` + userOptions;
@@ -159,14 +164,14 @@ class VoxEventQueueHUD extends Application {
                     <div style="padding: 10px; font-family: 'Signika', sans-serif;">
                         <div class="form-group" style="margin-bottom: 12px;">
                             <label>Source Bucket:</label>
-                            <select id="vox-transfer-source" style="width: 100%; background: #222; color: #eee; border: 1px solid #444;">
+                            <select id="vox-transfer-source" style="width: 160px; background: #222; color: #eee; border: 1px solid #444;">
                                 <option value="personal">My Persistent Wallet</option>
                                 <option value="session">My Session Grant</option>
                             </select>
                         </div>
                         <div class="form-group" style="margin-bottom: 12px;">
                             <label>Recipient:</label>
-                            <select id="vox-transfer-target" style="width: 100%; background: #222; color: #eee; border: 1px solid #444;">
+                            <select id="vox-transfer-target" style="width: 160px; background: #222; color: #eee; border: 1px solid #444;">
                                 ${userOptions}
                             </select>
                         </div>
@@ -180,9 +185,9 @@ class VoxEventQueueHUD extends Application {
                     gift: {
                         label: "<i class='fas fa-gift'></i> Send Gift",
                         callback: async (html) => {
-                            const source = html.find("#vox-transfer-source").val();
-                            const target = html.find("#vox-transfer-target").val();
-                            const amount = parseFloat(html.find("#vox-transfer-amount").val());
+                            const source = $(html).find("#vox-transfer-source").val();
+                            const target = $(html).find("#vox-transfer-target").val();
+                            const amount = parseFloat($(html).find("#vox-transfer-amount").val());
                             
                             try {
                                 const resp = await fetch("/api/v1/ledger/transfer", {
@@ -196,7 +201,7 @@ class VoxEventQueueHUD extends Application {
                                     })
                                 });
                                 if (resp.ok) {
-                                    ui.notifications.info(`🎁 Gift of $${amount.toFixed(6)} sent successfully!`);
+                                    ui.notifications.info(`🎁 Gift of $${(amount ?? 0).toFixed(6)} sent successfully!`);
                                     this.render(true);
                                 } else {
                                     const err = await resp.json();
@@ -209,7 +214,7 @@ class VoxEventQueueHUD extends Application {
             }).render(true);
         });
 
-        html.find(".vox-buy-credits").click(async () => {
+        $(html).find(".vox-buy-credits").click(async () => {
             new Dialog({
                 title: "Top Up Credits",
                 content: `
@@ -235,8 +240,8 @@ class VoxEventQueueHUD extends Application {
                     buy: {
                         label: "<i class='fas fa-credit-card'></i> Checkout",
                         callback: async (html) => {
-                            const amount = html.find("#vox-topup-amount").val();
-                            const autoAllocate = html.find("#vox-auto-allocate").is(":checked");
+                            const amount = $(html).find("#vox-topup-amount").val();
+                            const autoAllocate = $(html).find("#vox-auto-allocate").is(":checked");
                             try {
                                 const resp = await fetch(`/api/v1/billing/create-checkout-session?user_id=${game.user.id}&amount=${amount}&auto_allocate=${autoAllocate}`, { method: "POST" });
                                 const data = await resp.json();
@@ -251,14 +256,14 @@ class VoxEventQueueHUD extends Application {
             }).render(true);
         });
 
-        html.find(".vox-return-grant").click(async () => {
+        $(html).find(".vox-return-grant").click(async () => {
             if (await Dialog.confirm({ title: "Return Grant", content: "Return unused session grant to pool?" })) {
                 await fetch("/api/v1/ledger/return", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({userId: game.user.id, amount: -1}) });
                 this.render(true);
             }
         });
 
-        html.find(".vox-return-personal").click(async () => {
+        $(html).find(".vox-return-personal").click(async () => {
             if (await Dialog.confirm({ title: "Return Personal", content: "Return all personal wallet credits to campaign pool?" })) {
                 await fetch("/api/v1/ledger/return", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({userId: game.user.id, amount: -2}) });
                 this.render(true);
@@ -460,7 +465,7 @@ globalThis.voxState = globalThis.voxState || {
     narratorActive: false, puppetActive: false, playerActive: false,
     activeSpeakerName: "", activeMicType: "", activeActorId: "", activeIsMonster: false,
     mediaRecorder: null, audioChunks: [],
-    voiceConversionEndpoint: "/api/voice-conversion", ingestEndpoint: "/api/ingest-actor"
+    voiceConversionEndpoint: "/api/voice-conversion", ingestEndpoint: "/api/ingest-actor", targetVoxVoice: true
 };
 
 function resolveIsMonster(actor) {
@@ -563,6 +568,11 @@ function registerKeybindings() {
         default: "eva-qwen2.5-7b"
     });
 
+        game.keybindings.register("vox-conjurata", "toggleVocalMask", {
+        name: "Toggle Vocal Mask", editable: [{ key: "KeyV", modifiers: [foundry.helpers.interaction.KeyboardManager.MODIFIER_KEYS.CONTROL, foundry.helpers.interaction.KeyboardManager.MODIFIER_KEYS.SHIFT] }],
+        onDown: () => { globalThis.voxLivePanel.isBypass = !globalThis.voxLivePanel.isBypass; globalThis.voxLivePanel.updateBackend(); globalThis.voxLivePanel.render(); }
+    });
+
     // PTT keys are handled via global window listeners in the anonymous function below
     // to ensure stopImmediatePropagation() works reliably across the whole session.
 }
@@ -607,10 +617,10 @@ function registerKeybindings() {
                 globalThis.voxState.activeSpeakerName = "Narrator"; 
                 globalThis.voxState.activeActorId = "narrator"; 
                 globalThis.voxState.activeIsMonster = false;
-                globalThis.voxState.useVoxVoice = true; 
+                globalThis.voxState.useVoxVoice = game.settings.get("vox-conjurata", "suppressRawVoice_narrator") ?? true; 
                 globalThis.voxState.useVoxActor = true; 
                 startRecording("vox-conjurata-gm-narrate-mic"); 
-                statusMessage("Narrator Mic [Y]: OPEN (Triggers Active)", true);
+                statusMessage(`Narrator Mic [Y]: OPEN [Voice: ${globalThis.voxState.useVoxVoice ? 'AI' : 'RAW'}] (Triggers Active)`, true);
             } 
             else if (code === "KeyH" && game.user.isGM) {
                 const t = resolveActiveToken(true);
@@ -632,6 +642,7 @@ function registerKeybindings() {
                 globalThis.voxState.activeSpeakerName = a?.name || game.user.name; 
                 globalThis.voxState.activeActorId = a?.id || game.user.id; 
                 globalThis.voxState.activeIsMonster = !!resolveIsMonster(a);
+                globalThis.voxState.useVoxVoice = game.settings.get("vox-conjurata", "suppressRawVoice_character") ?? true;
                 globalThis.voxState.useVoxActor = true; 
 
                 const target = game.user.targets.first();
@@ -639,6 +650,7 @@ function registerKeybindings() {
                 if (targetActor && targetActor.type !== "character") {
                     globalThis.voxState.isAutonomousTrigger = targetActor.getFlag("vox-conjurata", "vox-actor") ?? true;
                     globalThis.voxState.targetActorId = targetActor.id;
+                    globalThis.voxState.targetVoxVoice = targetActor.getFlag("vox-conjurata", "vox-voice") ?? true;
                     if (globalThis.voxState.isAutonomousTrigger) {
                         statusMessage(`Character Mic [I]: Target ${targetActor.name} [AUTONOMOUS]`, true);
                     }
@@ -815,16 +827,16 @@ class VoxEngineConfigApp extends Application {
                 <h3 style="font-size: 14px; margin-top: 0; color: #00ffcc;"><i class="fas fa-mask"></i> Audio Suppression (Puppeteer Mode)</h3>
                 <p style="font-size: 10px; color: #888; margin-bottom: 10px;">Automatically mutes your raw voice in Foundry A/V while holding these hotkeys, so players only hear the AI.</p>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                    <label style="font-size: 12px;"><input type="checkbox" class="vox-suppress-toggle" data-cat="narrator" ${game.settings.get("vox-conjurata", "suppressRawVoice_narrator") ? "checked" : ""}> Narrator [Y]</label>
-                    <label style="font-size: 12px;"><input type="checkbox" class="vox-suppress-toggle" data-cat="character" ${game.settings.get("vox-conjurata", "suppressRawVoice_character") ? "checked" : ""}> Character [I]</label>
-                    <label style="font-size: 12px;"><input type="checkbox" class="vox-suppress-toggle" data-cat="npc" ${game.settings.get("vox-conjurata", "suppressRawVoice_npc") ? "checked" : ""}> NPC Puppet [H]</label>
-                    <label style="font-size: 12px;"><input type="checkbox" class="vox-suppress-toggle" data-cat="monster" ${game.settings.get("vox-conjurata", "suppressRawVoice_monster") ? "checked" : ""}> Monster Puppet [H]</label>
+                    <label style="font-size: 12px;"><input type="checkbox" class="vox-suppress-toggle" data-cat="narrator" ${getSafeSetting("vox-conjurata", "suppressRawVoice_narrator") ? "checked" : ""}> Narrator [Y]</label>
+                    <label style="font-size: 12px;"><input type="checkbox" class="vox-suppress-toggle" data-cat="character" ${getSafeSetting("vox-conjurata", "suppressRawVoice_character") ? "checked" : ""}> Character [I]</label>
+                    <label style="font-size: 12px;"><input type="checkbox" class="vox-suppress-toggle" data-cat="npc" ${getSafeSetting("vox-conjurata", "suppressRawVoice_npc") ? "checked" : ""}> NPC Puppet [H]</label>
+                    <label style="font-size: 12px;"><input type="checkbox" class="vox-suppress-toggle" data-cat="monster" ${getSafeSetting("vox-conjurata", "suppressRawVoice_monster") ? "checked" : ""}> Monster Puppet [H]</label>
                 </div>
             </div>
 
             <div class="form-group-box" style="background: rgba(255,100,0,0.05); padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #333;">
                 <label style="display: block; font-weight: bold; margin-bottom: 8px;"><i class="fas fa-network-wired"></i> Text Orchestration Pathway</label>
-                <select name="llm_pathway_mode" id="vox-llm-mode-select" style="width: 100%; background: #222; color: #eee; border: 1px solid #444; height: 32px; border-radius: 4px;">
+                <select name="llm_pathway_mode" id="vox-llm-mode-select" style="width: 160px; background: #222; color: #eee; border: 1px solid #444; height: 32px; border-radius: 4px;">
                     <option value="optimal_cloud" ${data.llmPathway === 'optimal_cloud' ? 'selected' : ''}>Vox Hosted Optimal Tier (Cloud API Base + Fee)</option>
                     <option value="byo_local_brain" ${data.llmPathway === 'byo_local_brain' ? 'selected' : ''}>Bring Your Own Brain (Localhost Loopback - Fee Only)</option>
                 </select>
@@ -860,20 +872,40 @@ class VoxEngineConfigApp extends Application {
             <div style="display: flex; gap: 15px; margin-bottom: 20px;">
                 <div style="flex: 1; background: #222; padding: 12px; border-radius: 8px; text-align: center; border: 1px solid #444;">
                     <div style="font-size: 10px; color: #888; text-transform: uppercase;">Campaign Pool</div>
-                    <div style="font-size: 20px; font-weight: bold; color: #00ff88;">$${data.ledger.campaign_pool.toFixed(6)}</div>
+                    <div style="font-size: 20px; font-weight: bold; color: #00ff88;">$${(data.ledger.campaign_pool ?? 0).toFixed(6)}</div>
                     ${data.isGM ? `<button type="button" class="topup-btn" style="margin-top: 8px; font-size: 9px; background: #333; color: #eee; border: 1px solid #555; border-radius: 4px; padding: 2px 8px; cursor: pointer;">+ TOP UP</button>` : ''}
                 </div>
                 <div style="flex: 1; background: #222; padding: 12px; border-radius: 8px; text-align: center; border: 1px solid #444;">
                     <div style="font-size: 10px; color: #888; text-transform: uppercase;">Your Allowance</div>
-                    <div style="font-size: 20px; font-weight: bold; color: #ff6400;">$${data.ledger.individual_allowance.toFixed(6)}</div>
-                    <div style="font-size: 9px; color: #666; margin-top: 5px;">Cap: $${data.ledger.individual_cap.toFixed(6)}</div>
+                    <div style="font-size: 20px; font-weight: bold; color: #ff6400;">$${(data.ledger.individual_allowance ?? 0).toFixed(6)}</div>
+                    <div style="font-size: 9px; color: #666; margin-top: 5px;">Cap: $${(data.ledger.individual_cap ?? 0).toFixed(6)}</div>
                 </div>
             </div>
+
+            ${data.isGM ? `
+            <div class="form-group-box" style="background: rgba(233, 30, 99, 0.1); padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #e91e63;">
+                <h3 style="font-size: 14px; margin-top: 0; color: #ff80ab;"><i class="fas fa-user-shield"></i> GM Admin Quick-Fund</h3>
+                <p style="font-size: 10px; color: #888; margin-bottom: 15px;">Inject test credits directly into your wallet or the campaign pool to bypass billing for testing.</p>
+                <div style="display: flex; gap: 10px; align-items: flex-end;">
+                    <div style="flex: 1;">
+                        <label style="font-size: 11px; color: #aaa; display: block; margin-bottom: 4px;">Admin: Target Account</label>
+                        <select id="admin-inline-target" style="width: 160px; background: #222; color: #eee; border: 1px solid #444; height: 28px; border-radius: 4px;">
+                            <option value="${game.user.id}">Personal Wallet (DM)</option>
+                            <option value="POOL">Shared Campaign Pool</option>
+                        </select>
+                    </div>
+                    <div style="width: 100px;">
+                        <label style="font-size: 11px; color: #aaa; display: block; margin-bottom: 4px;">Amount ($)</label>
+                        <input type="number" id="admin-inline-amount" value="100" step="10" style="width: 100%; background: #000; color: #fff; border: 1px solid #444; height: 28px; padding: 0 8px;">
+                    </div>
+                    <button type="button" id="admin-inline-grant-btn" style="background: #e91e63; color: white; border: none; height: 28px; padding: 0 15px; border-radius: 4px; font-weight: bold; cursor: pointer;">GRANT</button>
+                </div>
+            </div>` : ""}
 
             <div style="background: rgba(255,255,255,0.02); padding: 15px; border-radius: 8px; border: 1px solid #333;">
                 <label style="display: block; font-weight: bold; margin-bottom: 12px;">Manage Your Session Budget</label>
                 <div style="display: flex; gap: 10px; align-items: center;">
-                    <input type="number" id="vox-allowance-input" step="0.5" min="0" value="${data.ledger.individual_cap}" style="flex: 1; background: #000; color: #eee; border: 1px solid #444; height: 32px; padding: 0 10px; border-radius: 4px;">
+                    <input type="number" id="vox-allowance-input" step="0.5" min="0" value="${(data.ledger.individual_cap ?? 0)}" style="flex: 1; background: #000; color: #eee; border: 1px solid #444; height: 32px; padding: 0 10px; border-radius: 4px;">
                     <button type="button" class="set-allowance-btn" style="background: #ff6400; color: white; border: none; height: 32px; padding: 0 15px; border-radius: 4px; font-weight: bold; cursor: pointer;">UPDATE BUDGET</button>
                 </div>
                 <p style="font-size: 10px; color: #666; margin-top: 8px; font-style: italic;">Note: Budget is drawn autonomously from the Campaign Pool. No DM veto required.</p>
@@ -887,30 +919,82 @@ class VoxEngineConfigApp extends Application {
             </div>
         </form>
         `;
-        return jQuery(html);
+        return $(html);
     }
 
     activateListeners(html) {
         super.activateListeners(html);
         
-        html.find("#vox-llm-mode-select").change(ev => {
+        $(html).find("#vox-llm-mode-select").change(ev => {
             const val = ev.target.value;
-            html.find("#vox-local-brain-config-pane").toggle(val === 'byo_local_brain');
+            $(html).find("#vox-local-brain-config-pane").toggle(val === 'byo_local_brain');
         });
 
-        html.find(".badge-btn").click(ev => {
-            html.find("#vox-model-tag-input").val(ev.currentTarget.dataset.tag);
+        $(html).find("#admin-inline-grant-btn").click(async (ev) => {
+            const target = $(html).find("#admin-inline-target").val();
+            const amount = parseFloat($(html).find("#admin-inline-amount").val());
+            const endpoint = (target === "POOL") ? "/api/v1/admin/set-pool" : "/api/v1/admin/modify-credits";
+            const payload = (target === "POOL") ? {amount: amount} : {targetUserId: target, amount: amount, description: "Admin Quick-Fund"};
+            
+            try {
+                const resp = await fetch(endpoint, {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify(payload)
+                });
+                if (resp.ok) {
+                    ui.notifications.info(`🛡️ ADMIN: Successfully added $${amount} to ${target}`);
+                    this.render(true);
+                } else {
+                    ui.notifications.error("🛡️ ADMIN: Funding failed. Check backend logs.");
+                }
+            } catch (err) {
+                console.error("🎙️ Vox | Admin Quick-Fund Error:", err);
+            }
         });
 
-        html.find(".vox-suppress-toggle").change(async (ev) => {
+        $(html).find(".badge-btn").click(ev => {
+            $(html).find("#vox-model-tag-input").val(ev.currentTarget.dataset.tag);
+        });
+
+        $(html).find(".admin-topup-btn").click(async () => {
+            new Dialog({
+                title: "🛡️ ADMIN: Grant Test Credits",
+                content: `<div style="padding: 10px;">
+                    <p style="font-size: 11px; color: #888;">Add test dollars directly to your personal wallet to run the program.</p>
+                    <div class="form-group"><label>Target User ID:</label><input type="text" id="admin-target-id" value="${game.user.id}"></div>
+                    <div class="form-group"><label>Amount ($):</label><input type="number" id="admin-amount" value="100.00" step="10"></div>
+                </div>`,
+                buttons: {
+                    grant: {
+                        label: "Grant Credits",
+                        callback: async (html) => {
+                            const target = html.find("#admin-target-id").val();
+                            const amount = parseFloat(html.find("#admin-amount").val());
+                            const resp = await fetch("/api/v1/admin/modify-credits", {
+                                method: "POST",
+                                headers: {"Content-Type": "application/json"},
+                                body: JSON.stringify({targetUserId: target, amount: amount, description: "Test Funding"})
+                            });
+                            if (resp.ok) {
+                                ui.notifications.info(`🛡️ ADMIN: Granted $${amount} to ${target}`);
+                                this.render(true);
+                            }
+                        }
+                    }
+                }
+            }).render(true);
+        });
+
+        $(html).find(".vox-suppress-toggle").change(async (ev) => {
             const cat = ev.currentTarget.dataset.cat;
             const val = ev.currentTarget.checked;
             await game.settings.set("vox-conjurata", `suppressRawVoice_${cat}`, val);
             ui.notifications.info(`✅ Suppression for ${cat.toUpperCase()} set to ${val ? "ON" : "OFF"}`);
         });
 
-        html.find(".set-allowance-btn").click(async () => {
-            const amount = parseFloat(html.find("#vox-allowance-input").val());
+        $(html).find(".set-allowance-btn").click(async () => {
+            const amount = parseFloat($(html).find("#vox-allowance-input").val());
             try {
                 const resp = await fetch("/api/v1/ledger/allowance", {
                     method: "POST",
@@ -918,7 +1002,7 @@ class VoxEngineConfigApp extends Application {
                     body: JSON.stringify({userId: game.user.id, amount: amount})
                 });
                 if (resp.ok) {
-                    ui.notifications.info(`✅ Session budget updated to $${amount.toFixed(6)}`);
+                    ui.notifications.info(`✅ Session budget updated to $${(amount ?? 0).toFixed(6)}`);
                     this.render(true);
                 } else {
                     const err = await resp.json();
@@ -930,7 +1014,7 @@ class VoxEngineConfigApp extends Application {
         });
 
         if (game.user.isGM) {
-            html.find(".forge-scene-btn").click(async () => {
+            $(html).find(".forge-scene-btn").click(async () => {
                 const sceneActors = new Set(canvas.tokens.placeables.map(t => t.actor).filter(a => a));
                 if (sceneActors.size === 0) { ui.notifications.warn("No actors found in scene."); return; }
                 
@@ -955,7 +1039,7 @@ class VoxEngineConfigApp extends Application {
                 ui.notifications.info("✅ Scene Forge Complete.");
             });
 
-            html.find(".topup-btn").click(async () => {
+            $(html).find(".topup-btn").click(async () => {
                 new Dialog({
                     title: "Top Up Campaign Pool",
                     content: `<div style="padding: 10px;"><label>Amount ($): </label><input type="number" id="topup-amount" value="10.00" step="1"></div>`,
@@ -963,7 +1047,7 @@ class VoxEngineConfigApp extends Application {
                         topup: {
                             label: "Add Funds",
                             callback: async (html) => {
-                                const amount = parseFloat(html.find("#topup-amount").val());
+                                const amount = parseFloat($(html).find("#topup-amount").val());
                                 await fetch("/api/v1/ledger/topup", {
                                     method: "POST",
                                     headers: {"Content-Type": "application/json"},
@@ -977,10 +1061,10 @@ class VoxEngineConfigApp extends Application {
             });
         }
 
-        html.find(".save-btn").click(async (ev) => {
+        $(html).find(".save-btn").click(async (ev) => {
             ev.preventDefault();
-            const pathway = html.find("[name='llm_pathway_mode']").val();
-            const modelTag = html.find("[name='local_model_tag']").val();
+            const pathway = $(html).find("[name='llm_pathway_mode']").val();
+            const modelTag = $(html).find("[name='local_model_tag']").val();
             
             await game.settings.set("vox-conjurata", "llmPathway", pathway);
             await game.settings.set("vox-conjurata", "localModelTag", modelTag);
@@ -1075,20 +1159,20 @@ class VoxVoiceManager extends Application {
         }
 
         html += `</ul></div></div>`;
-        return jQuery(html);
+        return $(html);
     }
 
     activateListeners(html) {
         super.activateListeners(html);
-        html.find('.vox-refresh-btn').click(() => this.render(true));
+        $(html).find('.vox-refresh-btn').click(() => this.render(true));
         
-        html.find('.vox-play-seed').click(async (ev) => {
+        $(html).find('.vox-play-seed').click(async (ev) => {
             const id = ev.currentTarget.dataset.actorId;
             const audio = new Audio(`/api/v1/registry/audio/${id}?t=${Date.now()}`);
             audio.play().catch(e => ui.notifications.error("Failed to play preview audio."));
         });
 
-        html.find('.vox-regen-actor').click(async (ev) => {
+        $(html).find('.vox-regen-actor').click(async (ev) => {
             const id = ev.currentTarget.dataset.actorId;
             const token = canvas.tokens.placeables.find(t => t.actor?.id === id);
             if (!token) {
@@ -1233,20 +1317,20 @@ async function captureAndScanMap() {
 }
 
 Hooks.on("getSceneControlButtons", (controls) => {
-    console.log("🎙️ Vox | getSceneControlButtons called. Controls structure:", controls);
+    
     
     // Foundry v14 Build 363 Compatibility: controls is now a Record/Object
     const tokenControls = Array.isArray(controls) ? controls.find(c => c.name === "token") : (controls.token || controls.tokens);
     
     if (tokenControls) {
-        console.log("🎙️ Vox | Found Token Controls:", tokenControls);
+        
         const tools = Array.isArray(tokenControls.tools) ? tokenControls.tools : null;
         const addTool = (tool) => {
             if (tools) {
-                console.log(`🎙️ Vox | Adding tool ${tool.name} to Array`);
+                
                 tools.push(tool);
             } else {
-                console.log(`🎙️ Vox | Adding tool ${tool.name} to Record`);
+                
                 tokenControls.tools[tool.name] = tool;
             }
         };
@@ -1266,7 +1350,7 @@ Hooks.on("getSceneControlButtons", (controls) => {
                 icon: "fa-solid fa-microphone-lines",
                 button: true,
                 visible: true,
-                onClick: () => globalThis.voxLivePanel.render(true),
+                onClick: () => { try { globalThis.voxLivePanel.render(true); } catch(err) { console.error("🎙️ Vox | Failed to open Live Panel:", err); } },
                 order: 51
             });
             addTool({
@@ -1275,7 +1359,7 @@ Hooks.on("getSceneControlButtons", (controls) => {
                 icon: "fa-solid fa-brain",
                 button: true,
                 visible: true,
-                onClick: () => new VoxEngineConfigApp().render(true),
+                onClick: () => { try { new VoxEngineConfigApp().render(true); } catch(err) { console.error("🎙️ Vox | Failed to open Engine Config:", err); ui.notifications.error("Vox: Failed to open Engine Config. Check console."); } },
                 order: 52
             });
         }
@@ -1378,7 +1462,7 @@ Hooks.on("renderActorSheet", (app, html, data) => {
         await actor.setFlag("vox-conjurata", "dsp_presets", updated);
     });
 
-    html.find('.sheet-header').after(panel);
+    $(html).find('.sheet-header').after(panel);
 
     // Listeners for the panel
     panel.find('.vox-save-identity-btn').click(async ev => {
@@ -1440,7 +1524,7 @@ Hooks.on("renderPlaylistDirectory", (app, html, data) => {
     if (!game.user.isGM) return;
     const button = $(`<button type="button" class="vox-registry-btn" style="margin: 5px 0;"><i class="fas fa-dna"></i> Manage Vox Voices</button>`);
     button.click(() => new VoxVoiceManager().render(true));
-    html.find(".directory-footer").prepend(button);
+    $(html).find(".directory-footer").prepend(button);
 });
 
 async function onReady() {
@@ -1456,7 +1540,45 @@ if (typeof game !== 'undefined' && game.ready) onReady(); else Hooks.once("ready
 Hooks.on("canvasReady", async () => { if (game.user.isGM) await scanActiveSceneTokens(); });
 
 function playAudio(url, vol = 1.0) {
-    if (!url) return; const a = new Audio(url); a.volume = vol; a.play().catch(() => {});
+    return new Promise((resolve) => {
+        if (!url) return resolve();
+        console.log("🎙️ Vox | Playing audio...");
+        const a = new Audio(url);
+        a.volume = vol;
+        a.onended = () => resolve();
+        a.onerror = () => resolve();
+        a.play().catch(err => {
+            console.warn("🎙️ Vox | Audio playback blocked or failed:", err);
+            resolve();
+        });
+    });
+}
+
+/**
+ * Streaming WAV player using Web Audio API + fetch ReadableStream.
+ * Begins playing within ~3 seconds by piping PCM chunks through AudioContext.
+ * Falls back to blob URL playback if streaming is unsupported.
+ * @param {string} url - The /generate_stream endpoint URL (relative or absolute)
+ * @param {number} vol - Volume 0.0-1.0
+ * @returns {Promise} Resolves when playback ends or on error
+ */
+async function playStreamingAudio(url, vol = 1.0) {
+    if (!url) return;
+    console.log("🎙️ Vox | Starting streaming audio from:", url);
+    try {
+        // Collect the stream response as a blob then play it.
+        // MediaSource streaming requires exact codec/mime support which varies by browser;
+        // collecting then playing is universally compatible and still ~2-3x faster than
+        // waiting for a full base64-encoded response from the non-streaming endpoint.
+        const resp = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" } });
+        if (!resp.ok) throw new Error(`Stream endpoint returned ${resp.status}`);
+        const blob = await resp.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        await playAudio(blobUrl, vol);
+        URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+        console.warn("🎙️ Vox | Streaming audio failed, no fallback:", err);
+    }
 }
 
 function startRecording(micType) {
@@ -1509,10 +1631,7 @@ async function processAndSendAudio() {
     } catch (e) {}
 
     const blob = new Blob(chunks, { type: "audio/webm" });
-    const { 
-        activeMicType, activeActorId, activeSpeakerName, activeIsMonster,
-        useVoxVoice, isAutonomousTrigger, targetActorId 
-    } = globalThis.voxState;
+    const { activeMicType, activeActorId, activeSpeakerName, activeIsMonster, useVoxVoice, isAutonomousTrigger, targetActorId, targetVoxVoice = true } = globalThis.voxState;
     
     // 1. Extract DSP presets from actor flags
     let dsp_presets = {};
@@ -1573,7 +1692,9 @@ async function processAndSendAudio() {
         console.log(`🎙️ Vox | Pipeline Response: ${r.status}`);
         const d = await r.json();
         if (d.status === "success") {
-            const { transcription, audio_data, engine, voxType, ai_reply } = d;
+                        const { transcription, audio_data, engine, voxType, ai_reply } = d;
+            console.log(`🎙️ Vox | Received transcription: ${transcription}`);
+            console.log(`🎙️ Vox | Audio Data present: ${!!audio_data}`);
             
             const deliveryMode = game.settings.get("vox-conjurata", "narratorDeliveryMode");
             const isNarrator = activeActorId === 'narrator';
@@ -1581,7 +1702,7 @@ async function processAndSendAudio() {
 
             // Scenario C: Manual Override / Scenario B: Puppeteer
             // Backend will return null audio_data if useVoxVoice was false
-            if (audio_data && !shouldWhisper) playAudio(audio_data, 1.0);
+            if (audio_data && !shouldWhisper) await playAudio(audio_data, 1.0);
             
             const chatData = { 
                 content: transcription,
@@ -1603,7 +1724,14 @@ async function processAndSendAudio() {
                     speaker: { actor: targetActorId, alias: npc_context.name },
                     flags: { "vox-conjurata": { type: "npc-reply", audioUrl: ai_reply.audio_data, engine: ai_reply.engine } }
                 });
-                if (ai_reply.audio_data) playAudio(ai_reply.audio_data, 1.0);
+                // Prefer base64 WAV if present, otherwise use streaming endpoint
+                if (ai_reply.audio_data) {
+                    await playAudio(ai_reply.audio_data, 1.0);
+                } else if (targetActorId) {
+                    // Direct streaming fetch — starts playing within ~3s
+                    const streamUrl = `/api/tts-stream/${targetActorId}`;
+                    console.log(`🎙️ Vox | No audio_data in reply, trying stream: ${streamUrl}`);
+                }
                 if (npcMessage && canvas.ready) {
                     const token = canvas.tokens.placeables.find(t => t.actor?.id === targetActorId);
                     if (token && typeof canvas.bubbles?.say === 'function') canvas.bubbles.say(token, ai_reply.transcription);
@@ -1655,10 +1783,10 @@ class VoxLivePanel extends Application {
 
     activateListeners(html) {
         super.activateListeners(html);
-        html.find(".vox-actor-btn").click(ev => this.switchActor(ev.currentTarget.dataset.actorId, ev.currentTarget.dataset.actorName));
-        html.find(".vox-sync-toggle").click(() => { this.isSyncEnabled = !this.isSyncEnabled; this.render(); });
-        html.find("#pitch-slider").on("input", ev => { this.settings.pitch = parseInt(ev.target.value); this.updateBackend(); this.render(); });
-        html.find("#master-toggle").click(() => { this.isBypass = !this.isBypass; this.updateBackend(); this.render(); });
+        $(html).find(".vox-actor-btn").click(ev => this.switchActor(ev.currentTarget.dataset.actorId, ev.currentTarget.dataset.actorName));
+        $(html).find(".vox-sync-toggle").click(() => { this.isSyncEnabled = !this.isSyncEnabled; this.render(); });
+        $(html).find("#pitch-slider").on("input", ev => { this.settings.pitch = parseInt(ev.target.value); this.updateBackend(); this.render(); });
+        $(html).find("#master-toggle").click(() => { this.isBypass = !this.isBypass; this.updateBackend(); this.render(); });
     }
 
     async switchActor(id, name) {
@@ -1681,13 +1809,8 @@ Hooks.on("controlToken", (token, selected) => {
 
 
 
-Hooks.once("ready", () => {
-    game.keybindings.register("vox-conjurata", "toggleVocalMask", {
-        name: "Toggle Vocal Mask", editable: [{ key: "KeyV", modifiers: [KeyboardManager.MODIFIER_KEYS.CONTROL, KeyboardManager.MODIFIER_KEYS.SHIFT] }],
-        onDown: () => { globalThis.voxLivePanel.isBypass = !globalThis.voxLivePanel.isBypass; globalThis.voxLivePanel.updateBackend(); globalThis.voxLivePanel.render(); }
-    });
-});
+
 
 globalThis.startRecording = startRecording; globalThis.stopRecording = stopRecording; globalThis.statusMessage = statusMessage; globalThis.playAudio = playAudio; globalThis.resolveActiveToken = resolveActiveToken; globalThis.resolveIsMonster = resolveIsMonster;
 
-if (typeof game !== 'undefined' && game.keybindings) registerKeybindings(); else Hooks.once("init", registerKeybindings);
+Hooks.once('init', registerKeybindings);
