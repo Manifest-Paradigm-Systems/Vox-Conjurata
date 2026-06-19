@@ -411,13 +411,13 @@ async def generate_ai_reply(player_name: str, player_text: str, ctx: NPCContext)
         f"--- CURRENT LOCATION & LOCAL LORE ---\n{ctx.local_lore}\n\n"
         f"--- WORLD EVENTS ---\n{ctx.world_lore}\n\n"
         f"OUTPUT FORMAT RULES:\n"
-        f"1. Always wrap the story/dialogue inside a <Narrative> block.\n"
-        f"2. DIALOGUE LENGTH: Keep the NPC's spoken reply to a maximum of 30 words. Be punchy, vivid, and in-character. Cut anything that can be implied.\n"
-        f"3. DYNAMIC IMAGE GENERATION: You MUST append an <ImagePrompt> block (containing comma-separated Pony 6 Danbooru tags) ONLY in the following cases:\n"
-        f"   - A scene transition occurs or you/the narrator are describing a new location/character in detail.\n"
-        f"   - A combat or spell strike successfully hits a target (NPC or player). Describe the visual impact of the hit.\n"
-        f"   - If the turn is purely conversational dialogue without a major physical event, OMIT the <ImagePrompt> block entirely.\n"
-        f"4. Use ChatML format. Actions in *asterisks*, dialogue in \"quotes\"."
+        f"1. Always wrap your reply inside a <Narrative> block.\n"
+        f"2. SPEAK AS {ctx.name.upper()} IN FIRST PERSON. Write only what {ctx.name} actually SAYS out loud — direct dialogue, not narrator prose. No 'the cave trembles', no third-person descriptions.\n"
+        f"   GOOD: \"Grr! Magic-user dares face my claws? You will bleed for that!\"\n"
+        f"   BAD: 'The lizardman snarls menacingly as its scales ripple with fury.'\n"
+        f"3. DIALOGUE LENGTH: Maximum 30 words. Be punchy, feral, in-character. Every word must count.\n"
+        f"4. DYNAMIC IMAGE GENERATION: Append an <ImagePrompt> block ONLY when a scene transition or combat hit occurs. For dialogue replies, OMIT it entirely.\n"
+        f"5. Use ChatML format. Dialogue in \"quotes\". Short physical action in *asterisks* is OK but counts toward the 30-word limit."
     )
     payload = {
         "model": "EVA-UNIT-01/EVA-Qwen2.5-7B-v0.1",
@@ -425,7 +425,7 @@ async def generate_ai_reply(player_name: str, player_text: str, ctx: NPCContext)
             {"role": "system", "content": system_instruction}, 
             {"role": "user", "content": f"{player_name}: {player_text}"}
         ],
-        "temperature": 0.8, "max_tokens": 512,
+        "temperature": 0.8, "max_tokens": 80,
     }
     async with httpx.AsyncClient(timeout=60.0) as client:
         try:
