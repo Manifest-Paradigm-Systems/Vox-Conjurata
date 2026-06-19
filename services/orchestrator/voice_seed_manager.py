@@ -31,6 +31,16 @@ class CacheEntry:
     source: str = "generated"
     version: int = 1
 
+    # VAE latent storage (optional, for performance optimization)
+    latent_path: Optional[str] = None
+    latent_size: int = 0
+    voice_characteristics: Dict = field(default_factory=dict)
+
+    # VAE validation and metadata
+    latent_valid: bool = False
+    vae_model_version: str = "unknown"
+    vae_generation_timestamp: float = 0.0
+
 @dataclass
 class SeedCacheStats:
     cache_hits: int = 0
