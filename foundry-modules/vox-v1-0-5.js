@@ -636,14 +636,11 @@ function registerKeybindings() {
 
                 const target = game.user.targets.first();
                 const targetActor = target?.actor;
-                if (targetActor) {
-                    const hasVoxActor = targetActor.getFlag("vox-conjurata", "vox-actor") ?? (targetActor.type !== "character");
-                    if (hasVoxActor) {
-                        globalThis.voxState.isAutonomousTrigger = true;
-                        globalThis.voxState.targetActorId = targetActor.id;
+                if (targetActor && targetActor.type !== "character") {
+                    globalThis.voxState.isAutonomousTrigger = targetActor.getFlag("vox-conjurata", "vox-actor") ?? true;
+                    globalThis.voxState.targetActorId = targetActor.id;
+                    if (globalThis.voxState.isAutonomousTrigger) {
                         statusMessage(`Character Mic [I]: Target ${targetActor.name} [AUTONOMOUS]`, true);
-                    } else {
-                        globalThis.voxState.isAutonomousTrigger = false;
                     }
                 } else {
                     globalThis.voxState.isAutonomousTrigger = false;
