@@ -8,14 +8,14 @@
   },
   "session_allowances": {
     "G3SJW9rRHe7J3AOH": 0.0,
-    "gm": 99.96274999999997
+    "gm": 99.95599999999996
   },
   "session_caps": {
     "G3SJW9rRHe7J3AOH": 0.0,
     "gm": 100.0
   },
   "session_spent": {
-    "gm": 0.037250000000000005,
+    "gm": 0.04400000000000001,
     "G3SJW9rRHe7J3AOH": 0.026,
     "nXnKU6oZYzdg0xSY": 0.04175
   },
@@ -919,6 +919,24 @@
       "amount": 0.00225,
       "description": "AI Orchestration Fee: Valeros",
       "timestamp": 1781850358.3328543
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.00225,
+      "description": "AI Orchestration Fee: Merisiel",
+      "timestamp": 1781850368.5492873
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.00225,
+      "description": "AI Orchestration Fee: Ezren",
+      "timestamp": 1781850378.771026
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.00225,
+      "description": "AI Orchestration Fee: Xulgath Warrior",
+      "timestamp": 1781850388.9761107
     }
   ]
 }

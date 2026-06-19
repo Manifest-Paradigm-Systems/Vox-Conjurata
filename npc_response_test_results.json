@@ -1,0 +1,48 @@
+{
+  "timestamp": "2026-06-19 00:26:29",
+  "test_type": "direct_npc_response_timing",
+  "results": [
+    {
+      "name": "Valeros",
+      "actor_id": "vcwqnXHkhzFhrt7O",
+      "success": true,
+      "response_time": 0.15018391609191895,
+      "status": "empty",
+      "transcription": "",
+      "error": ""
+    },
+    {
+      "name": "Merisiel",
+      "actor_id": "czQ0MaZBu3BqMpce",
+      "success": true,
+      "response_time": 0.16153478622436523,
+      "status": "empty",
+      "transcription": "",
+      "error": ""
+    },
+    {
+      "name": "Ezren",
+      "actor_id": "WNX5OQKPh4uaV7mW",
+      "success": true,
+      "response_time": 0.14313507080078125,
+      "status": "empty",
+      "transcription": "",
+      "error": ""
+    },
+    {
+      "name": "Xulgath Warrior",
+      "actor_id": "5vBG8a8dnJfmVd3Y",
+      "success": true,
+      "response_time": 0.15770578384399414,
+      "status": "empty",
+      "transcription": "",
+      "error": ""
+    }
+  ],
+  "summary": {
+    "total_tests": 4,
+    "successful": 4,
+    "failed": 0,
+    "success_rate": 100.0
+  }
+}
