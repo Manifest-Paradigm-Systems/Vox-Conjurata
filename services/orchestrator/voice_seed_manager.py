@@ -18,7 +18,7 @@ import json
 import logging
 from pathlib import Path
 from typing import Optional, Dict, List, Tuple
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from threading import Lock
 
 logger = logging.getLogger("voice-seed-cache")
@@ -94,6 +94,11 @@ class VoiceSeedManager:
         logger.info(f"   📊 Memory entries: {len(self.memory_cache)}")
         logger.info(f"   📁 Registry entries: {len(self.registry_cache)}")
         logger.info(f"   🎵 Pre-scanned actors: {len(self.filesystem_seeds)}")
+
+        # Log VAE latent storage status
+        if self.latent_enabled:
+            latent_files = list(self.latent_dir.glob("*.pt")) + list(self.latent_dir.glob("*.pth"))
+            logger.info(f"   🧠 VAE latent cache: {len(latent_files)} files available")
 
     def _scan_filesystem(self):
         logger.info("🔍 Scanning filesystem for existing seed files...")
