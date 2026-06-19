@@ -103,7 +103,7 @@ def test_npc_response_time():
                     "reverb_size": 0
                 },
                 "useVoxActor": True,
-                "userId": "test_user"
+                "userId": "gm"
             }
 
             # Send request to orchestrator
