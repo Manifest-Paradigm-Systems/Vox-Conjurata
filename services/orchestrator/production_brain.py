@@ -412,11 +412,12 @@ async def generate_ai_reply(player_name: str, player_text: str, ctx: NPCContext)
         f"--- WORLD EVENTS ---\n{ctx.world_lore}\n\n"
         f"OUTPUT FORMAT RULES:\n"
         f"1. Always wrap the story/dialogue inside a <Narrative> block.\n"
-        f"2. DYNAMIC IMAGE GENERATION: You MUST append an <ImagePrompt> block (containing comma-separated Pony 6 Danbooru tags) ONLY in the following cases:\n"
+        f"2. DIALOGUE LENGTH: Keep the NPC's spoken reply to a maximum of 30 words. Be punchy, vivid, and in-character. Cut anything that can be implied.\n"
+        f"3. DYNAMIC IMAGE GENERATION: You MUST append an <ImagePrompt> block (containing comma-separated Pony 6 Danbooru tags) ONLY in the following cases:\n"
         f"   - A scene transition occurs or you/the narrator are describing a new location/character in detail.\n"
         f"   - A combat or spell strike successfully hits a target (NPC or player). Describe the visual impact of the hit.\n"
         f"   - If the turn is purely conversational dialogue without a major physical event, OMIT the <ImagePrompt> block entirely.\n"
-        f"3. Use ChatML format. Actions in *asterisks*, dialogue in \"quotes\"."
+        f"4. Use ChatML format. Actions in *asterisks*, dialogue in \"quotes\"."
     )
     payload = {
         "model": "EVA-UNIT-01/EVA-Qwen2.5-7B-v0.1",
@@ -456,13 +457,20 @@ async def enrich_and_instruct(speaker: str, role: str, text: str, is_monster: bo
 # ---------------------------------------------------------------------------
 
 class SpeechEngine:
-    async def generate(self, text: str, actor_id: str, client: httpx.AsyncClient, dsp_presets: dict = None) -> Optional[bytes]:
+    async def generate(self, text: str, actor_id: str, client: httpx.AsyncClient, dsp_presets: dict = None, control_instruction: str = None) -> Optional[bytes]:
         raise NotImplementedError()
 
 class VoxAudioCoreEngine(SpeechEngine):
-    async def generate(self, text: str, actor_id: str, client: httpx.AsyncClient, dsp_presets: dict = None) -> Optional[bytes]:
+    async def generate(self, text: str, actor_id: str, client: httpx.AsyncClient, dsp_presets: dict = None, control_instruction: str = None) -> Optional[bytes]:
         try:
-            resp = await client.post(f"{TTS_ACTOR_URL}/generate", json={"npc_id": actor_id, "dialogue_text": text, "dsp_presets": dsp_presets or {}})
+            payload = {
+                "npc_id": actor_id,
+                "dialogue_text": text,
+                "dsp_presets": dsp_presets or {},
+            }
+            if control_instruction:
+                payload["control_instruction"] = control_instruction
+            resp = await client.post(f"{TTS_ACTOR_URL}/generate", json=payload)
             return resp.content if resp.status_code == 200 else None
         except Exception as e:
             logger.error(f"VoxAudioCore generation failed: {e}")
@@ -1093,18 +1101,23 @@ async def _execute_voice_conversion_pipeline(task_id: str, audio_bytes: bytes, a
                     # Charge DM for AI Reply TTS
                     cost_reply = ledger.calculate_cost("tts", tier)
                     ledger.charge("gm", cost_reply, f"Autonomous NPC Reply: {meta.npc_context.name}")
-                    
-                    wav = await engine.generate(std_reply, meta.targetActorId, client, {})
+                    # Enrich the NPC reply for vocal delivery
+                    npc_enriched = await enrich_and_instruct(meta.activeSpeakerName, "NPC", std_reply, is_monster=meta.npc_context.is_monster)
+                    npc_control = npc_enriched.vocal_delivery_prompt
+                    wav = await engine.generate(std_reply, meta.targetActorId, client, {}, control_instruction=npc_control)
                     if wav: ai_audio = f"data:audio/wav;base64,{base64.b64encode(wav).decode('utf-8')}"
                 ai_reply_obj = AIReply(transcription=std_reply, audio_data=ai_audio, image_prompt=image_prompt)
 
-            if meta.useVoxVoice:
-                # 3. TTS Generation
+            if meta.useVoxVoice and not meta.isAutonomousTrigger:
+                # 3. TTS Generation — SKIPPED on autonomous trigger to save ~5-8s
+                # When targeting an NPC, we only need the NPC's voice; the player's
+                # human voice is already heard live at the table.
                 cost_tts = ledger.calculate_cost("tts", tier)
                 ledger.charge(billing_user_id, cost_tts, f"TTS Generation for {meta.activeSpeakerName}")
                 
                 target_text = enriched.monster_text if meta.isMonster else enriched.instruct_text
-                wav = await engine.generate(target_text, meta.actorId, client, meta.dsp_presets)
+                control = enriched.vocal_delivery_prompt
+                wav = await engine.generate(target_text, meta.actorId, client, meta.dsp_presets, control_instruction=control)
                 logger.info(f"🎙️ Vox | Engine generated wav: {len(wav) if wav else 0} bytes")
                 if wav: audio_data = f"data:audio/wav;base64,{base64.b64encode(wav).decode('utf-8')}"
 
