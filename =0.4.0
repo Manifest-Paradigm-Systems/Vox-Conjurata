@@ -1,102 +1,30 @@
-Defaulting to user installation because normal site-packages is not writeable
-Collecting torch
-  Downloading torch-2.12.1-cp314-cp314-manylinux_2_28_x86_64.whl.metadata (31 kB)
-Collecting safetensors
-  Downloading safetensors-0.8.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.2 kB)
+Requirement already satisfied: torch in /home/EvokeStudio/.local/lib/python3.14/site-packages (2.12.1)
+Requirement already satisfied: safetensors in /home/EvokeStudio/.local/lib/python3.14/site-packages (0.8.0)
 Requirement already satisfied: filelock in /usr/lib/python3.14/site-packages (from torch) (3.15.4)
 Requirement already satisfied: typing-extensions>=4.10.0 in /usr/lib/python3.14/site-packages (from torch) (4.15.0)
 Requirement already satisfied: setuptools<82 in /usr/lib/python3.14/site-packages (from torch) (80.10.2)
-Collecting sympy>=1.13.3 (from torch)
-  Downloading sympy-1.14.0-py3-none-any.whl.metadata (12 kB)
-Collecting networkx>=2.5.1 (from torch)
-  Downloading networkx-3.6.1-py3-none-any.whl.metadata (6.8 kB)
+Requirement already satisfied: sympy>=1.13.3 in /home/EvokeStudio/.local/lib/python3.14/site-packages (from torch) (1.14.0)
+Requirement already satisfied: networkx>=2.5.1 in /home/EvokeStudio/.local/lib/python3.14/site-packages (from torch) (3.6.1)
 Requirement already satisfied: jinja2 in /home/EvokeStudio/.local/lib/python3.14/site-packages (from torch) (3.1.6)
 Requirement already satisfied: fsspec>=0.8.5 in /home/EvokeStudio/.local/lib/python3.14/site-packages (from torch) (2026.4.0)
-Collecting cuda-toolkit==13.0.2 (from cuda-toolkit[cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch)
-  Downloading cuda_toolkit-13.0.2-py2.py3-none-any.whl.metadata (9.4 kB)
-Collecting nvidia-cublas<=13.1.1.3,>=13.1.0.3 (from torch)
-  Downloading nvidia_cublas-13.1.1.3-py3-none-manylinux_2_27_x86_64.whl.metadata (1.8 kB)
-Collecting cuda-bindings<14,>=13.0.3 (from torch)
-  Downloading cuda_bindings-13.3.1-cp314-cp314-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (2.5 kB)
-Collecting nvidia-cudnn-cu13==9.20.0.48 (from torch)
-  Downloading nvidia_cudnn_cu13-9.20.0.48-py3-none-manylinux_2_27_x86_64.whl.metadata (1.9 kB)
-Collecting nvidia-cusparselt-cu13==0.8.1 (from torch)
-  Downloading nvidia_cusparselt_cu13-0.8.1-py3-none-manylinux2014_x86_64.whl.metadata (12 kB)
-Collecting nvidia-nccl-cu13==2.29.7 (from torch)
-  Downloading nvidia_nccl_cu13-2.29.7-py3-none-manylinux_2_18_x86_64.whl.metadata (2.1 kB)
-Collecting nvidia-nvshmem-cu13==3.4.5 (from torch)
-  Downloading nvidia_nvshmem_cu13-3.4.5-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (2.1 kB)
-Collecting triton==3.7.1 (from torch)
-  Downloading triton-3.7.1-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (1.7 kB)
-Collecting nvidia-cuda-runtime==13.0.96.* (from cuda-toolkit[cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch)
-  Downloading nvidia_cuda_runtime-13.0.96-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (1.7 kB)
-Collecting nvidia-cufft==12.0.0.61.* (from cuda-toolkit[cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch)
-  Downloading nvidia_cufft-12.0.0.61-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (1.8 kB)
-Collecting nvidia-cufile==1.15.1.6.* (from cuda-toolkit[cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch)
-  Downloading nvidia_cufile-1.15.1.6-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (1.7 kB)
-Collecting nvidia-cuda-cupti==13.0.85.* (from cuda-toolkit[cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch)
-  Downloading nvidia_cuda_cupti-13.0.85-py3-none-manylinux_2_25_x86_64.whl.metadata (1.7 kB)
-Collecting nvidia-curand==10.4.0.35.* (from cuda-toolkit[cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch)
-  Downloading nvidia_curand-10.4.0.35-py3-none-manylinux_2_27_x86_64.whl.metadata (1.7 kB)
-Collecting nvidia-cusolver==12.0.4.66.* (from cuda-toolkit[cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch)
-  Downloading nvidia_cusolver-12.0.4.66-py3-none-manylinux_2_27_x86_64.whl.metadata (1.8 kB)
-Collecting nvidia-cusparse==12.6.3.3.* (from cuda-toolkit[cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch)
-  Downloading nvidia_cusparse-12.6.3.3-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (1.8 kB)
-Collecting nvidia-nvjitlink==13.0.88.* (from cuda-toolkit[cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch)
-  Downloading nvidia_nvjitlink-13.0.88-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl.metadata (1.7 kB)
-Collecting nvidia-cuda-nvrtc==13.0.88.* (from cuda-toolkit[cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch)
-  Downloading nvidia_cuda_nvrtc-13.0.88-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl.metadata (1.7 kB)
-Collecting nvidia-nvtx==13.0.85.* (from cuda-toolkit[cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch)
-  Downloading nvidia_nvtx-13.0.85-py3-none-manylinux1_x86_64.manylinux_2_5_x86_64.whl.metadata (1.8 kB)
-Collecting cuda-pathfinder>=1.4.2 (from cuda-bindings<14,>=13.0.3->torch)
-  Downloading cuda_pathfinder-1.5.5-py3-none-any.whl.metadata (1.9 kB)
-Collecting mpmath<1.4,>=1.1.0 (from sympy>=1.13.3->torch)
-  Downloading mpmath-1.3.0-py3-none-any.whl.metadata (8.6 kB)
+Requirement already satisfied: cuda-toolkit==13.0.2 in /home/EvokeStudio/.local/lib/python3.14/site-packages (from cuda-toolkit[cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch) (13.0.2)
+Requirement already satisfied: nvidia-cublas<=13.1.1.3,>=13.1.0.3 in /home/EvokeStudio/.local/lib/python3.14/site-packages (from torch) (13.1.1.3)
+Requirement already satisfied: cuda-bindings<14,>=13.0.3 in /home/EvokeStudio/.local/lib/python3.14/site-packages (from torch) (13.3.1)
+Requirement already satisfied: nvidia-cudnn-cu13==9.20.0.48 in /home/EvokeStudio/.local/lib/python3.14/site-packages (from torch) (9.20.0.48)
+Requirement already satisfied: nvidia-cusparselt-cu13==0.8.1 in /home/EvokeStudio/.local/lib/python3.14/site-packages (from torch) (0.8.1)
+Requirement already satisfied: nvidia-nccl-cu13==2.29.7 in /home/EvokeStudio/.local/lib/python3.14/site-packages (from torch) (2.29.7)
+Requirement already satisfied: nvidia-nvshmem-cu13==3.4.5 in /home/EvokeStudio/.local/lib/python3.14/site-packages (from torch) (3.4.5)
+Requirement already satisfied: triton==3.7.1 in /home/EvokeStudio/.local/lib/python3.14/site-packages (from torch) (3.7.1)
+Requirement already satisfied: nvidia-cuda-runtime==13.0.96.* in /home/EvokeStudio/.local/lib/python3.14/site-packages (from cuda-toolkit[cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch) (13.0.96)
+Requirement already satisfied: nvidia-cufft==12.0.0.61.* in /home/EvokeStudio/.local/lib/python3.14/site-packages (from cuda-toolkit[cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch) (12.0.0.61)
+Requirement already satisfied: nvidia-cufile==1.15.1.6.* in /home/EvokeStudio/.local/lib/python3.14/site-packages (from cuda-toolkit[cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch) (1.15.1.6)
+Requirement already satisfied: nvidia-cuda-cupti==13.0.85.* in /home/EvokeStudio/.local/lib/python3.14/site-packages (from cuda-toolkit[cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch) (13.0.85)
+Requirement already satisfied: nvidia-curand==10.4.0.35.* in /home/EvokeStudio/.local/lib/python3.14/site-packages (from cuda-toolkit[cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch) (10.4.0.35)
+Requirement already satisfied: nvidia-cusolver==12.0.4.66.* in /home/EvokeStudio/.local/lib/python3.14/site-packages (from cuda-toolkit[cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch) (12.0.4.66)
+Requirement already satisfied: nvidia-cusparse==12.6.3.3.* in /home/EvokeStudio/.local/lib/python3.14/site-packages (from cuda-toolkit[cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch) (12.6.3.3)
+Requirement already satisfied: nvidia-nvjitlink==13.0.88.* in /home/EvokeStudio/.local/lib/python3.14/site-packages (from cuda-toolkit[cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch) (13.0.88)
+Requirement already satisfied: nvidia-cuda-nvrtc==13.0.88.* in /home/EvokeStudio/.local/lib/python3.14/site-packages (from cuda-toolkit[cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch) (13.0.88)
+Requirement already satisfied: nvidia-nvtx==13.0.85.* in /home/EvokeStudio/.local/lib/python3.14/site-packages (from cuda-toolkit[cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch) (13.0.85)
+Requirement already satisfied: cuda-pathfinder>=1.4.2 in /home/EvokeStudio/.local/lib/python3.14/site-packages (from cuda-bindings<14,>=13.0.3->torch) (1.5.5)
+Requirement already satisfied: mpmath<1.4,>=1.1.0 in /home/EvokeStudio/.local/lib/python3.14/site-packages (from sympy>=1.13.3->torch) (1.3.0)
 Requirement already satisfied: MarkupSafe>=2.0 in /home/EvokeStudio/.local/lib/python3.14/site-packages (from jinja2->torch) (3.0.3)
-Downloading torch-2.12.1-cp314-cp314-manylinux_2_28_x86_64.whl (532.3 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 532.3/532.3 MB 58.7 MB/s  0:00:10
-Downloading cuda_toolkit-13.0.2-py2.py3-none-any.whl (2.4 kB)
-Downloading nvidia_cudnn_cu13-9.20.0.48-py3-none-manylinux_2_27_x86_64.whl (366.2 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 366.2/366.2 MB 64.5 MB/s  0:00:05
-Downloading nvidia_cusparselt_cu13-0.8.1-py3-none-manylinux2014_x86_64.whl (170.1 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 170.1/170.1 MB 63.7 MB/s  0:00:02
-Downloading nvidia_nccl_cu13-2.29.7-py3-none-manylinux_2_18_x86_64.whl (206.0 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 206.0/206.0 MB 63.3 MB/s  0:00:03
-Downloading nvidia_nvshmem_cu13-3.4.5-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (60.4 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 60.4/60.4 MB 63.8 MB/s  0:00:00
-Downloading triton-3.7.1-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (197.7 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 197.7/197.7 MB 65.1 MB/s  0:00:03
-Downloading cuda_bindings-13.3.1-cp314-cp314-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (6.5 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.5/6.5 MB 65.4 MB/s  0:00:00
-Downloading nvidia_cublas-13.1.1.3-py3-none-manylinux_2_27_x86_64.whl (423.1 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 423.1/423.1 MB 68.5 MB/s  0:00:06
-Downloading nvidia_cuda_cupti-13.0.85-py3-none-manylinux_2_25_x86_64.whl (10.7 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 10.7/10.7 MB 71.6 MB/s  0:00:00
-Downloading nvidia_cuda_nvrtc-13.0.88-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl (90.2 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 90.2/90.2 MB 66.3 MB/s  0:00:01
-Downloading nvidia_cuda_runtime-13.0.96-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (2.2 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.2/2.2 MB 62.5 MB/s  0:00:00
-Downloading nvidia_cufft-12.0.0.61-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (214.1 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 214.1/214.1 MB 70.3 MB/s  0:00:03
-Downloading nvidia_cufile-1.15.1.6-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (1.2 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.2/1.2 MB 68.3 MB/s  0:00:00
-Downloading nvidia_curand-10.4.0.35-py3-none-manylinux_2_27_x86_64.whl (59.5 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 59.5/59.5 MB 73.7 MB/s  0:00:00
-Downloading nvidia_cusolver-12.0.4.66-py3-none-manylinux_2_27_x86_64.whl (200.9 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 200.9/200.9 MB 69.9 MB/s  0:00:02
-Downloading nvidia_cusparse-12.6.3.3-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (145.9 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 145.9/145.9 MB 68.9 MB/s  0:00:02
-Downloading nvidia_nvjitlink-13.0.88-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl (40.7 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 40.7/40.7 MB 66.1 MB/s  0:00:00
-Downloading nvidia_nvtx-13.0.85-py3-none-manylinux1_x86_64.manylinux_2_5_x86_64.whl (148 kB)
-Downloading safetensors-0.8.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (516 kB)
-Downloading cuda_pathfinder-1.5.5-py3-none-any.whl (51 kB)
-Downloading networkx-3.6.1-py3-none-any.whl (2.1 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.1/2.1 MB 66.2 MB/s  0:00:00
-Downloading sympy-1.14.0-py3-none-any.whl (6.3 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.3/6.3 MB 71.7 MB/s  0:00:00
-Downloading mpmath-1.3.0-py3-none-any.whl (536 kB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 536.2/536.2 kB 31.1 MB/s  0:00:00
-Installing collected packages: nvidia-cusparselt-cu13, mpmath, cuda-toolkit, triton, sympy, safetensors, nvidia-nvtx, nvidia-nvshmem-cu13, nvidia-nvjitlink, nvidia-nccl-cu13, nvidia-curand, nvidia-cufile, nvidia-cuda-runtime, nvidia-cuda-nvrtc, nvidia-cuda-cupti, networkx, cuda-pathfinder, nvidia-cusparse, nvidia-cufft, nvidia-cublas, cuda-bindings, nvidia-cusolver, nvidia-cudnn-cu13, torch
-
-Successfully installed cuda-bindings-13.3.1 cuda-pathfinder-1.5.5 cuda-toolkit-13.0.2 mpmath-1.3.0 networkx-3.6.1 nvidia-cublas-13.1.1.3 nvidia-cuda-cupti-13.0.85 nvidia-cuda-nvrtc-13.0.88 nvidia-cuda-runtime-13.0.96 nvidia-cudnn-cu13-9.20.0.48 nvidia-cufft-12.0.0.61 nvidia-cufile-1.15.1.6 nvidia-curand-10.4.0.35 nvidia-cusolver-12.0.4.66 nvidia-cusparse-12.6.3.3 nvidia-cusparselt-cu13-0.8.1 nvidia-nccl-cu13-2.29.7 nvidia-nvjitlink-13.0.88 nvidia-nvshmem-cu13-3.4.5 nvidia-nvtx-13.0.85 safetensors-0.8.0 sympy-1.14.0 torch-2.12.1 triton-3.7.1
