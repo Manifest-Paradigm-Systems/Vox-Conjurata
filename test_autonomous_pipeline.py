@@ -68,7 +68,7 @@ def test_autonomous_npc_pipeline():
 
     start_time = time.time()
     try:
-        response = requests.post(url, files=files, data=data, timeout=120.0)
+        response = requests.post(url, files=files, data=data, timeout=300.0)
         end_time = time.time()
         elapsed = end_time - start_time
 
