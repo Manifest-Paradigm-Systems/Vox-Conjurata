@@ -1151,10 +1151,12 @@ async def _execute_voice_conversion_pipeline(task_id: str, audio_bytes: bytes, a
         ledger.charge(billing_user_id, cost_llm, f"AI Orchestration Fee: {meta.activeSpeakerName}")
 
         # 1. Transcription
-
+        t_stt_start = time.time()
         async with httpx.AsyncClient(timeout=300.0) as client:
             stt_resp = await client.post(f"{STT_URL}/v1/audio/transcriptions", files={"file": (audio_filename, audio_bytes, audio_content_type)}, data={"model": "tiny.en", "language": "en"})
             transcription = stt_resp.json().get("text", "").strip()
+        t_stt = time.time() - t_stt_start
+        logger.info(f"⏱️  Pipeline Latency | STT (Whisper): {t_stt:.4f}s")
 
         if not transcription: return {"status": "empty"}
 
@@ -1169,15 +1171,22 @@ async def _execute_voice_conversion_pipeline(task_id: str, audio_bytes: bytes, a
         chronicle.log_interaction(meta.activeSpeakerName, transcription)
         
         # 2. LLM Enrichment
+        t_enrich_start = time.time()
         enriched = await enrich_and_instruct(meta.activeSpeakerName, role, transcription, is_monster=meta.isMonster)
+        t_enrich = time.time() - t_enrich_start
+        logger.info(f"⏱️  Pipeline Latency | LLM Enrichment: {t_enrich:.4f}s")
         engine = pipeline_factory.get_engine()
         audio_data = None
         ai_reply_obj = None
 
         async with httpx.AsyncClient(timeout=300.0) as client:
             if meta.isAutonomousTrigger and meta.npc_context:
+                t_reply_start = time.time()
                 # Autonomous NPC reply is ALWAYS billed to DM
                 raw_reply = await generate_ai_reply(meta.activeSpeakerName, transcription, meta.npc_context)
+                t_reply = time.time() - t_reply_start
+                logger.info(f"⏱️  Pipeline Latency | LLM Reply (Qwen): {t_reply:.4f}s")
+                
                 parsed_reply = parse_block_response(raw_reply)
                 reply_text = parsed_reply["narrative"]
                 image_prompt = parsed_reply["image_prompt"]
@@ -1200,7 +1209,10 @@ async def _execute_voice_conversion_pipeline(task_id: str, audio_bytes: bytes, a
                     ledger.charge("gm", cost_reply, f"Autonomous NPC Reply: {meta.npc_context.name}")
                     
                     # Generate only the first chunk synchronously
+                    t_tts_start = time.time()
                     wav = await engine.generate(first_chunk, meta.targetActorId, client, {}, control_instruction=npc_control)
+                    t_tts = time.time() - t_tts_start
+                    logger.info(f"⏱️  Pipeline Latency | NPC TTS Chunk 1 (VoxCPM2): {t_tts:.4f}s")
                     if wav: 
                         ai_audio = f"data:audio/wav;base64,{base64.b64encode(wav).decode('utf-8')}"
                 
