@@ -194,6 +194,57 @@ class AIReply(BaseModel):
     audio_data: Optional[str] = None
     engine: str = "VoxAudioCore"
     image_prompt: Optional[str] = None
+    subsequent_chunks: Optional[list[str]] = None
+    control_instruction: Optional[str] = None
+
+def split_dialogue_into_chunks(text: str, max_words: int = 12) -> list[str]:
+    """Splits a dialogue text into smaller, natural-sounding sentences/chunks of ~12 words."""
+    # Split text by sentence boundaries first (. ! ?)
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+    chunks = []
+    current_chunk = []
+    current_word_count = 0
+    
+    for sentence in sentences:
+        if not sentence.strip():
+            continue
+        words = sentence.split()
+        word_count = len(words)
+        
+        if current_word_count + word_count <= max_words:
+            current_chunk.append(sentence)
+            current_word_count += word_count
+        else:
+            if current_chunk:
+                chunks.append(" ".join(current_chunk))
+            # If the single sentence is longer than max_words, split it by commas/conjunctions
+            if word_count > max_words:
+                sub_sentences = re.split(r'(?<=,)\s+', sentence)
+                sub_chunk = []
+                sub_word_count = 0
+                for sub in sub_sentences:
+                    sub_words = sub.split()
+                    sub_len = len(sub_words)
+                    if sub_word_count + sub_len <= max_words:
+                        sub_chunk.append(sub)
+                        sub_word_count += sub_len
+                    else:
+                        if sub_chunk:
+                            chunks.append(" ".join(sub_chunk))
+                        sub_chunk = [sub]
+                        sub_word_count = sub_len
+                if sub_chunk:
+                    chunks.append(" ".join(sub_chunk))
+                current_chunk = []
+                current_word_count = 0
+            else:
+                current_chunk = [sentence]
+                current_word_count = word_count
+                
+    if current_chunk:
+        chunks.append(" ".join(current_chunk))
+        
+    return [c.strip() for c in chunks if c.strip()]
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -659,6 +710,43 @@ async def create_checkout_session(user_id: str, amount: float = 10.0, auto_alloc
         logger.error(f"Stripe Checkout Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/v1/dialogue/end")
+async def dialogue_end(request: Request):
+    try:
+        data = await request.json()
+        actor_id = data.get("actor_id")
+        logger.info(f"Dialogue session ended for actor: {actor_id}")
+        return {"status": "success"}
+    except Exception as e:
+        logger.error(f"Failed to end dialogue session: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/tts-chunk")
+async def tts_chunk(request: Request):
+    """
+    Subsequent chunk voice generation requested by client during pipelined playback.
+    """
+    try:
+        data = await request.json()
+        actor_id = data.get("actor_id")
+        text = data.get("text")
+        dsp_presets = data.get("dsp_presets") or {}
+        control_instruction = data.get("control_instruction")
+        
+        logger.info(f"Pipelined TTS chunk request for actor: {actor_id} | text: '{text[:40]}...'")
+        
+        engine = pipeline_factory.get_engine()
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            wav = await engine.generate(text, actor_id, client, dsp_presets, control_instruction=control_instruction)
+            if wav:
+                audio_base64 = f"data:audio/wav;base64,{base64.b64encode(wav).decode('utf-8')}"
+                return {"status": "success", "audio_data": audio_base64}
+            else:
+                return {"status": "error", "message": "Failed to generate audio chunk"}
+    except Exception as e:
+        logger.error(f"Error in tts_chunk: {e}")
+        return {"status": "error", "message": str(e)}
+
 @app.post("/api/v1/billing/webhook")
 async def stripe_webhook(request: Request):
     payload = await request.body()
@@ -1096,17 +1184,33 @@ async def _execute_voice_conversion_pipeline(task_id: str, audio_bytes: bytes, a
                 
                 target_engine = "monster" if meta.npc_context.is_monster else "humanoid"
                 std_reply = standardize_speech_text(reply_text, target_engine, "neutral")
+                
+                # Split reply into ~12 word chunks to minimize synthesis latency for playback start
+                reply_chunks = split_dialogue_into_chunks(std_reply, max_words=12)
+                first_chunk = reply_chunks[0] if reply_chunks else std_reply
+                subsequent_chunks = reply_chunks[1:] if len(reply_chunks) > 1 else []
+                
+                # Deterministic vocal delivery prompt selection (skips LLM call)
+                npc_control = "A deep, guttural, feral monster voice. Aggressive and territorial." if meta.npc_context.is_monster else "A gruff humanoid voice. Direct and menacing."
+                
                 ai_audio = None
                 if meta.targetVoxVoice:
                     # Charge DM for AI Reply TTS
                     cost_reply = ledger.calculate_cost("tts", tier)
                     ledger.charge("gm", cost_reply, f"Autonomous NPC Reply: {meta.npc_context.name}")
-                    # Enrich the NPC reply for vocal delivery
-                    npc_enriched = await enrich_and_instruct(meta.activeSpeakerName, "NPC", std_reply, is_monster=meta.npc_context.is_monster)
-                    npc_control = npc_enriched.vocal_delivery_prompt
-                    wav = await engine.generate(std_reply, meta.targetActorId, client, {}, control_instruction=npc_control)
-                    if wav: ai_audio = f"data:audio/wav;base64,{base64.b64encode(wav).decode('utf-8')}"
-                ai_reply_obj = AIReply(transcription=std_reply, audio_data=ai_audio, image_prompt=image_prompt)
+                    
+                    # Generate only the first chunk synchronously
+                    wav = await engine.generate(first_chunk, meta.targetActorId, client, {}, control_instruction=npc_control)
+                    if wav: 
+                        ai_audio = f"data:audio/wav;base64,{base64.b64encode(wav).decode('utf-8')}"
+                
+                ai_reply_obj = AIReply(
+                    transcription=std_reply, 
+                    audio_data=ai_audio, 
+                    image_prompt=image_prompt,
+                    subsequent_chunks=subsequent_chunks,
+                    control_instruction=npc_control
+                )
 
             if meta.useVoxVoice and not meta.isAutonomousTrigger:
                 # 3. TTS Generation — SKIPPED on autonomous trigger to save ~5-8s

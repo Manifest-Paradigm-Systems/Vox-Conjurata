@@ -1724,11 +1724,54 @@ async function processAndSendAudio() {
                     speaker: { actor: targetActorId, alias: npc_context.name },
                     flags: { "vox-conjurata": { type: "npc-reply", audioUrl: ai_reply.audio_data, engine: ai_reply.engine } }
                 });
-                // Prefer base64 WAV if present, otherwise use streaming endpoint
+                
                 if (ai_reply.audio_data) {
-                    await playAudio(ai_reply.audio_data, 1.0);
+                    // Check if there are subsequent chunks to pipeline
+                    if (ai_reply.subsequent_chunks && ai_reply.subsequent_chunks.length > 0) {
+                        console.log(`🎙️ Vox | Pipelining ${ai_reply.subsequent_chunks.length} subsequent chunks in background...`);
+                        
+                        // Start fetching all subsequent chunks in parallel in the background
+                        const fetchPromises = ai_reply.subsequent_chunks.map((chunkText, idx) => {
+                            return (async () => {
+                                try {
+                                    console.log(`🎙️ Vox | Fetching chunk ${idx + 2} text: '${chunkText}'`);
+                                    const chunkRes = await fetch("/api/tts-chunk", {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({
+                                            actor_id: targetActorId,
+                                            text: chunkText,
+                                            dsp_presets: dsp_presets || {},
+                                            control_instruction: ai_reply.control_instruction
+                                        })
+                                    });
+                                    const chunkData = await chunkRes.json();
+                                    return chunkData.audio_data;
+                                } catch (e) {
+                                    console.error(`🎙️ Vox | Failed to fetch chunk ${idx + 2}:`, e);
+                                    return null;
+                                }
+                            })();
+                        });
+                        
+                        // Play chunk 1 immediately
+                        console.log("🎙️ Vox | Playing first chunk immediately...");
+                        await playAudio(ai_reply.audio_data, 1.0);
+                        
+                        // Play subsequent chunks in order as their fetch requests complete
+                        for (let i = 0; i < fetchPromises.length; i++) {
+                            const chunkAudio = await fetchPromises[i];
+                            if (chunkAudio) {
+                                console.log(`🎙️ Vox | Playing chunk ${i + 2}...`);
+                                await playAudio(chunkAudio, 1.0);
+                            }
+                        }
+                    } else {
+                        // Play the full audio as a single chunk
+                        await playAudio(ai_reply.audio_data, 1.0);
+                    }
                 } else if (targetActorId) {
-                    // Direct streaming fetch — starts playing within ~3s
+                    // Direct streaming fetch fallback
                     const streamUrl = `/api/tts-stream/${targetActorId}`;
                     console.log(`🎙️ Vox | No audio_data in reply, trying stream: ${streamUrl}`);
                 }

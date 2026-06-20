@@ -15,6 +15,8 @@ import logging
 
 logging.basicConfig(level=logging.INFO)
 from torchao.quantization import quantize_, Int8WeightOnlyConfig
+from voxcpm.core import next_and_close
+import re
 
 logger = logging.getLogger("vox-audio-core")
 
@@ -34,6 +36,59 @@ logger.info("Model loaded.")
 
 SEED_DIR = os.getenv("SEED_DIR", "/app/seeds/")
 os.makedirs(SEED_DIR, exist_ok=True)
+
+_prompt_cache = {}
+
+def get_or_create_prompt_cache(seed_path: str):
+    if seed_path not in _prompt_cache:
+        logger.info(f"Building prompt cache for: {seed_path}")
+        prompt_cache = vox_engine.tts_model.build_prompt_cache(reference_wav_path=seed_path)
+        _prompt_cache[seed_path] = prompt_cache
+    return _prompt_cache[seed_path]
+
+def generate_with_cache(
+    text: str,
+    seed_path: str,
+    inference_timesteps: int = 4,
+    cfg_value: float = 2.0
+) -> np.ndarray:
+    prompt_cache = get_or_create_prompt_cache(seed_path)
+    text = text.replace("\n", " ")
+    text = re.sub(r"\s+", " ", text)
+    
+    gen = vox_engine.tts_model._generate_with_prompt_cache(
+        target_text=text,
+        prompt_cache=prompt_cache,
+        inference_timesteps=inference_timesteps,
+        cfg_value=cfg_value,
+        retry_badcase=False
+    )
+    wav, _, _ = next_and_close(gen)
+    return wav.squeeze(0).cpu().numpy()
+
+def generate_stream_with_cache(
+    text: str,
+    seed_path: str,
+    inference_timesteps: int = 4,
+    cfg_value: float = 2.0
+) -> Generator[np.ndarray, None, None]:
+    prompt_cache = get_or_create_prompt_cache(seed_path)
+    text = text.replace("\n", " ")
+    text = re.sub(r"\s+", " ", text)
+    
+    gen = vox_engine.tts_model._generate_with_prompt_cache(
+        target_text=text,
+        prompt_cache=prompt_cache,
+        inference_timesteps=inference_timesteps,
+        cfg_value=cfg_value,
+        retry_badcase=False,
+        streaming=True
+    )
+    try:
+        for wav, _, _ in gen:
+            yield wav.squeeze(0).cpu().numpy()
+    finally:
+        gen.close()
 
 class NPCIdentityRequest(BaseModel):
     npc_id: str
@@ -155,12 +210,11 @@ async def generate_audio(request: DialogueRequest):
         final_text = build_voxcpm_text(request.dialogue_text, request.control_instruction)
         logger.info(f"Generating dialogue for NPC: {request.npc_id} | text: '{final_text[:80]}...'")
 
-        # Execute high-fidelity cloning from the fixed master anchor
-        clean_audio = vox_engine.generate(
+        # Execute high-fidelity cloning using cached prompt and no retry
+        clean_audio = generate_with_cache(
             text=final_text,
-            reference_wav_path=seed_path,
-            cfg_value=2.0,
-            inference_timesteps=4  # Aggressively optimized for real-time delivery
+            seed_path=seed_path,
+            inference_timesteps=4
         )
 
         # Apply C++ Pedalboard DSP (monster textures, pitch shift, etc.)
@@ -204,10 +258,9 @@ async def generate_audio_stream(request: DialogueRequest):
             # Emit the WAV header first so the browser knows the format
             yield encode_wav_header(sample_rate)
 
-            for chunk in vox_engine.generate_streaming(
+            for chunk in generate_stream_with_cache(
                 text=final_text,
-                reference_wav_path=final_seed,
-                cfg_value=2.0,
+                seed_path=final_seed,
                 inference_timesteps=4,
             ):
                 # Apply DSP on each chunk (Pedalboard is ~1ms per chunk)
@@ -223,6 +276,29 @@ async def generate_audio_stream(request: DialogueRequest):
 
     except Exception as e:
         logger.error(f"Failed to stream audio for NPC {request.npc_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/cache/warm")
+async def warm_cache(request: NPCIdentityRequest):
+    """Warm prompt cache for a specific NPC."""
+    try:
+        seed_path = os.path.join(SEED_DIR, f"{request.npc_id}.wav")
+        palette_path = os.path.join(SEED_DIR, "_palette", f"{request.npc_id}.wav")
+
+        final_seed = None
+        if os.path.exists(seed_path):
+            final_seed = seed_path
+        elif os.path.exists(palette_path):
+            final_seed = palette_path
+
+        if not final_seed:
+            raise HTTPException(status_code=404, detail=f"Seed for NPC {request.npc_id} not found.")
+
+        get_or_create_prompt_cache(final_seed)
+        return {"status": "success", "message": f"Cache warmed for {request.npc_id}"}
+    except Exception as e:
+        logger.error(f"Failed to warm cache for NPC {request.npc_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
