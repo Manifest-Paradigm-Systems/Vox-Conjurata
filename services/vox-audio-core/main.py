@@ -347,6 +347,43 @@ async def warm_cache(request: NPCIdentityRequest):
         logger.error(f"Failed to warm cache for NPC {request.npc_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/diagnose")
+async def diagnose_generation(request: DialogueRequest):
+    try:
+        seed_path = os.path.join(SEED_DIR, f"{request.npc_id}.wav")
+        palette_path = os.path.join(SEED_DIR, "_palette", f"{request.npc_id}.wav")
+        final_seed = seed_path if os.path.exists(seed_path) else palette_path
+        
+        prompt_cache = get_or_create_prompt_cache(final_seed)
+        final_text = build_voxcpm_text(request.dialogue_text, request.control_instruction)
+        safe_max_len = _compute_max_len(request.dialogue_text)
+        
+        gen = vox_engine.tts_model.generate_with_prompt_cache_streaming(
+            target_text=final_text,
+            prompt_cache=prompt_cache,
+            max_len=safe_max_len,
+            inference_timesteps=4,
+            cfg_value=2.0
+        )
+        
+        steps_info = []
+        step = 0
+        for decode_audio, target_text_token, pred_audio_feat in gen:
+            audio_nans = int(torch.isnan(decode_audio).sum().item())
+            latest_feat = pred_audio_feat[-1] if len(pred_audio_feat) > 0 else None
+            feat_nans = int(torch.isnan(latest_feat).sum().item()) if latest_feat is not None else 0
+            steps_info.append({
+                "step": step,
+                "audio_nans": audio_nans,
+                "audio_size": decode_audio.numel(),
+                "feat_nans": feat_nans
+            })
+            step += 1
+        return {"status": "success", "steps": steps_info}
+    except Exception as e:
+        logger.error(f"Diagnose failed: {e}")
+        return {"status": "error", "message": str(e)}
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
