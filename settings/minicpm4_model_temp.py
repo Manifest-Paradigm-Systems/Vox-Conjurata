@@ -103,8 +103,13 @@ class MiniCPMLongRoPE(nn.Module):
         Returns:
             Tensor(seq_len, head_dim), Tensor(seq_len, head_dim)
         """
-        cos = self.cos_cached[position_ids]
-        sin = self.sin_cached[position_ids]
+        if position_ids.numel() == 1:
+            idx = int(position_ids.item())
+            cos = self.cos_cached[idx:idx+1]
+            sin = self.sin_cached[idx:idx+1]
+        else:
+            cos = self.cos_cached[position_ids]
+            sin = self.sin_cached[position_ids]
 
         return cos, sin
 
