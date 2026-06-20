@@ -4,7 +4,7 @@
   "personal_wallets": {
     "gm": 979.7102499999966,
     "G3SJW9rRHe7J3AOH": 208.97400000000002,
-    "nXnKU6oZYzdg0xSY": 9.938749999999995
+    "nXnKU6oZYzdg0xSY": 9.936499999999995
   },
   "session_allowances": {
     "G3SJW9rRHe7J3AOH": 0.0,
@@ -17,7 +17,7 @@
   "session_spent": {
     "gm": 0.2445000000000002,
     "G3SJW9rRHe7J3AOH": 0.026,
-    "nXnKU6oZYzdg0xSY": 0.06350000000000001
+    "nXnKU6oZYzdg0xSY": 0.06575000000000002
   },
   "transactions": [
     {
@@ -1381,6 +1381,12 @@
       "amount": 0.00225,
       "description": "AI Orchestration Fee: Ezren",
       "timestamp": 1781975236.65846
+    },
+    {
+      "user_id": "nXnKU6oZYzdg0xSY",
+      "amount": 0.00225,
+      "description": "AI Orchestration Fee: Ezren",
+      "timestamp": 1781975357.6315536
     }
   ]
 }
