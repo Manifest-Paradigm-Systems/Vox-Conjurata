@@ -626,10 +626,39 @@ SCENE_CONTEXT = {
 # Structure: { userId: { "intentId": ..., "hit_assets": {...}, "miss_assets": {...}, "timestamp": ... } }
 ANTICIPATED_ACTIONS: dict[str, dict] = {}
 
+async def prewarm_voice_registry_caches():
+    """
+    After startup, pre-build TTS prompt caches for all NPCs in the voice registry.
+    This eliminates the ~16s cold-cache build penalty on the first dialogue request
+    after a container restart.
+    """
+    # Small delay to let vox-audio-core finish loading its model (~60s)
+    await asyncio.sleep(75)
+    registry = load_voice_registry()
+    if not registry:
+        logger.info("Voice registry empty — skipping cache pre-warm.")
+        return
+    logger.info(f"🔥 Pre-warming TTS prompt caches for {len(registry)} registered NPCs...")
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        for actor_id, entry in registry.items():
+            try:
+                resp = await client.post(
+                    f"{TTS_ACTOR_URL}/cache/warm",
+                    json={"npc_id": actor_id, "voice_description": entry.get("voice_prompt", "")}
+                )
+                if resp.status_code == 200:
+                    logger.info(f"  ✅ Cache warmed: {actor_id}")
+                else:
+                    logger.warning(f"  ⚠️  Cache warm failed for {actor_id}: {resp.status_code}")
+            except Exception as e:
+                logger.warning(f"  ⚠️  Cache warm error for {actor_id}: {e}")
+    logger.info("🔥 TTS cache pre-warm complete.")
+
 @app.on_event("startup")
 async def startup_event():
     resource_manager.start_worker()
     asyncio.create_task(prewarm_palette_foundations())
+    asyncio.create_task(prewarm_voice_registry_caches())
     # Ensure system starts in default HOT state
     asyncio.create_task(container_manager.swap_to_hot_combat())
 
