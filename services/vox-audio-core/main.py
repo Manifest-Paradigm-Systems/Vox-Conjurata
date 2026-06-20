@@ -47,9 +47,24 @@ def get_or_create_prompt_cache(seed_path: str):
         _prompt_cache[seed_path] = prompt_cache
     return _prompt_cache[seed_path]
 
+def _compute_max_len(dialogue_text: str) -> int:
+    """
+    Compute a tight upper-bound on audio patch generation length based on the
+    spoken word count alone (excluding any control instruction prefix).
+
+    VoxCPM2 produces ~4-8 audio patches per spoken word.  We use a multiplier
+    of 9 (generous) plus a fixed 20-patch head-room so the model has room to
+    speak naturally while being prevented from running to its 2000-step default
+    when the stop head fails to fire.
+    """
+    word_count = max(1, len(dialogue_text.split()))
+    return max(25, word_count * 9 + 20)
+
+
 def generate_with_cache(
     text: str,
     seed_path: str,
+    dialogue_text: str = "",
     inference_timesteps: int = 4,
     cfg_value: float = 2.0
 ) -> np.ndarray:
@@ -60,11 +75,17 @@ def generate_with_cache(
     
     text = text.replace("\n", " ")
     text = re.sub(r"\s+", " ", text)
+
+    # Compute max_len from the raw dialogue words to prevent runaway generation
+    # when the control-instruction prefix inflates target_text_length.
+    safe_max_len = _compute_max_len(dialogue_text or text)
+    logger.info(f"⏱️  [vox-audio-core] max_len cap: {safe_max_len} (from '{(dialogue_text or text)[:60]}')")
     
     t_gen_start = time.time()
     gen = vox_engine.tts_model._generate_with_prompt_cache(
         target_text=text,
         prompt_cache=prompt_cache,
+        max_len=safe_max_len,
         inference_timesteps=inference_timesteps,
         cfg_value=cfg_value,
         retry_badcase=False
@@ -78,16 +99,22 @@ def generate_with_cache(
 def generate_stream_with_cache(
     text: str,
     seed_path: str,
+    dialogue_text: str = "",
     inference_timesteps: int = 4,
     cfg_value: float = 2.0
 ) -> Generator[np.ndarray, None, None]:
     prompt_cache = get_or_create_prompt_cache(seed_path)
     text = text.replace("\n", " ")
     text = re.sub(r"\s+", " ", text)
+
+    # Compute max_len from the raw dialogue words to prevent runaway generation
+    safe_max_len = _compute_max_len(dialogue_text or text)
+    logger.info(f"⏱️  [vox-audio-core] STREAM max_len cap: {safe_max_len}")
     
     gen = vox_engine.tts_model._generate_with_prompt_cache(
         target_text=text,
         prompt_cache=prompt_cache,
+        max_len=safe_max_len,
         inference_timesteps=inference_timesteps,
         cfg_value=cfg_value,
         retry_badcase=False,
@@ -219,10 +246,12 @@ async def generate_audio(request: DialogueRequest):
         final_text = build_voxcpm_text(request.dialogue_text, request.control_instruction)
         logger.info(f"Generating dialogue for NPC: {request.npc_id} | text: '{final_text[:80]}...'")
 
-        # Execute high-fidelity cloning using cached prompt and no retry
+        # Execute high-fidelity cloning using cached prompt and no retry.
+        # Pass dialogue_text separately so max_len is computed from spoken words only.
         clean_audio = generate_with_cache(
             text=final_text,
             seed_path=seed_path,
+            dialogue_text=request.dialogue_text,
             inference_timesteps=4
         )
 
@@ -262,6 +291,8 @@ async def generate_audio_stream(request: DialogueRequest):
         sample_rate = vox_engine.tts_model.sample_rate
         final_text = build_voxcpm_text(request.dialogue_text, request.control_instruction)
         logger.info(f"STREAM: Generating dialogue for NPC: {request.npc_id} | text: '{final_text[:80]}...'")
+        # Capture dialogue_text for the closure
+        _dialogue_text = request.dialogue_text
 
         def wav_chunk_generator() -> Generator[bytes, None, None]:
             # Emit the WAV header first so the browser knows the format
@@ -270,6 +301,7 @@ async def generate_audio_stream(request: DialogueRequest):
             for chunk in generate_stream_with_cache(
                 text=final_text,
                 seed_path=final_seed,
+                dialogue_text=_dialogue_text,
                 inference_timesteps=4,
             ):
                 # Apply DSP on each chunk (Pedalboard is ~1ms per chunk)
