@@ -408,7 +408,7 @@ def standardize_speech_text(text: str, engine_type: str, emotion: str) -> str:
     clean_text = re.sub(r'\s+', ' ', clean_text).strip()
     
     # Prepend emotion tag if specified and not neutral
-    if emotion and emotion.strip():
+    if emotion and emotion.strip() and emotion.strip().lower() != "neutral":
         emo = emotion.strip().lower()
         if engine_type == "humanoid":
             clean_text = f"({emo}) {clean_text}"
