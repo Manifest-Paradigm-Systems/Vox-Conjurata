@@ -721,7 +721,7 @@ async def dialogue_end(request: Request):
         logger.error(f"Failed to end dialogue session: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/tts-chunk")
+@app.post("/api/v1/tts-chunk")
 async def tts_chunk(request: Request):
     """
     Subsequent chunk voice generation requested by client during pipelined playback.
