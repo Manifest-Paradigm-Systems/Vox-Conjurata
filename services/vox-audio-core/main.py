@@ -31,8 +31,6 @@ torch.set_float32_matmul_precision('high')
 logger.info("Loading VoxCPM2 model...")
 # Load in eager mode to prevent long Inductor compilation overhead of quantized weights
 vox_engine = VoxCPM.from_pretrained("openbmb/VoxCPM2", load_denoiser=False, optimize=False)
-logger.info("Quantizing VoxCPM2 to INT8 Weight-Only...")
-quantize_(vox_engine.tts_model, Int8WeightOnlyConfig())
 logger.info("Model loaded.")
 
 SEED_DIR = os.getenv("SEED_DIR", "/app/seeds/")
