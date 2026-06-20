@@ -8,14 +8,14 @@
   },
   "session_allowances": {
     "G3SJW9rRHe7J3AOH": 0.0,
-    "gm": 99.7439999999998
+    "gm": 99.7404999999998
   },
   "session_caps": {
     "G3SJW9rRHe7J3AOH": 0.0,
     "gm": 100.0
   },
   "session_spent": {
-    "gm": 0.25600000000000017,
+    "gm": 0.2595000000000002,
     "G3SJW9rRHe7J3AOH": 0.026,
     "nXnKU6oZYzdg0xSY": 0.06800000000000002
   },
@@ -1417,6 +1417,12 @@
       "amount": 0.00225,
       "description": "AI Orchestration Fee: Ezren",
       "timestamp": 1781980407.8457718
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.0035,
+      "description": "Autonomous NPC Reply: Xulgath Warrior",
+      "timestamp": 1781980409.604296
     }
   ]
 }
