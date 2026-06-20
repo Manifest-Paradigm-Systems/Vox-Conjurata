@@ -52,13 +52,16 @@ def _compute_max_len(dialogue_text: str) -> int:
     Compute a tight upper-bound on audio patch generation length based on the
     spoken word count alone (excluding any control instruction prefix).
 
-    VoxCPM2 produces ~4-8 audio patches per spoken word.  We use a multiplier
-    of 9 (generous) plus a fixed 20-patch head-room so the model has room to
-    speak naturally while being prevented from running to its 2000-step default
-    when the stop head fails to fire.
+    VoxCPM2 produces ~4-6 audio patches per spoken word at 8 words/chunk.  We
+    use a multiplier of 6 (measured empirically) plus a fixed 18-patch buffer
+    so the model can finish naturally but cannot run to its 2000-step default.
+
+    Examples for 8-word chunks:
+      8 words * 6 + 18 = 66  steps  (~6s at ~11 it/s)
+      4 words * 6 + 18 = 42  steps  (~4s)
     """
     word_count = max(1, len(dialogue_text.split()))
-    return max(25, word_count * 9 + 20)
+    return max(22, word_count * 6 + 18)
 
 
 def generate_with_cache(

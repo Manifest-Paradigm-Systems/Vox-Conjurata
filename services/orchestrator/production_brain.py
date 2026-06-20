@@ -418,6 +418,10 @@ def standardize_speech_text(text: str, engine_type: str, emotion: str) -> str:
     # Strip any XML/HTML tags like <Narrative> or </Narrative>
     clean_text = re.sub(r'<[^>]+>', '', clean_text).strip()
     
+    # Strip dialogue quote characters that the LLM wraps around speech.
+    # These confuse VoxCPM2's stop token predictor and cause runaway generation.
+    clean_text = clean_text.strip('\"\'\u201c\u201d\u2018\u2019')
+    
     # Clean up whitespace
     clean_text = re.sub(r'\s+', ' ', clean_text).strip()
     
