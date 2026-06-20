@@ -154,6 +154,11 @@ class MiniCPMAttention(nn.Module):
         query_states = query_states.contiguous()
         key_states = key_states.contiguous()
         value_states = value_states.contiguous()
+        orig_dtype = query_states.dtype
+        if orig_dtype in (torch.float16, torch.bfloat16):
+            query_states = query_states.to(torch.float32)
+            key_states = key_states.to(torch.float32)
+            value_states = value_states.to(torch.float32)
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,
@@ -161,6 +166,8 @@ class MiniCPMAttention(nn.Module):
             is_causal=is_causal,
             enable_gqa=True,
         )
+        if orig_dtype in (torch.float16, torch.bfloat16):
+            attn_output = attn_output.to(orig_dtype)
 
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.reshape(bsz, q_len, self.num_heads * self.head_dim)
@@ -205,6 +212,11 @@ class MiniCPMAttention(nn.Module):
         query_states = query_states.contiguous()
         key_cache = key_cache.contiguous()
         value_cache = value_cache.contiguous()
+        orig_dtype = query_states.dtype
+        if orig_dtype in (torch.float16, torch.bfloat16):
+            query_states = query_states.to(torch.float32)
+            key_cache = key_cache.to(torch.float32)
+            value_cache = value_cache.to(torch.float32)
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_cache,
@@ -212,6 +224,8 @@ class MiniCPMAttention(nn.Module):
             attn_mask=attn_mask,
             enable_gqa=True,
         )
+        if orig_dtype in (torch.float16, torch.bfloat16):
+            attn_output = attn_output.to(orig_dtype)
 
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.reshape(bsz, self.num_heads * self.head_dim)
