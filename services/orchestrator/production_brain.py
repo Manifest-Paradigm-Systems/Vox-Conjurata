@@ -1203,7 +1203,9 @@ async def _execute_voice_conversion_pipeline(task_id: str, audio_bytes: bytes, a
                 std_reply = standardize_speech_text(reply_text, target_engine, "neutral")
                 
                 # Split reply into ~12 word chunks to minimize synthesis latency for playback start
+                logger.info(f"DEBUG CHUNKING | std_reply: '{std_reply}'")
                 reply_chunks = split_dialogue_into_chunks(std_reply, max_words=12)
+                logger.info(f"DEBUG CHUNKING | reply_chunks: {reply_chunks}")
                 first_chunk = reply_chunks[0] if reply_chunks else std_reply
                 subsequent_chunks = reply_chunks[1:] if len(reply_chunks) > 1 else []
                 
