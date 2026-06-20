@@ -160,6 +160,7 @@ services:
     - seccomp=unconfined
     environment:
     - HSA_OVERRIDE_GFX_VERSION=12.0.1
+    - ROCR_VISIBLE_DEVICES=1
     - CUDA_VISIBLE_DEVICES=""
     - PYTHONUNBUFFERED=1
     networks:
@@ -185,6 +186,7 @@ services:
     - ROCR_VISIBLE_DEVICES=0
     - HIP_VISIBLE_DEVICES=0
     - CUDA_VISIBLE_DEVICES=0
+    - MIOPEN_FIND_MODE=2
     - VRAM_LIMIT=0.80GB
     - HF_TOKEN=${HF_TOKEN}
     - STABLE_AUDIO_MODEL=stabilityai/stable-audio-open-1.0
@@ -214,6 +216,7 @@ services:
     - ROCR_VISIBLE_DEVICES=0
     - HIP_VISIBLE_DEVICES=0
     - CUDA_VISIBLE_DEVICES=0
+    - MIOPEN_FIND_MODE=2
     - AUDIO_ENGINE_TYPE=sfx
     - EXECUTION_DEVICE=gpu
     - VRAM_LIMIT=0.80GB
@@ -247,6 +250,7 @@ services:
     - ROCR_VISIBLE_DEVICES=0
     - HIP_VISIBLE_DEVICES=0
     - CUDA_VISIBLE_DEVICES=0
+    - MIOPEN_FIND_MODE=2
     - VRAM_LIMIT=4.20GB
     - SEED_DIR=/app/voice_seeds/
     - PYTORCH_ALLOC_CONF=expandable_segments:True
