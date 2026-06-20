@@ -256,8 +256,12 @@ async def generate_audio(request: DialogueRequest):
             inference_timesteps=4
         )
 
+        logger.info(f"📊 [vox-audio-core] clean_audio: NaN count={np.isnan(clean_audio).sum()}, min={np.min(clean_audio)}, max={np.max(clean_audio)}")
+
         # Apply C++ Pedalboard DSP (monster textures, pitch shift, etc.)
         output_audio = apply_dsp(clean_audio, sample_rate, request.dsp_presets)
+
+        logger.info(f"📊 [vox-audio-core] output_audio: NaN count={np.isnan(output_audio).sum()}, min={np.min(output_audio)}, max={np.max(output_audio)}")
 
         # Return native WAV — no transcoding overhead
         buffer = io.BytesIO()
