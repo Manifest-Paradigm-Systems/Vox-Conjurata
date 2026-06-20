@@ -366,6 +366,20 @@ def split_into_sentences(text: str) -> List[str]:
     raw_sentences = re.split(r'(?<=[.!?])\s+|\n+', text)
     return [s.strip() for s in raw_sentences if s.strip()]
 
+def is_llm_output_garbage(text: str) -> bool:
+    """
+    Detect KV-cache corruption: when llama.cpp produces garbled output the reply
+    consists almost entirely of repeated punctuation (usually '?'). Guard against
+    this to prevent passing garbage text to VoxCPM2, which causes GPU page faults.
+    Returns True if the output should be discarded.
+    """
+    if not text or len(text.strip()) < 2:
+        return True
+    # Count non-alphanumeric, non-space characters
+    junk_chars = sum(1 for c in text if not (c.isalnum() or c.isspace()))
+    ratio = junk_chars / max(1, len(text))
+    return ratio > 0.5
+
 def concatenate_wavs(wav_bytes_list: List[bytes]) -> Optional[bytes]:
     valid_wavs = [w for w in wav_bytes_list if w]
     if not valid_wavs: return None
@@ -1221,9 +1235,26 @@ async def _execute_voice_conversion_pipeline(task_id: str, audio_bytes: bytes, a
                 
                 target_engine = "monster" if meta.npc_context.is_monster else "humanoid"
                 std_reply = standardize_speech_text(reply_text, target_engine, "neutral")
-                
+
+                # Guard against KV-cache corruption: if the LLM produced garbage
+                # (e.g. all '?' chars), skip TTS to prevent GPU crash and log a warning.
+                if is_llm_output_garbage(std_reply):
+                    logger.error(
+                        f"LLM output appears corrupted (likely KV-cache fault): '{std_reply[:60]}'. "
+                        f"Skipping TTS. The llama.cpp server should be restarted."
+                    )
+                    ai_reply_obj = AIReply(
+                        transcription="[System: LLM output corrupted — restart vox-llm-llama]",
+                        audio_data=None,
+                        image_prompt=None,
+                        subsequent_chunks=[],
+                        control_instruction=None
+                    )
+                    # Skip rest of this block
+                else:
+
                 # Split reply into ~8 word chunks to minimize synthesis latency for playback start
-                logger.info(f"DEBUG CHUNKING | std_reply: '{std_reply}'")
+                 logger.info(f"DEBUG CHUNKING | std_reply: '{std_reply}'")
                 reply_chunks = split_dialogue_into_chunks(std_reply, max_words=8)
                 logger.info(f"DEBUG CHUNKING | reply_chunks: {reply_chunks}")
                 first_chunk = reply_chunks[0] if reply_chunks else std_reply
