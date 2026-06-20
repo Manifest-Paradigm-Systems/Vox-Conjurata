@@ -1735,7 +1735,7 @@ async function processAndSendAudio() {
                             return (async () => {
                                 try {
                                     console.log(`🎙️ Vox | Fetching chunk ${idx + 2} text: '${chunkText}'`);
-                                    const chunkRes = await fetch("/api/tts-chunk", {
+                                    const chunkRes = await fetch("/api/v1/tts-chunk", {
                                         method: "POST",
                                         headers: { "Content-Type": "application/json" },
                                         body: JSON.stringify({
