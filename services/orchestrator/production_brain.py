@@ -387,14 +387,34 @@ def concatenate_wavs(wav_bytes_list: List[bytes]) -> Optional[bytes]:
 
 def standardize_speech_text(text: str, engine_type: str, emotion: str) -> str:
     import re
+    # Strip metadata prefixes
     clean_text = re.sub(r'^(?i:Mood|Emotion|Sentiment|Tone|Note|Instruction|Direction|Delivery|Background|Acoustics|Style|Voice|Speaker):\s*[a-z\s]*', '', text).strip()
+    
+    # Strip existing [brackets] and (parentheses)
     clean_text = re.sub(r'\[.*?\]|\(.*?\)', '', clean_text).strip()
+    
+    # Convert asterisks to inline tags for humanoid, or strip them for monster
     if engine_type == "humanoid":
         clean_text = re.sub(r'\*(.*?)\*', r'<\1>', clean_text)
     else:
         clean_text = re.sub(r'\*.*?\*', '', clean_text)
+        
     clean_text = re.sub(r'\w+:\s*', '', clean_text)
+    
+    # Strip any XML/HTML tags like <Narrative> or </Narrative>
+    clean_text = re.sub(r'<[^>]+>', '', clean_text).strip()
+    
+    # Clean up whitespace
     clean_text = re.sub(r'\s+', ' ', clean_text).strip()
+    
+    # Prepend emotion tag if specified and not neutral
+    if emotion and emotion.strip():
+        emo = emotion.strip().lower()
+        if engine_type == "humanoid":
+            clean_text = f"({emo}) {clean_text}"
+        elif engine_type == "monster":
+            clean_text = f"[{emo}] {clean_text}"
+            
     return clean_text
 
 def get_vram_used_gb() -> float:
