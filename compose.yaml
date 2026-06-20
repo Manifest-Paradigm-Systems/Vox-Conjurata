@@ -249,6 +249,7 @@ services:
     - CUDA_VISIBLE_DEVICES=0
     - VRAM_LIMIT=4.20GB
     - SEED_DIR=/app/voice_seeds/
+    - PYTORCH_ALLOC_CONF=expandable_segments:True
     volumes:
     - model_storage:/models:z
     - ./services/orchestrator/voice_seeds:/app/voice_seeds:z
