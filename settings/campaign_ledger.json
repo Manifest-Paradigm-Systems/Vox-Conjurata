@@ -8,16 +8,16 @@
   },
   "session_allowances": {
     "G3SJW9rRHe7J3AOH": 0.0,
-    "gm": 99.80349999999984
+    "gm": 99.79999999999984
   },
   "session_caps": {
     "G3SJW9rRHe7J3AOH": 0.0,
     "gm": 100.0
   },
   "session_spent": {
-    "gm": 0.19650000000000015,
+    "gm": 0.20000000000000015,
     "G3SJW9rRHe7J3AOH": 0.026,
-    "nXnKU6oZYzdg0xSY": 0.05375000000000001
+    "nXnKU6oZYzdg0xSY": 0.056000000000000015
   },
   "transactions": [
     {
@@ -1261,6 +1261,24 @@
       "amount": 0.0035,
       "description": "Autonomous NPC Reply: Xulgath Warrior",
       "timestamp": 1781937585.969369
+    },
+    {
+      "user_id": "nXnKU6oZYzdg0xSY",
+      "amount": -0.00225,
+      "description": "REFUND: Cancelled Task (LLM)",
+      "timestamp": 1781937613.9266946
+    },
+    {
+      "user_id": "nXnKU6oZYzdg0xSY",
+      "amount": 0.00225,
+      "description": "AI Orchestration Fee: Ezren",
+      "timestamp": 1781937625.3078437
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.0035,
+      "description": "Autonomous NPC Reply: Xulgath Warrior",
+      "timestamp": 1781937627.389976
     }
   ]
 }
