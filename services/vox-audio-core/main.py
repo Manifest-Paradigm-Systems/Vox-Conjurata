@@ -3,6 +3,7 @@ from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
 from typing import Optional, Generator
 import os
+import time
 import json
 import soundfile as sf
 import numpy as np
@@ -52,10 +53,15 @@ def generate_with_cache(
     inference_timesteps: int = 4,
     cfg_value: float = 2.0
 ) -> np.ndarray:
+    t_start = time.time()
     prompt_cache = get_or_create_prompt_cache(seed_path)
+    t_cache = time.time() - t_start
+    logger.info(f"⏱️  [vox-audio-core] Cache fetch: {t_cache:.4f}s")
+    
     text = text.replace("\n", " ")
     text = re.sub(r"\s+", " ", text)
     
+    t_gen_start = time.time()
     gen = vox_engine.tts_model._generate_with_prompt_cache(
         target_text=text,
         prompt_cache=prompt_cache,
@@ -64,6 +70,9 @@ def generate_with_cache(
         retry_badcase=False
     )
     wav, _, _ = next_and_close(gen)
+    t_gen = time.time() - t_gen_start
+    logger.info(f"⏱️  [vox-audio-core] TTS model generate: {t_gen:.4f}s")
+    logger.info(f"⏱️  [vox-audio-core] Total generate_with_cache: {time.time() - t_start:.4f}s")
     return wav.squeeze(0).cpu().numpy()
 
 def generate_stream_with_cache(
