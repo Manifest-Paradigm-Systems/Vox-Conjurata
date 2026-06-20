@@ -1171,10 +1171,18 @@ async def _execute_voice_conversion_pipeline(task_id: str, audio_bytes: bytes, a
         chronicle.log_interaction(meta.activeSpeakerName, transcription)
         
         # 2. LLM Enrichment
-        t_enrich_start = time.time()
-        enriched = await enrich_and_instruct(meta.activeSpeakerName, role, transcription, is_monster=meta.isMonster)
-        t_enrich = time.time() - t_enrich_start
-        logger.info(f"⏱️  Pipeline Latency | LLM Enrichment: {t_enrich:.4f}s")
+        enriched = None
+        if not meta.isAutonomousTrigger and meta.useVoxVoice:
+            t_enrich_start = time.time()
+            enriched = await enrich_and_instruct(meta.activeSpeakerName, role, transcription, is_monster=meta.isMonster)
+            t_enrich = time.time() - t_enrich_start
+            logger.info(f"⏱️  Pipeline Latency | LLM Enrichment: {t_enrich:.4f}s")
+        else:
+            enriched = DialogueEnrichment(
+                speaker=meta.activeSpeakerName, role=role, raw_text=transcription,
+                emotional_resonance="Neutral", vocal_delivery_prompt="Standard.",
+                instruct_text=transcription, monster_text=transcription, emotion_tag="neutral"
+            )
         engine = pipeline_factory.get_engine()
         audio_data = None
         ai_reply_obj = None
@@ -1199,8 +1207,8 @@ async def _execute_voice_conversion_pipeline(task_id: str, audio_bytes: bytes, a
                 first_chunk = reply_chunks[0] if reply_chunks else std_reply
                 subsequent_chunks = reply_chunks[1:] if len(reply_chunks) > 1 else []
                 
-                # Deterministic vocal delivery prompt selection (skips LLM call)
-                npc_control = "A deep, guttural, feral monster voice. Aggressive and territorial." if meta.npc_context.is_monster else "A gruff humanoid voice. Direct and menacing."
+                # Deterministic vocal delivery prompt selection (skips LLM call, shortened for speed)
+                npc_control = "Guttural monster." if meta.npc_context.is_monster else "Gruff voice."
                 
                 ai_audio = None
                 if meta.targetVoxVoice:
