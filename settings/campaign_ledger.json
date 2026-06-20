@@ -4,20 +4,20 @@
   "personal_wallets": {
     "gm": 979.7102499999966,
     "G3SJW9rRHe7J3AOH": 208.97400000000002,
-    "nXnKU6oZYzdg0xSY": 9.931999999999995
+    "nXnKU6oZYzdg0xSY": 9.929749999999995
   },
   "session_allowances": {
     "G3SJW9rRHe7J3AOH": 0.0,
-    "gm": 99.73474999999979
+    "gm": 99.73124999999979
   },
   "session_caps": {
     "G3SJW9rRHe7J3AOH": 0.0,
     "gm": 100.0
   },
   "session_spent": {
-    "gm": 0.26525000000000015,
+    "gm": 0.26875000000000016,
     "G3SJW9rRHe7J3AOH": 0.026,
-    "nXnKU6oZYzdg0xSY": 0.07025000000000002
+    "nXnKU6oZYzdg0xSY": 0.07250000000000002
   },
   "transactions": [
     {
@@ -1441,6 +1441,18 @@
       "amount": 0.0035,
       "description": "Autonomous NPC Reply: Xulgath Warrior",
       "timestamp": 1781980900.2527485
+    },
+    {
+      "user_id": "nXnKU6oZYzdg0xSY",
+      "amount": 0.00225,
+      "description": "AI Orchestration Fee: Ezren",
+      "timestamp": 1781980983.8588586
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.0035,
+      "description": "Autonomous NPC Reply: Xulgath Warrior",
+      "timestamp": 1781980989.2295597
     }
   ]
 }
