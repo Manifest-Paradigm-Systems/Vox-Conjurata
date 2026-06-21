@@ -10,6 +10,8 @@ import numpy as np
 import io
 import struct
 import torch
+import gc
+import asyncio
 from voxcpm import VoxCPM
 from pedalboard import Pedalboard, PitchShift, Distortion, Chorus, Reverb, HighpassFilter
 import logging
@@ -22,6 +24,30 @@ import re
 logger = logging.getLogger("vox-audio-core")
 
 app = FastAPI(title="Vox Conjurata Core Audio Engine")
+
+last_used_time = time.time()
+
+def update_last_used():
+    global last_used_time
+    last_used_time = time.time()
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(vram_flusher_loop())
+
+async def vram_flusher_loop():
+    global last_used_time
+    logger.info("🧹 VRAM Flusher background loop started.")
+    while True:
+        await asyncio.sleep(15)
+        if time.time() - last_used_time > 60:
+            if torch.cuda.is_available():
+                before = torch.cuda.memory_reserved()
+                torch.cuda.empty_cache()
+                gc.collect()
+                after = torch.cuda.memory_reserved()
+                if before > after:
+                    logger.info(f"🧹 VRAM Flusher: Cleaned PyTorch cache. Freed {(before - after)/1024**2:.2f} MB. Reserved: {after/1024**2:.2f} MB")
 
 # Enable TF32 for much faster matrix multiplication on supported GPUs
 torch.set_float32_matmul_precision('high')
@@ -198,6 +224,7 @@ async def initialize_npc(request: NPCIdentityRequest):
     Saves a 5-second deterministic phonetic anchor to disk.
     """
     try:
+        update_last_used()
         seed_path = os.path.join(SEED_DIR, f"{request.npc_id}.wav")
 
         # Use VoxCPM2 Voice Design block notation
@@ -225,6 +252,7 @@ async def generate_audio(request: DialogueRequest):
     then applies mathematical DSP filters for custom monstrous textures.
     """
     try:
+        update_last_used()
         # Check standard seed path
         seed_path = os.path.join(SEED_DIR, f"{request.npc_id}.wav")
         # Check palette fallback for system archetypes and narrator
@@ -281,6 +309,7 @@ async def generate_audio_stream(request: DialogueRequest):
     The browser can play these chunks using a MediaSource + AudioContext.
     """
     try:
+        update_last_used()
         seed_path = os.path.join(SEED_DIR, f"{request.npc_id}.wav")
         palette_path = os.path.join(SEED_DIR, "_palette", f"{request.npc_id}.wav")
 
@@ -329,6 +358,7 @@ async def generate_audio_stream(request: DialogueRequest):
 async def warm_cache(request: NPCIdentityRequest):
     """Warm prompt cache for a specific NPC."""
     try:
+        update_last_used()
         seed_path = os.path.join(SEED_DIR, f"{request.npc_id}.wav")
         palette_path = os.path.join(SEED_DIR, "_palette", f"{request.npc_id}.wav")
 

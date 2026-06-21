@@ -7,6 +7,8 @@ import os
 import tempfile
 import torch
 import gc
+import time
+import asyncio
 from diffusers import StableAudioPipeline
 
 logging.basicConfig(level=logging.INFO)
@@ -21,6 +23,30 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+last_used_time = time.time()
+
+def update_last_used():
+    global last_used_time
+    last_used_time = time.time()
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(vram_flusher_loop())
+
+async def vram_flusher_loop():
+    global last_used_time
+    logger.info("🧹 VRAM Flusher background loop started.")
+    while True:
+        await asyncio.sleep(15)
+        if time.time() - last_used_time > 60:
+            if torch.cuda.is_available():
+                before = torch.cuda.memory_reserved()
+                torch.cuda.empty_cache()
+                gc.collect()
+                after = torch.cuda.memory_reserved()
+                if before > after:
+                    logger.info(f"🧹 VRAM Flusher: Cleaned PyTorch cache. Freed {(before - after)/1024**2:.2f} MB. Reserved: {after/1024**2:.2f} MB")
 
 ENGINE_TYPE = os.getenv("AUDIO_ENGINE_TYPE", "music")
 MODEL_ID = os.getenv("STABLE_AUDIO_MODEL", "stabilityai/stable-audio-3-small")
@@ -47,6 +73,7 @@ async def generate_audio(request: AudioRequest):
     logger.info(f"Generating {ENGINE_TYPE} audio for prompt: '{request.prompt[:50]}...'")
     
     try:
+        update_last_used()
         if pipe is None:
             raise HTTPException(status_code=500, detail=f"Pipeline not loaded for {ENGINE_TYPE}")
 
