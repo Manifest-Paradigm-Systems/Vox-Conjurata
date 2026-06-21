@@ -73,9 +73,6 @@ class ResourceManager:
         # Traffic light to prevent heavy GPU tasks from running at the exact same millisecond
         self.gpu_priority_lock = PriorityGPULock()
 
-    def gpu_lock(self, priority: int):
-        return GPULockContext(self.gpu_priority_lock, priority)
-
         # State tracking (obsolete but kept for compatibility)
         self.current_resident = "always-on"
         self.burst_services = []
@@ -83,6 +80,9 @@ class ResourceManager:
         # Start background worker
         self.worker_task = None
         self.processing_tasks: Dict[str, asyncio.Task] = {}
+
+    def gpu_lock(self, priority: int):
+        return GPULockContext(self.gpu_priority_lock, priority)
 
     def start_worker(self):
         if not self.worker_task:
