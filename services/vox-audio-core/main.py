@@ -295,9 +295,7 @@ async def generate_audio(request: DialogueRequest):
         buffer = io.BytesIO()
         sf.write(buffer, output_audio, sample_rate, format='WAV')
         
-        # Clean VRAM after audio generation
-        torch.cuda.empty_cache()
-        gc.collect()
+
         
         return Response(content=buffer.getvalue(), media_type="audio/wav")
 
@@ -378,9 +376,7 @@ async def warm_cache(request: NPCIdentityRequest):
 
         get_or_create_prompt_cache(final_seed)
         
-        # Clean VRAM after warming cache
-        torch.cuda.empty_cache()
-        gc.collect()
+
         
         return {"status": "success", "message": f"Cache warmed for {request.npc_id}"}
     except Exception as e:
