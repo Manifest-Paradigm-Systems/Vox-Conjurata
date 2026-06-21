@@ -54,30 +54,32 @@ MODEL_ID = os.getenv("STABLE_AUDIO_MODEL", "stabilityai/stable-audio-3-small")
 class AudioRequest(BaseModel):
     prompt: str
     duration_seconds: float = 30.0
+    engine_type: str | None = None
 
 @app.get("/")
 async def root():
-    return {"service": f"vox-audio-generation-{ENGINE_TYPE}", "status": "running"}
+    return {"service": f"vox-audio-generation-consolidated", "status": "running"}
 
 # Global pre-loaded pipeline to keep the model resident in VRAM for instant triggers
 pipe = None
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-logger.info(f"Pre-loading Stable Audio {ENGINE_TYPE} model {MODEL_ID} to VRAM...")
+logger.info(f"Pre-loading Stable Audio model {MODEL_ID} to VRAM...")
 pipe = StableAudioPipeline.from_pretrained(MODEL_ID, torch_dtype=torch.float16).to(device)
-logger.info(f"Stable Audio {ENGINE_TYPE} model loaded and resident in VRAM.")
+logger.info(f"Stable Audio model loaded and resident in VRAM.")
 
 @app.post("/generate")
 async def generate_audio(request: AudioRequest):
     global pipe
-    logger.info(f"Generating {ENGINE_TYPE} audio for prompt: '{request.prompt[:50]}...'")
+    engine_type = request.engine_type or ENGINE_TYPE
+    logger.info(f"Generating {engine_type} audio for prompt: '{request.prompt[:50]}...'")
     
     try:
         update_last_used()
         if pipe is None:
-            raise HTTPException(status_code=500, detail=f"Pipeline not loaded for {ENGINE_TYPE}")
+            raise HTTPException(status_code=500, detail=f"Pipeline not loaded")
 
-        prompt_prefix = "TrackType: Music, VocalType: Instrumental, " if ENGINE_TYPE == "music" else "TrackType: SFX, "
+        prompt_prefix = "TrackType: Music, VocalType: Instrumental, " if engine_type == "music" else "TrackType: SFX, "
         formatted_prompt = f"{prompt_prefix}{request.prompt}"
         
         with torch.inference_mode():

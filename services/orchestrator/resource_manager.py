@@ -241,11 +241,13 @@ class ResourceManager:
             await push_to_foundry("sfx-trigger", {"sound_id": sound_id, "prompt": prompt})
             return
 
-        url = "http://vox-audio-generation-sfx:8000/generate"
+        url = "http://vox-audio-generation:8000/generate"
         task.status = "processing"
         task.progress = 0.2
+        payload = task.payload.copy()
+        payload["engine_type"] = "sfx"
         async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.post(url, json=task.payload)
+            resp = await client.post(url, json=payload)
             if resp.status_code == 200:
                 # Store in vault for future replays
                 with open(vault_path, "wb") as f:
@@ -387,10 +389,12 @@ class ResourceManager:
             task.status = "failed"
             return
 
-        url = "http://vox-audio-generation-music:8000/generate"
+        url = "http://vox-audio-generation:8000/generate"
         task.progress = 0.4
+        payload = task.payload.copy()
+        payload["engine_type"] = "music"
         async with httpx.AsyncClient(timeout=300.0) as client:
-            resp = await client.post(url, json=task.payload)
+            resp = await client.post(url, json=payload)
             if resp.status_code == 200:
                 task.progress = 1.0
             else:

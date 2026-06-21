@@ -165,10 +165,10 @@ services:
     - vox-net
     restart: unless-stopped
 
-  vox-audio-generation-music:
+  vox-audio-generation:
     build:
       context: ./services/vox-audio-generation
-    container_name: vox-audio-generation-music
+    container_name: vox-audio-generation
     ports:
     - 8000:8000
     devices:
@@ -185,37 +185,6 @@ services:
     - HIP_VISIBLE_DEVICES=0
     - CUDA_VISIBLE_DEVICES=0
     - MIOPEN_FIND_MODE=2
-    - VRAM_LIMIT=0.80GB
-    - HF_TOKEN=${HF_TOKEN}
-    - STABLE_AUDIO_MODEL=stabilityai/stable-audio-open-1.0
-    volumes:
-    - ./cache/huggingface:/root/.cache/huggingface:z
-    command: ["python", "tts_engine.py", "--precision", "fp8"]
-    networks:
-    - vox-net
-    restart: unless-stopped
-
-  vox-audio-generation-sfx:
-    build:
-      context: ./services/vox-audio-generation
-    container_name: vox-audio-generation-sfx
-    ports:
-    - 8001:8000
-    devices:
-    - /dev/kfd:/dev/kfd
-    - /dev/dri:/dev/dri
-    group_add:
-    - "39"
-    - "105"
-    security_opt:
-    - seccomp=unconfined
-    environment:
-    - HSA_OVERRIDE_GFX_VERSION=12.0.1
-    - ROCR_VISIBLE_DEVICES=0
-    - HIP_VISIBLE_DEVICES=0
-    - CUDA_VISIBLE_DEVICES=0
-    - MIOPEN_FIND_MODE=2
-    - AUDIO_ENGINE_TYPE=sfx
     - EXECUTION_DEVICE=gpu
     - VRAM_LIMIT=0.80GB
     - HF_TOKEN=${HF_TOKEN}
