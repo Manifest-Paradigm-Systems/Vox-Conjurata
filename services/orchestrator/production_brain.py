@@ -559,8 +559,11 @@ class VoxAudioCoreEngine(SpeechEngine):
             }
             if control_instruction:
                 payload["control_instruction"] = control_instruction
-            resp = await client.post(f"{TTS_ACTOR_URL}/generate", json=payload)
-            return resp.content if resp.status_code == 200 else None
+            
+            # Acquire GPU lock with highest priority (0) for gameplay-critical speech
+            async with resource_manager.gpu_lock(priority=0):
+                resp = await client.post(f"{TTS_ACTOR_URL}/generate", json=payload)
+                return resp.content if resp.status_code == 200 else None
         except Exception as e:
             logger.error(f"VoxAudioCore generation failed: {e}")
             return None

@@ -17,19 +17,64 @@ class Task(BaseModel):
     progress: float = 0.0
     created_at: float
 
+class PriorityGPULock:
+    def __init__(self):
+        self._locked = False
+        self._waiters = [] # list of (priority, event)
+
+    async def acquire(self, priority: int):
+        if not self._locked:
+            self._locked = True
+            return
+        
+        event = asyncio.Event()
+        waiter = (priority, event)
+        self._waiters.append(waiter)
+        # Sort by priority ascending (lower value = higher priority)
+        self._waiters.sort(key=lambda x: x[0])
+        
+        try:
+            await event.wait()
+        except asyncio.CancelledError:
+            if waiter in self._waiters:
+                self._waiters.remove(waiter)
+            raise
+
+    def release(self):
+        if self._waiters:
+            priority, event = self._waiters.pop(0)
+            event.set()
+        else:
+            self._locked = False
+
+class GPULockContext:
+    def __init__(self, lock, priority):
+        self.lock = lock
+        self.priority = priority
+
+    async def __aenter__(self):
+        await self.lock.acquire(self.priority)
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        self.lock.release()
+
 class ResourceManager:
     def __init__(self):
         # We no longer need to connect to docker for swapping, everything is resident
         self.client = None
         logger.info("✅ Resource Manager initialized in 'Always-On' mode. Swapping disabled.")
 
-        self.queue: asyncio.Queue = asyncio.Queue()
+        self.queue: asyncio.PriorityQueue = asyncio.PriorityQueue()
         self.active_tasks: Dict[str, Task] = {}
         self.dedupe_cache: Dict[str, float] = {}
         self.lock = asyncio.Lock()
 
         # Traffic light to prevent heavy GPU tasks from running at the exact same millisecond
-        self.gpu_compute_lock = asyncio.Lock()
+        self.gpu_priority_lock = PriorityGPULock()
+
+    def gpu_lock(self, priority: int):
+        return GPULockContext(self.gpu_priority_lock, priority)
 
         # State tracking (obsolete but kept for compatibility)
         self.current_resident = "always-on"
@@ -65,8 +110,18 @@ class ResourceManager:
         async with self.lock:
             self.active_tasks[task_id] = task
         
-        await self.queue.put(task_id)
-        logger.info(f"📥 Enqueued task: {task_id}")
+        # Determine priority:
+        # "sfx-gen": 1
+        # "music-gen": 2
+        # "vision-scan" / "image-gen": 3
+        priority = 3
+        if task_type == "sfx-gen":
+            priority = 1
+        elif task_type == "music-gen":
+            priority = 2
+            
+        await self.queue.put((priority, task_id))
+        logger.info(f"📥 Enqueued task: {task_id} (priority: {priority})")
         return task_id
 
     async def get_queue_status(self) -> List[Dict[str, Any]]:
@@ -101,7 +156,7 @@ class ResourceManager:
     async def _background_worker(self):
         """Monitors the queue and manages the hot-swaps."""
         while True:
-            task_id = await self.queue.get()
+            priority, task_id = await self.queue.get()
             task = self.active_tasks.get(task_id)
             if not task or task.status == "cancelled":
                 self.queue.task_done()
@@ -126,18 +181,21 @@ class ResourceManager:
         """Logic for executing a task with compute serialization."""
         logger.info(f"⚙️ Processing task {task.id} ({task.type})")
         
-        # 1. SFX generation is resident, no swap needed and doesn't need strict GPU lock
-        if task.type == "sfx-gen":
-            await self._execute_sfx_gen(task)
-            return
-
-        # 2. Execute heavy payload sequentially via lock
         task.status = "processing"
         task.progress = 0.3
         
+        # Determine priority:
+        priority = 3
+        if task.type == "sfx-gen":
+            priority = 1
+        elif task.type == "music-gen":
+            priority = 2
+            
         try:
-            async with self.gpu_compute_lock:
-                if task.type == "image-gen":
+            async with self.gpu_lock(priority):
+                if task.type == "sfx-gen":
+                    await self._execute_sfx_gen(task)
+                elif task.type == "image-gen":
                     await self._execute_image_gen(task)
                 elif task.type == "music-gen":
                     await self._execute_music_gen(task)
