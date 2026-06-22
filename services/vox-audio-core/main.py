@@ -104,7 +104,6 @@ def generate_with_cache(
     text = re.sub(r"\s+", " ", text)
 
     # Compute max_len from the raw dialogue words to prevent runaway generation
-    # when the control-instruction prefix inflates target_text_length.
     safe_max_len = _compute_max_len(dialogue_text or text)
     logger.info(f"⏱️  [vox-audio-core] max_len cap: {safe_max_len} (from '{(dialogue_text or text)[:60]}')")
 
@@ -123,12 +122,21 @@ def generate_with_cache(
     logger.info(f"⏱️  [vox-audio-core] Total generate_with_cache: {time.time() - t_start:.4f}s")
     arr = wav.squeeze(0).cpu().numpy()
 
-    # NaN guard: VoxCPM2 occasionally produces a few NaN samples (~0.003%) on ROCm.
-    # These cause static/crackling. Zero them out — the loss is imperceptible.
+    # NaN guard + ROCm prompt-cache fallback:
+    # _generate_with_prompt_cache produces 100% NaN on AMD ROCm (RDNA3).
+    # When that happens, fall back to direct generate (no voice cloning)
+    # so the user gets audible speech rather than silence.
     nan_count = np.isnan(arr).sum()
-    if nan_count > 0:
-        if nan_count > max(1, arr.size // 100):
-            logger.error(f"⚠️ Severe NaN ({nan_count}/{arr.size}) in generation — zeroing")
+    if nan_count > max(1, arr.size // 100):
+        logger.warning(f"⚠️ Prompt-cache path failed ({nan_count}/{arr.size} NaN), falling back to direct generate")
+        fallback = vox_engine.generate(
+            text=dialogue_text or text,
+            cfg_value=cfg_value,
+            inference_timesteps=inference_timesteps,
+            retry_badcase=False
+        )
+        arr = np.nan_to_num(fallback)
+    elif nan_count > 0:
         arr = np.nan_to_num(arr)
 
     return arr
