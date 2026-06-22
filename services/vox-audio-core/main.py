@@ -261,8 +261,14 @@ async def initialize_npc(request: NPCIdentityRequest):
         raw_wav = vox_engine.generate(
             text=birth_prompt,
             cfg_value=2.5,          # Forces model adherence to text criteria
-            inference_timesteps=12
+            inference_timesteps=12,
+            retry_badcase=False     # Badcase retry produces all-NaN on ROCm
         )
+
+        # NaN guard: abort if the birth clip is unusable
+        if np.isnan(raw_wav).sum() > max(1, raw_wav.size // 100):
+            logger.error(f"⚠️ Birth clip for {request.npc_id} is {np.isnan(raw_wav).sum()}/{raw_wav.size} NaN — aborting")
+            raise HTTPException(status_code=500, detail="Voice generation failed (NaN output — retry later)")
 
         sf.write(seed_path, raw_wav, vox_engine.tts_model.sample_rate)
         return {"status": "success", "seed_path": seed_path}
