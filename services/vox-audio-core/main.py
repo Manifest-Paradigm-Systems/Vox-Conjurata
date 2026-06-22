@@ -105,17 +105,16 @@ def generate_with_cache(
     text = re.sub(r"\s+", " ", text)
 
     t_gen_start = time.time()
-    gen = vox_engine.tts_model.generate(
+    wav = vox_engine.generate(
         text=text,
         cfg_value=cfg_value,
         inference_timesteps=inference_timesteps,
         retry_badcase=False
     )
-    wav = next_and_close(gen)
     t_gen = time.time() - t_gen_start
     logger.info(f"⏱️  [vox-audio-core] Direct generate: {t_gen:.4f}s")
     logger.info(f"⏱️  [vox-audio-core] Total: {time.time() - t_start:.4f}s")
-    arr = wav.squeeze(0).cpu().numpy()
+    arr = wav.squeeze() if hasattr(wav, 'squeeze') else wav
 
     # NaN guard: zero out the rare NaN samples (~0.03%)
     nan_count = np.isnan(arr).sum()
