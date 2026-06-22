@@ -99,7 +99,7 @@ def generate_with_cache(
     prompt_cache = get_or_create_prompt_cache(seed_path)
     t_cache = time.time() - t_start
     logger.info(f"⏱️  [vox-audio-core] Cache fetch: {t_cache:.4f}s")
-    
+
     text = text.replace("\n", " ")
     text = re.sub(r"\s+", " ", text)
 
@@ -107,7 +107,7 @@ def generate_with_cache(
     # when the control-instruction prefix inflates target_text_length.
     safe_max_len = _compute_max_len(dialogue_text or text)
     logger.info(f"⏱️  [vox-audio-core] max_len cap: {safe_max_len} (from '{(dialogue_text or text)[:60]}')")
-    
+
     t_gen_start = time.time()
     gen = vox_engine.tts_model._generate_with_prompt_cache(
         target_text=text,
@@ -121,7 +121,34 @@ def generate_with_cache(
     t_gen = time.time() - t_gen_start
     logger.info(f"⏱️  [vox-audio-core] TTS model generate: {t_gen:.4f}s")
     logger.info(f"⏱️  [vox-audio-core] Total generate_with_cache: {time.time() - t_start:.4f}s")
-    return wav.squeeze(0).cpu().numpy()
+    arr = wav.squeeze(0).cpu().numpy()
+
+    # NaN guard: numerical instability in the diffusion process produces static.
+    # Retry with higher timesteps if >1% of samples are NaN.
+    nan_count = np.isnan(arr).sum()
+    if nan_count > max(1, arr.size // 100):
+        logger.warning(f"⚠️ NaN detected ({nan_count}/{arr.size}), retrying with 2× inference_timesteps ({inference_timesteps*2})")
+        prompt_cache = get_or_create_prompt_cache(seed_path)  # rebuild cache to purge any corrupted state
+        gen = vox_engine.tts_model._generate_with_prompt_cache(
+            target_text=text,
+            prompt_cache=prompt_cache,
+            max_len=safe_max_len,
+            inference_timesteps=inference_timesteps * 2,
+            cfg_value=cfg_value,
+            retry_badcase=False
+        )
+        wav2, _, _ = next_and_close(gen)
+        arr2 = wav2.squeeze(0).cpu().numpy()
+        nan2 = np.isnan(arr2).sum()
+        if nan2 > max(1, arr2.size // 100):
+            logger.error(f"⚠️ NaN persisted after retry ({nan2}/{arr2.size}), zeroing NaN values")
+            arr = np.nan_to_num(arr2)
+        else:
+            arr = arr2
+    elif nan_count > 0:
+        arr = np.nan_to_num(arr)  # small NaN count — just zero them
+
+    return arr
 
 def generate_stream_with_cache(
     text: str,
