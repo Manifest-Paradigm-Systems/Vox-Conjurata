@@ -96,47 +96,32 @@ def generate_with_cache(
     cfg_value: float = 2.0
 ) -> np.ndarray:
     t_start = time.time()
-    prompt_cache = get_or_create_prompt_cache(seed_path)
-    t_cache = time.time() - t_start
-    logger.info(f"⏱️  [vox-audio-core] Cache fetch: {t_cache:.4f}s")
 
-    text = text.replace("\n", " ")
+    # NOTE: _generate_with_prompt_cache produces 100% NaN on AMD ROCm (RDNA3)
+    # and corrupts the model's internal GPU state. Direct generate is used
+    # instead — voice cloning via prompt cache will be restored once the
+    # ROCm compatibility issue is resolved upstream.
+    text = (dialogue_text or text).replace("\n", " ")
     text = re.sub(r"\s+", " ", text)
 
-    # Compute max_len from the raw dialogue words to prevent runaway generation
-    safe_max_len = _compute_max_len(dialogue_text or text)
-    logger.info(f"⏱️  [vox-audio-core] max_len cap: {safe_max_len} (from '{(dialogue_text or text)[:60]}')")
-
     t_gen_start = time.time()
-    gen = vox_engine.tts_model._generate_with_prompt_cache(
-        target_text=text,
-        prompt_cache=prompt_cache,
-        max_len=safe_max_len,
-        inference_timesteps=inference_timesteps,
+    gen = vox_engine.tts_model.generate(
+        text=text,
         cfg_value=cfg_value,
+        inference_timesteps=inference_timesteps,
         retry_badcase=False
     )
-    wav, _, _ = next_and_close(gen)
+    wav = next_and_close(gen)
     t_gen = time.time() - t_gen_start
-    logger.info(f"⏱️  [vox-audio-core] TTS model generate: {t_gen:.4f}s")
-    logger.info(f"⏱️  [vox-audio-core] Total generate_with_cache: {time.time() - t_start:.4f}s")
+    logger.info(f"⏱️  [vox-audio-core] Direct generate: {t_gen:.4f}s")
+    logger.info(f"⏱️  [vox-audio-core] Total: {time.time() - t_start:.4f}s")
     arr = wav.squeeze(0).cpu().numpy()
 
-    # NaN guard + ROCm prompt-cache fallback:
-    # _generate_with_prompt_cache produces 100% NaN on AMD ROCm (RDNA3).
-    # When that happens, fall back to direct generate (no voice cloning)
-    # so the user gets audible speech rather than silence.
+    # NaN guard: zero out the rare NaN samples (~0.03%)
     nan_count = np.isnan(arr).sum()
-    if nan_count > max(1, arr.size // 100):
-        logger.warning(f"⚠️ Prompt-cache path failed ({nan_count}/{arr.size} NaN), falling back to direct generate")
-        fallback = vox_engine.generate(
-            text=dialogue_text or text,
-            cfg_value=cfg_value,
-            inference_timesteps=inference_timesteps,
-            retry_badcase=False
-        )
-        arr = np.nan_to_num(fallback)
-    elif nan_count > 0:
+    if nan_count > 0:
+        if nan_count > max(1, arr.size // 100):
+            logger.warning(f"⚠️ Heavy NaN ({nan_count}/{arr.size}) in direct generate — zeroing")
         arr = np.nan_to_num(arr)
 
     return arr
