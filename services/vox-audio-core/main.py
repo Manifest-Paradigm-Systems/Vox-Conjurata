@@ -123,30 +123,13 @@ def generate_with_cache(
     logger.info(f"⏱️  [vox-audio-core] Total generate_with_cache: {time.time() - t_start:.4f}s")
     arr = wav.squeeze(0).cpu().numpy()
 
-    # NaN guard: numerical instability in the diffusion process produces static.
-    # Retry with higher timesteps if >1% of samples are NaN.
+    # NaN guard: VoxCPM2 occasionally produces a few NaN samples (~0.003%) on ROCm.
+    # These cause static/crackling. Zero them out — the loss is imperceptible.
     nan_count = np.isnan(arr).sum()
-    if nan_count > max(1, arr.size // 100):
-        logger.warning(f"⚠️ NaN detected ({nan_count}/{arr.size}), retrying with 2× inference_timesteps ({inference_timesteps*2})")
-        prompt_cache = get_or_create_prompt_cache(seed_path)  # rebuild cache to purge any corrupted state
-        gen = vox_engine.tts_model._generate_with_prompt_cache(
-            target_text=text,
-            prompt_cache=prompt_cache,
-            max_len=safe_max_len,
-            inference_timesteps=inference_timesteps * 2,
-            cfg_value=cfg_value,
-            retry_badcase=False
-        )
-        wav2, _, _ = next_and_close(gen)
-        arr2 = wav2.squeeze(0).cpu().numpy()
-        nan2 = np.isnan(arr2).sum()
-        if nan2 > max(1, arr2.size // 100):
-            logger.error(f"⚠️ NaN persisted after retry ({nan2}/{arr2.size}), zeroing NaN values")
-            arr = np.nan_to_num(arr2)
-        else:
-            arr = arr2
-    elif nan_count > 0:
-        arr = np.nan_to_num(arr)  # small NaN count — just zero them
+    if nan_count > 0:
+        if nan_count > max(1, arr.size // 100):
+            logger.error(f"⚠️ Severe NaN ({nan_count}/{arr.size}) in generation — zeroing")
+        arr = np.nan_to_num(arr)
 
     return arr
 
