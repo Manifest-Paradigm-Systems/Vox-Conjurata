@@ -84,8 +84,17 @@ async def generate_audio(request: AudioRequest):
         prompt_prefix = "TrackType: Music, VocalType: Instrumental, " if engine_type == "music" else "TrackType: SFX, "
         formatted_prompt = f"{prompt_prefix}{request.prompt}"
         
+        generate_kwargs = {
+            "prompt": formatted_prompt,
+            "audio_end_in_s": request.duration_seconds,
+        }
+        if request.num_inference_steps is not None:
+            generate_kwargs["num_inference_steps"] = request.num_inference_steps
+        if request.guidance_scale is not None:
+            generate_kwargs["guidance_scale"] = request.guidance_scale
+
         with torch.inference_mode():
-            audio = pipe(prompt=formatted_prompt, audio_end_in_s=request.duration_seconds).audios[0]
+            audio = pipe(**generate_kwargs).audios[0]
             
         fd, output_path = tempfile.mkstemp(suffix=".wav")
         os.close(fd)
