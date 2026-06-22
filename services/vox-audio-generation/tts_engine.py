@@ -55,6 +55,8 @@ class AudioRequest(BaseModel):
     prompt: str
     duration_seconds: float = 30.0
     engine_type: str | None = None
+    num_inference_steps: int | None = None
+    guidance_scale: float | None = None
 
 @app.get("/")
 async def root():
