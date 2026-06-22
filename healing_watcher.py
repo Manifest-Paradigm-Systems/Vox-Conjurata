@@ -85,8 +85,7 @@ def trigger_emergency_shutdown(reason: str, vram_gb: float):
         "vox-actor",
         "vox-voice",
         "vox-monster-fish",
-        "vox-audio-generation-music",
-        "vox-audio-generation-sfx",
+        "vox-audio-generation",
     ]
     print(f"\n🚨 [SELF-HEALING DAEMON] EMERGENCY DETECTED: {reason}")
     print(f"Current VRAM Usage: {vram_gb:.2f} GB / 32.00 GB")
