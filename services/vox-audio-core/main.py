@@ -297,6 +297,13 @@ async def generate_audio(request: DialogueRequest):
         # Apply C++ Pedalboard DSP (monster textures, pitch shift, etc.)
         output_audio = apply_dsp(clean_audio, sample_rate, request.dsp_presets)
 
+        # Normalize volume: boost quiet direct-generate output to usable levels
+        peak = np.max(np.abs(output_audio))
+        if peak > 0 and peak < 0.5:
+            gain = min(0.95 / peak, 10.0)  # target -0.4 dBFS, cap at 10x
+            output_audio = output_audio * gain
+            logger.info(f"📈 [vox-audio-core] Volume normalized: peak {peak:.4f} → {np.max(np.abs(output_audio)):.4f} (gain {gain:.1f}x)")
+
         logger.info(f"📊 [vox-audio-core] output_audio: NaN count={np.isnan(output_audio).sum()}, min={np.min(output_audio)}, max={np.max(output_audio)}")
 
         # Return native WAV — no transcoding overhead
