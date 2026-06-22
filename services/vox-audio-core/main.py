@@ -114,7 +114,7 @@ def generate_with_cache(
     t_gen = time.time() - t_gen_start
     logger.info(f"⏱️  [vox-audio-core] Direct generate: {t_gen:.4f}s")
     logger.info(f"⏱️  [vox-audio-core] Total: {time.time() - t_start:.4f}s")
-    arr = wav.squeeze() if hasattr(wav, 'squeeze') else wav
+    arr = wav
 
     # NaN guard: zero out the rare NaN samples (~0.03%)
     nan_count = np.isnan(arr).sum()
