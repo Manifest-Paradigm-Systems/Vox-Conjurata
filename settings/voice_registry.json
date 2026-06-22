@@ -78,5 +78,13 @@
     "is_archetype": false,
     "archetype_key": "human_male_british",
     "created_at": "2026-06-10T21:23:45"
+  },
+  "npc_barkeep": {
+    "engine": "vox-audio-core",
+    "seed_path": "npc_barkeep.wav",
+    "voice_prompt": "A clear voice.",
+    "is_archetype": false,
+    "archetype_key": "human_male_british",
+    "created_at": "2026-06-22T09:01:44"
   }
 }
