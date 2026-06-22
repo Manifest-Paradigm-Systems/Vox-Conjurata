@@ -87,11 +87,9 @@ async def generate_audio(request: AudioRequest):
         generate_kwargs = {
             "prompt": formatted_prompt,
             "audio_end_in_s": request.duration_seconds,
+            "num_inference_steps": request.num_inference_steps or (25 if engine_type == "sfx" else 50),
+            "guidance_scale": request.guidance_scale or (3.0 if engine_type == "sfx" else 5.0),
         }
-        if request.num_inference_steps is not None:
-            generate_kwargs["num_inference_steps"] = request.num_inference_steps
-        if request.guidance_scale is not None:
-            generate_kwargs["guidance_scale"] = request.guidance_scale
 
         with torch.inference_mode():
             audio = pipe(**generate_kwargs).audios[0]
