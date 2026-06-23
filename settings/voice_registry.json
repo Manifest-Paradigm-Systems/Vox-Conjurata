@@ -134,5 +134,13 @@
     "is_archetype": false,
     "archetype_key": "monster_dragon",
     "created_at": "2026-06-23T09:03:51"
+  },
+  "bMWpFxnCsrBOU0DN": {
+    "engine": "vox-audio-core",
+    "seed_path": "bMWpFxnCsrBOU0DN.wav",
+    "voice_prompt": "A sprightly yet eerie presence, Fungus Leshy is a whisper in the wind, a fleeting shadow among the mushrooms, their soft rustling the only sound as they skitter away at the first hint of intrusion.",
+    "is_archetype": false,
+    "archetype_key": "monster_beast",
+    "created_at": "2026-06-23T09:05:41"
   }
 }
