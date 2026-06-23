@@ -25,6 +25,9 @@ logger = logging.getLogger("vox-audio-core")
 
 app = FastAPI(title="Vox Conjurata Core Audio Engine")
 
+# Serialize seed generation to prevent GPU OOM from concurrent model inference
+_seed_lock = asyncio.Lock()
+
 last_used_time = time.time()
 
 def update_last_used():
@@ -222,34 +225,46 @@ def encode_wav_header(sample_rate: int, num_channels: int = 1, bits_per_sample: 
 async def initialize_npc(request: NPCIdentityRequest):
     """
     PHASE 1: THE BIRTH CLIP.
-    Executes once when an NPC is created to prevent voice drifting across sessions.
-    Saves a 5-second deterministic phonetic anchor to disk.
+    Executes once per NPC to create a deterministic phonetic anchor.
+    Idempotent — returns immediately if seed already exists for this NPC.
+    Serialized globally via _seed_lock to prevent GPU OOM from concurrent generation.
     """
-    try:
-        update_last_used()
-        seed_path = os.path.join(SEED_DIR, f"{request.npc_id}.wav")
+    update_last_used()
+    seed_path = os.path.join(SEED_DIR, f"{request.npc_id}.wav")
 
-        # Use VoxCPM2 Voice Design block notation
-        birth_prompt = f"({request.voice_description}) System voice alignment sequence active. Timbre matrix locked."
+    # Idempotency seed already exists skip generation
+    if os.path.exists(seed_path):
+        logger.info(f"Seed already exists for NPC {request.npc_id} — skipping")
+        return {"status": "success", "seed_path": seed_path, "cached": True}
 
-        logger.info(f"Generating birth clip for NPC: {request.npc_id}")
-        raw_wav = vox_engine.generate(
-            text=birth_prompt,
-            cfg_value=2.5,          # Forces model adherence to text criteria
-            inference_timesteps=12,
-            retry_badcase=False     # Badcase retry produces all-NaN on ROCm
-        )
+    async with _seed_lock:
+        # Double-check after acquiring lock a concurrent caller may have just finished
+        if os.path.exists(seed_path):
+            logger.info(f"Seed already exists for NPC {request.npc_id} (after lock) — skipping")
+            return {"status": "success", "seed_path": seed_path, "cached": True}
 
-        # NaN guard: abort if the birth clip is unusable
-        if np.isnan(raw_wav).sum() > max(1, raw_wav.size // 100):
-            logger.error(f"⚠️ Birth clip for {request.npc_id} is {np.isnan(raw_wav).sum()}/{raw_wav.size} NaN — aborting")
-            raise HTTPException(status_code=500, detail="Voice generation failed (NaN output — retry later)")
+        try:
+            # Use VoxCPM2 Voice Design block notation
+            birth_prompt = f"({request.voice_description}) System voice alignment sequence active. Timbre matrix locked."
 
-        sf.write(seed_path, raw_wav, vox_engine.tts_model.sample_rate)
-        return {"status": "success", "seed_path": seed_path}
-    except Exception as e:
-        logger.error(f"Failed to initialize NPC {request.npc_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+            logger.info(f"Generating birth clip for NPC: {request.npc_id}")
+            raw_wav = vox_engine.generate(
+                text=birth_prompt,
+                cfg_value=2.5,          # Forces model adherence to text criteria
+                inference_timesteps=12,
+                retry_badcase=False     # Badcase retry produces all-NaN on ROCm
+            )
+
+            # NaN guard abort if the birth clip is unusable
+            if np.isnan(raw_wav).sum() > max(1, raw_wav.size // 100):
+                logger.error(f"Birth clip for {request.npc_id} is {np.isnan(raw_wav).sum()}/{raw_wav.size} NaN aborting")
+                raise HTTPException(status_code=500, detail="Voice generation failed (NaN output retry later)")
+
+            sf.write(seed_path, raw_wav, vox_engine.tts_model.sample_rate)
+            return {"status": "success", "seed_path": seed_path, "cached": False}
+        except Exception as e:
+            logger.error(f"Failed to initialize NPC {request.npc_id}: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/generate")
