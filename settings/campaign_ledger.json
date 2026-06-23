@@ -8,14 +8,14 @@
   },
   "session_allowances": {
     "G3SJW9rRHe7J3AOH": 0.0,
-    "gm": 99.57274999999971
+    "gm": 99.56674999999971
   },
   "session_caps": {
     "G3SJW9rRHe7J3AOH": 0.0,
     "gm": 100.0
   },
   "session_spent": {
-    "gm": 0.42725000000000013,
+    "gm": 0.43325000000000014,
     "G3SJW9rRHe7J3AOH": 0.026,
     "nXnKU6oZYzdg0xSY": 0.11075000000000006
   },
@@ -1855,6 +1855,18 @@
       "amount": 0.003,
       "description": "Voice Forging for Fungus Leshy",
       "timestamp": 1782205030.9360023
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Princess Sunset",
+      "timestamp": 1782205065.0420675
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Princess Sunset",
+      "timestamp": 1782205068.9648561
     }
   ]
 }
