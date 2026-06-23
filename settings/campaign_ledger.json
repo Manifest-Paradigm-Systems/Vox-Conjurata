@@ -8,14 +8,14 @@
   },
   "session_allowances": {
     "G3SJW9rRHe7J3AOH": 0.0,
-    "gm": 99.54574999999971
+    "gm": 99.54274999999971
   },
   "session_caps": {
     "G3SJW9rRHe7J3AOH": 0.0,
     "gm": 100.0
   },
   "session_spent": {
-    "gm": 0.45425000000000015,
+    "gm": 0.45725000000000016,
     "G3SJW9rRHe7J3AOH": 0.026,
     "nXnKU6oZYzdg0xSY": 0.11075000000000006
   },
@@ -1909,6 +1909,12 @@
       "amount": 0.003,
       "description": "Neural Profiling for Lawn Crawfish",
       "timestamp": 1782205431.6754293
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Lawn Crawfish",
+      "timestamp": 1782205435.6079357
     }
   ]
 }
