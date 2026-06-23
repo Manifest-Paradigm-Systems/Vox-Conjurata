@@ -8,14 +8,14 @@
   },
   "session_allowances": {
     "G3SJW9rRHe7J3AOH": 0.0,
-    "gm": 99.63224999999973
+    "gm": 99.61724999999973
   },
   "session_caps": {
     "G3SJW9rRHe7J3AOH": 0.0,
     "gm": 100.0
   },
   "session_spent": {
-    "gm": 0.36775000000000013,
+    "gm": 0.38275000000000015,
     "G3SJW9rRHe7J3AOH": 0.026,
     "nXnKU6oZYzdg0xSY": 0.11075000000000006
   },
@@ -1735,6 +1735,36 @@
       "amount": 0.003,
       "description": "Neural Profiling for Precarious Pile",
       "timestamp": 1782203104.131118
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Precarious Pile",
+      "timestamp": 1782203112.3072877
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Fungus Leshy",
+      "timestamp": 1782203119.6099963
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Fungus Leshy",
+      "timestamp": 1782203128.2129285
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Taxidermic Dog",
+      "timestamp": 1782203128.2371774
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Taxidermic Dog",
+      "timestamp": 1782203136.7374065
     }
   ]
 }
