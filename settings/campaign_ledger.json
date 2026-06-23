@@ -8,14 +8,14 @@
   },
   "session_allowances": {
     "G3SJW9rRHe7J3AOH": 0.0,
-    "gm": 99.56074999999971
+    "gm": 99.54574999999971
   },
   "session_caps": {
     "G3SJW9rRHe7J3AOH": 0.0,
     "gm": 100.0
   },
   "session_spent": {
-    "gm": 0.43925000000000014,
+    "gm": 0.45425000000000015,
     "G3SJW9rRHe7J3AOH": 0.026,
     "nXnKU6oZYzdg0xSY": 0.11075000000000006
   },
@@ -1879,6 +1879,36 @@
       "amount": 0.003,
       "description": "Voice Forging for Soulbound Doll",
       "timestamp": 1782205079.9318602
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Giant Badger",
+      "timestamp": 1782205417.403213
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Giant Badger",
+      "timestamp": 1782205419.9601276
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Fey Dragonet",
+      "timestamp": 1782205424.7320642
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Fey Dragonet",
+      "timestamp": 1782205428.564813
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Lawn Crawfish",
+      "timestamp": 1782205431.6754293
     }
   ]
 }

@@ -118,5 +118,21 @@
     "is_archetype": false,
     "archetype_key": "human_non-binary_british",
     "created_at": "2026-06-23T08:57:06"
+  },
+  "rgzkcCX3WXrffDQ3": {
+    "engine": "vox-audio-core",
+    "seed_path": "rgzkcCX3WXrffDQ3.wav",
+    "voice_prompt": "A hulking, burly creature with shaggy fur and sharp claws, the Giant Badger rumbles through the forest with the earthy weight of a living boulder.",
+    "is_archetype": false,
+    "archetype_key": "monster_beast",
+    "created_at": "2026-06-23T09:03:44"
+  },
+  "GRLAwjvxTcC9C9vW": {
+    "engine": "vox-audio-core",
+    "seed_path": "GRLAwjvxTcC9C9vW.wav",
+    "voice_prompt": "Fey Dragonet's melodic voice carries an ethereal quality, reminiscent of tinkling bells and whispers of ancient magic.",
+    "is_archetype": false,
+    "archetype_key": "monster_dragon",
+    "created_at": "2026-06-23T09:03:51"
   }
 }
