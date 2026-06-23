@@ -102,5 +102,21 @@
     "is_archetype": false,
     "archetype_key": "monster_beast",
     "created_at": "2026-06-23T08:25:40"
+  },
+  "qOOcpTIoKssIuocI": {
+    "engine": "vox-audio-core",
+    "seed_path": "qOOcpTIoKssIuocI.wav",
+    "voice_prompt": "A lithe and agile young man whose skin glimmers with an otherworldly, pulsating light.",
+    "is_archetype": false,
+    "archetype_key": "monster_beast",
+    "created_at": "2026-06-23T08:57:02"
+  },
+  "1bbVTBzaqdUFl0wz": {
+    "engine": "vox-audio-core",
+    "seed_path": "1bbVTBzaqdUFl0wz.wav",
+    "voice_prompt": "A whimsical and unpredictable figure with a chaotic energy, always on the verge of toppling over but somehow managing to stay upright.",
+    "is_archetype": false,
+    "archetype_key": "human_non-binary_british",
+    "created_at": "2026-06-23T08:57:06"
   }
 }

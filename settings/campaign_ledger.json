@@ -8,14 +8,14 @@
   },
   "session_allowances": {
     "G3SJW9rRHe7J3AOH": 0.0,
-    "gm": 99.59074999999972
+    "gm": 99.57274999999971
   },
   "session_caps": {
     "G3SJW9rRHe7J3AOH": 0.0,
     "gm": 100.0
   },
   "session_spent": {
-    "gm": 0.4092500000000001,
+    "gm": 0.42725000000000013,
     "G3SJW9rRHe7J3AOH": 0.026,
     "nXnKU6oZYzdg0xSY": 0.11075000000000006
   },
@@ -1819,6 +1819,42 @@
       "amount": 0.0035,
       "description": "TTS Generation for Xulgath Warrior",
       "timestamp": 1782204396.7636485
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Flash Beetle",
+      "timestamp": 1782205014.305128
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Flash Beetle",
+      "timestamp": 1782205019.3518784
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Precarious Pile",
+      "timestamp": 1782205022.0533426
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Precarious Pile",
+      "timestamp": 1782205025.8177173
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Fungus Leshy",
+      "timestamp": 1782205026.7968922
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Fungus Leshy",
+      "timestamp": 1782205030.9360023
     }
   ]
 }
