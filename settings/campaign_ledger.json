@@ -8,14 +8,14 @@
   },
   "session_allowances": {
     "G3SJW9rRHe7J3AOH": 0.0,
-    "gm": 99.52474999999971
+    "gm": 99.51874999999971
   },
   "session_caps": {
     "G3SJW9rRHe7J3AOH": 0.0,
     "gm": 100.0
   },
   "session_spent": {
-    "gm": 0.4752500000000002,
+    "gm": 0.4812500000000002,
     "G3SJW9rRHe7J3AOH": 0.026,
     "nXnKU6oZYzdg0xSY": 0.11075000000000006
   },
@@ -1951,6 +1951,18 @@
       "amount": 0.003,
       "description": "Voice Forging for Soulbound Doll",
       "timestamp": 1782205559.24507
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Lawn Crawfish",
+      "timestamp": 1782206243.265996
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Lawn Crawfish",
+      "timestamp": 1782206247.0739334
     }
   ]
 }
