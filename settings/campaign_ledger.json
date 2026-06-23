@@ -8,14 +8,14 @@
   },
   "session_allowances": {
     "G3SJW9rRHe7J3AOH": 0.0,
-    "gm": 99.51274999999971
+    "gm": 99.50674999999971
   },
   "session_caps": {
     "G3SJW9rRHe7J3AOH": 0.0,
     "gm": 100.0
   },
   "session_spent": {
-    "gm": 0.4872500000000002,
+    "gm": 0.4932500000000002,
     "G3SJW9rRHe7J3AOH": 0.026,
     "nXnKU6oZYzdg0xSY": 0.11075000000000006
   },
@@ -1975,6 +1975,18 @@
       "amount": 0.003,
       "description": "Voice Forging for Princess Sunset",
       "timestamp": 1782206319.9275532
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Soulbound Doll",
+      "timestamp": 1782206348.241308
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Soulbound Doll",
+      "timestamp": 1782206351.74519
     }
   ]
 }
