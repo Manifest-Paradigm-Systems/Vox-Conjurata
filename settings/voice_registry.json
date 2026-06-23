@@ -142,5 +142,13 @@
     "is_archetype": false,
     "archetype_key": "monster_beast",
     "created_at": "2026-06-23T09:05:41"
+  },
+  "BekaoJyh1OaroRrj": {
+    "engine": "vox-audio-core",
+    "seed_path": "BekaoJyh1OaroRrj.wav",
+    "voice_prompt": "A rugged, swamp-dwelling man with a weathered face and claw-like hands, Lawn Crawfish moves with a slow, deliberate gait, his eyes always scanning the murky waters nearby.",
+    "is_archetype": false,
+    "archetype_key": "monster_beast",
+    "created_at": "2026-06-23T09:17:30"
   }
 }
