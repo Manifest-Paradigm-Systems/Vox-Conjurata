@@ -17,6 +17,7 @@ from pathlib import Path
 import subprocess
 
 from chronicle import VoxChronicleSystem
+from pdf_import_vision import router as pdf_import_vision_router
 from vision_reader import MonsterSightSystem
 from resource_manager import resource_manager
 from foundry_client import push_to_foundry, log_to_foundry
@@ -53,6 +54,9 @@ app.mount("/temp", StaticFiles(directory=str(TEMP_DIR)), name="temp")
 SESSION_LIBRARY_DIR = Path("/app/session_library")
 SESSION_LIBRARY_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/sessions", StaticFiles(directory=str(SESSION_LIBRARY_DIR)), name="sessions")
+
+# Register PDF import vision router
+app.include_router(pdf_import_vision_router)
 
 # Global memory map tracking active execution loops for cancellation
 ACTIVE_TASKS: dict[str, asyncio.Task] = {}
