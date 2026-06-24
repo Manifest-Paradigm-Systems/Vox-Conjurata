@@ -17,6 +17,9 @@ const MODULE_ID = "vox-pdf-importer";
 // ─── Hooks ──────────────────────────────────────────────────────────
 
 Hooks.once("init", () => {
+  // Handlebars helper for step status comparison
+  Handlebars.registerHelper("eq", (a, b) => a === b);
+
   game.settings.register(MODULE_ID, "visionApiEndpoint", {
     name: "VOXPDF.Settings.VisionEndpoint",
     hint: "VOXPDF.Settings.VisionEndpointHint",

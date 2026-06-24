@@ -12,8 +12,8 @@
   "VOXPDF.ActorsCreated": "Actors Created",
   "VOXPDF.JournalsCreated": "Journal Entries",
   "VOXPDF.ScenesCreated": "Scenes Created",
-  "VOXPDF.ItemsCreated": "Items Created",
   "VOXPDF.PagesProcessed": "Pages Processed",
+  "VOXPDF.Queue": "Enchantment Queue",
   "VOXPDF.RetryPage": "Retrying page {page}...",
   "VOXPDF.ErrorPage": "Error on page {page}",
   "VOXPDF.SkippingPage": "Skipping page {page} (no content detected)",
@@ -27,6 +27,8 @@
     "CreateJournals": "Create Journal Entries",
     "CreateJournalsHint": "Create journal entries for narrative text pages",
     "CreateScenes": "Create Scenes",
-    "CreateScenesHint": "Create scenes from identified map pages"
+    "CreateScenesHint": "Create scenes from identified map pages",
+    "GameSystem": "Game System",
+    "GameSystemHint": "TTRPG system to format stat blocks for (auto-detected)"
   }
 }

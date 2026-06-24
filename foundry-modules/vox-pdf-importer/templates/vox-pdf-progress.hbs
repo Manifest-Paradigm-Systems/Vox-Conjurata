@@ -1,5 +1,12 @@
 <form class="flexcol">
   <section>
+    {{#if queueTotal}}
+    <div class="vox-pdf-queue-header">
+      Enchantment Queue — Item {{queuePosition}} of {{queueTotal}}
+    </div>
+    {{/if}}
+    <div class="vox-pdf-filename">{{filename}}</div>
+
     <div class="form-group">
       <label>{{localize "VOXPDF.Progress"}}</label>
       <div class="form-fields">
@@ -13,6 +20,37 @@
     <div class="form-group">
       <label>{{localize "VOXPDF.Status"}}</label>
       <p class="notes" id="vox-pdf-status">{{status}}</p>
+    </div>
+
+    <hr>
+
+    {{! Step indicators }}
+    <div class="vox-pdf-steps">
+      {{#each steps}}
+      <div class="vox-pdf-step vox-pdf-step-{{this.status}}">
+        <span class="vox-pdf-step-icon">
+          {{#if (eq this.status "done")}}&#10003;{{/if}}
+          {{#if (eq this.status "running")}}&#9851;{{/if}}
+          {{#if (eq this.status "failed")}}&#10007;{{/if}}
+          {{#if (eq this.status "pending")}}&#9633;{{/if}}
+        </span>
+        <span class="vox-pdf-step-label">{{this.label}}</span>
+      </div>
+      {{/each}}
+    </div>
+
+    <hr>
+
+    {{! Mini-terminal log }}
+    <div class="vox-pdf-terminal">
+      {{#each logs}}
+      <div class="vox-pdf-log-line vox-pdf-log-{{this.level}}">
+        [{{time}}] {{this.message}}
+      </div>
+      {{/each}}
+      {{#unless logs}}
+      <div class="vox-pdf-log-line vox-pdf-log-info">Waiting to start...</div>
+      {{/unless}}
     </div>
 
     <hr>
