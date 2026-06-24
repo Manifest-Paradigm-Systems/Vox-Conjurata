@@ -59,7 +59,7 @@ async def pdf_import_vision(req: PdfImportVisionRequest):
                 "role": "user",
                 "content": [
                     {"type": "text", "text": vision_prompt},
-                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_b64}"}}
+                    {"type": "image_url", "image_url": {"url": f"data:image/webp;base64,{image_b64}"}}
                 ]
             }
         ],
@@ -96,7 +96,7 @@ async def pdf_import_vision(req: PdfImportVisionRequest):
     }
 
 
-def _build_vision_prompt(previous_context: str) -> str:
+def _build_pf2e_prompt(previous_context: str) -> str:
     context_block = ""
     if previous_context:
         context_block = f"\nCONTEXT FROM PREVIOUS PAGE:\n{previous_context}\n\n"
