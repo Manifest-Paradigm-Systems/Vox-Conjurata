@@ -23,8 +23,9 @@ LLM_CORE_URL = os.getenv("OLLAMA_URL", "http://vox-llm-core:8081")
 
 
 class PdfImportVisionRequest(BaseModel):
-    page_image: str  # base64-encoded PNG data URI
+    page_image: str  # base64-encoded data URI
     page_number: int
+    game_system: str = "pf2e"  # "pf2e" or "dnd5e"
     previous_context: str = ""
     max_tokens: int = 2048
     temperature: float = 0.1
@@ -39,8 +40,11 @@ async def pdf_import_vision(req: PdfImportVisionRequest):
     Returns:
         { page, raw_extraction, structured_data, has_content }
     """
-    # Step 1: Build vision prompt
-    vision_prompt = _build_vision_prompt(req.previous_context)
+    # Step 1: Build vision prompt for the selected game system
+    if req.game_system == "dnd5e":
+        vision_prompt = _build_dnd5e_prompt(req.previous_context)
+    else:
+        vision_prompt = _build_pf2e_prompt(req.previous_context)
 
     # Step 2: Strip data URI prefix if present
     image_b64 = req.page_image

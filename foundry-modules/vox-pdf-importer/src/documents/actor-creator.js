@@ -1,7 +1,7 @@
 /**
- * ActorCreator — Creates PF2e NPC actors from parsed stat block data.
+ * ActorCreator — Creates actors from parsed stat block data using the system-appropriate parser.
  */
-import { StatBlockParser } from "../parser/statblock-parser.js";
+import { ParserRegistry } from "../parser/registry.js";
 
 export class ActorCreator {
 
@@ -9,12 +9,14 @@ export class ActorCreator {
    * Create actors from an array of structured NPC data.
    * @param {Array} npcDataList
    * @param {string} folderId - Target folder ID
+   * @param {string} systemId - Game system ID ("pf2e", "dnd5e")
    * @returns {Promise<Array>} Created actor documents
    */
-  static async createFromParsedData(npcDataList, folderId) {
+  static async createFromParsedData(npcDataList, folderId, systemId) {
+    const parser = ParserRegistry.get(systemId);
     const created = [];
     for (const npcData of npcDataList) {
-      const model = StatBlockParser.toActorCreateData(npcData);
+      const model = parser.toActorCreateData(npcData);
       if (!model) continue;
 
       model.folder = folderId;
