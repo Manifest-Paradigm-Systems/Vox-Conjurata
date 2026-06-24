@@ -35,6 +35,7 @@ services:
     - PYTHONUNBUFFERED=1
     volumes:
     - model_storage:/models:z
+    - ./services/orchestrator:/app:z
     - ./services/orchestrator/voice_seeds:/app/voice_seeds:z
     - ./services/orchestrator/music_library:/app/music_library:z
     - ./settings:/app/settings:z
