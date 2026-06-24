@@ -1,5 +1,5 @@
 /**
- * VoxPdfProgressDialog — Page-by-page progress tracker for PDF import.
+ * VoxPdfProgressDialog — Page-by-page progress tracker with mini-terminal log.
  */
 export class VoxPdfProgressDialog extends Application {
   constructor(totalPages, options = {}) {
@@ -11,6 +11,12 @@ export class VoxPdfProgressDialog extends Application {
     this.skippedCount = 0;
     this.status = "Starting...";
     this.cancelled = false;
+    this.queuePosition = options.queuePosition || 0;
+    this.queueTotal = options.queueTotal || 0;
+    this.filename = options.filename || "";
+    this.steps = [];
+    this.logs = [];
+    this._closed = false;
   }
 
   static get defaultOptions() {
@@ -19,8 +25,8 @@ export class VoxPdfProgressDialog extends Application {
       title: "Vox AI PDF Import — Progress",
       template: "modules/vox-pdf-importer/templates/vox-pdf-progress.hbs",
       popOut: true,
-      width: 420,
-      height: "auto",
+      width: 520,
+      height: 500,
       minimizable: false,
       closable: false,
     });
@@ -35,6 +41,11 @@ export class VoxPdfProgressDialog extends Application {
       successCount: this.successCount,
       errorCount: this.errorCount,
       skippedCount: this.skippedCount,
+      queuePosition: this.queuePosition,
+      queueTotal: this.queueTotal,
+      filename: this.filename,
+      steps: this.steps,
+      logs: this.logs.slice(-30),
     };
   }
 
@@ -43,7 +54,7 @@ export class VoxPdfProgressDialog extends Application {
     html.find(".vox-pdf-cancel-btn").click(() => {
       this.cancelled = true;
       this.status = "Cancelling...";
-      this.render();
+      this.render(false);
     });
   }
 
@@ -53,17 +64,22 @@ export class VoxPdfProgressDialog extends Application {
     this.render(false);
   }
 
+  updateSteps(steps, logs) {
+    this.steps = steps;
+    this.logs = logs;
+    this.render(false);
+  }
+
   recordResult(type) {
     if (type === "success") this.successCount++;
     else if (type === "error") this.errorCount++;
     else if (type === "skipped") this.skippedCount++;
   }
 
-  isCancelled() {
-    return this.cancelled;
-  }
+  isCancelled() { return this.cancelled; }
 
   close(options = {}) {
+    this._closed = true;
     this.cancelled = true;
     return super.close(options);
   }
