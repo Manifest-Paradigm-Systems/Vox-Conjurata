@@ -59,7 +59,7 @@ async def pdf_import_vision(req: PdfImportVisionRequest):
                 "role": "user",
                 "content": [
                     {"type": "text", "text": vision_prompt},
-                    {"type": "image_url", "image_url": {"url": f"data:image/webp;base64,{image_b64}"}}
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_b64}"}}
                 ]
             }
         ],
