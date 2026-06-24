@@ -1,8 +1,9 @@
 /**
- * StatBlockParser — Transforms vision AI JSON output into PF2e actor createDocuments format.
- * Maps the structured NPC data from the vision model to Foundry's PF2e system schema.
+ * Pf2eParser — Transforms vision AI JSON output into PF2e actor createDocuments format.
  */
 export class Pf2eParser {
+  static systemId = "pf2e";
+  static actorType = "npc";
 
   /**
    * Convert structured NPC data into a PF2e Actor.createDocuments-compatible model.
