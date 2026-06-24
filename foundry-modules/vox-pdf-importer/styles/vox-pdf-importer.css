@@ -1,82 +1,84 @@
 /* vox-pdf-importer styles */
 
 .vox-pdf-progress-bar {
-  width: 100%;
-  height: 20px;
-  background: #333;
-  border-radius: 4px;
-  overflow: hidden;
+  width: 100%; height: 20px;
+  background: #333; border-radius: 4px; overflow: hidden;
 }
-
 .vox-pdf-progress-fill {
   height: 100%;
   background: linear-gradient(90deg, #6a1b9a, #9c27b0);
   transition: width 0.3s ease;
 }
-
 .vox-pdf-stats {
-  display: flex;
-  justify-content: space-around;
-  padding: 8px 0;
+  display: flex; justify-content: space-around; padding: 8px 0;
 }
-
-.vox-pdf-stat {
-  text-align: center;
-}
-
-.vox-pdf-stat-label {
-  display: block;
-  font-size: 11px;
-  color: #999;
-}
-
-.vox-pdf-stat-value {
-  display: block;
-  font-size: 22px;
-  font-weight: bold;
-}
-
+.vox-pdf-stat { text-align: center; }
+.vox-pdf-stat-label { display: block; font-size: 11px; color: #999; }
+.vox-pdf-stat-value { display: block; font-size: 22px; font-weight: bold; }
 .vox-pdf-stat-value.success { color: #4caf50; }
 .vox-pdf-stat-value.skipped { color: #ff9800; }
 .vox-pdf-stat-value.error { color: #f44336; }
+.vox-pdf-cancel-btn { margin-top: 8px; width: 100%; }
 
-.vox-pdf-cancel-btn {
-  margin-top: 8px;
-  width: 100%;
+/* Queue header */
+.vox-pdf-queue-header {
+  font-size: 14px; font-weight: bold; color: #9c27b0; margin-bottom: 4px;
+}
+.vox-pdf-filename {
+  font-size: 12px; color: #ccc; margin-bottom: 8px; word-break: break-all;
 }
 
-.vox-pdf-result-stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  padding: 12px 0;
+/* Step indicators */
+.vox-pdf-steps { margin: 4px 0; }
+.vox-pdf-step {
+  display: flex; align-items: center; gap: 6px; padding: 2px 0;
+  font-size: 12px;
+}
+.vox-pdf-step-icon { width: 16px; text-align: center; font-size: 14px; }
+.vox-pdf-step-done .vox-pdf-step-icon { color: #4caf50; }
+.vox-pdf-step-done .vox-pdf-step-label { color: #aaa; text-decoration: line-through; }
+.vox-pdf-step-running .vox-pdf-step-icon { color: #2196f3; animation: pulse 1s infinite; }
+.vox-pdf-step-running .vox-pdf-step-label { color: #fff; font-weight: bold; }
+.vox-pdf-step-failed .vox-pdf-step-icon { color: #f44336; }
+.vox-pdf-step-pending .vox-pdf-step-icon { color: #555; }
+.vox-pdf-step-pending .vox-pdf-step-label { color: #666; }
+
+@keyframes pulse {
+  0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; }
 }
 
-.vox-pdf-result-stats .vox-pdf-stat {
-  flex: 1;
-  min-width: 100px;
+/* Mini-terminal */
+.vox-pdf-terminal {
+  background: #1a1a1a; border: 1px solid #333; border-radius: 4px;
+  padding: 6px; max-height: 120px; overflow-y: auto;
+  font-family: monospace; font-size: 11px; line-height: 1.4;
 }
+.vox-pdf-log-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vox-pdf-log-info { color: #aaa; }
+.vox-pdf-log-warning { color: #ff9800; }
+.vox-pdf-log-error { color: #f44336; }
 
-.vox-pdf-import-btn {
-  background: #6a1b9a !important;
-  color: white !important;
-  border: none !important;
+/* Queue list */
+.vox-pdf-queue-list { margin: 8px 0; max-height: 200px; overflow-y: auto; }
+.vox-pdf-queue-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 6px; background: #2a2a2a; border-radius: 4px; margin-bottom: 4px;
 }
+.vox-pdf-queue-name { flex: 1; font-size: 12px; color: #ddd; }
+.vox-pdf-queue-status { font-size: 11px; text-transform: uppercase; }
+.vox-pdf-queue-remove { background: none; border: none; color: #f44336; cursor: pointer; }
 
-.vox-pdf-import-btn:hover {
-  background: #8e24aa !important;
+/* Buttons */
+.vox-pdf-import-btn { background: #6a1b9a !important; color: white !important; border: none !important; }
+.vox-pdf-import-btn:hover { background: #8e24aa !important; }
+.vox-pdf-start-queue {
+  background: #6a1b9a; color: white; border: none;
+  width: 100%; padding: 8px; border-radius: 4px; cursor: pointer;
 }
+.vox-pdf-start-queue:hover { background: #8e24aa; }
+.vox-pdf-add-btn { background: #333; color: #ddd; border: 1px solid #555; }
+.vox-pdf-add-btn:hover { background: #444; }
 
-.vox-pdf-start-btn {
-  background: #6a1b9a;
-  color: white;
-  border: none;
-  width: 100%;
-  padding: 8px;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.vox-pdf-start-btn:hover {
-  background: #8e24aa;
-}
+/* Results */
+.vox-pdf-result-stats { display: flex; flex-wrap: wrap; gap: 12px; padding: 12px 0; }
+.vox-pdf-result-stats .vox-pdf-stat { flex: 1; min-width: 100px; }
