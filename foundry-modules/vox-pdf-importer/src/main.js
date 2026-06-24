@@ -169,47 +169,60 @@ class VoxPdfImport {
           // 4a. Get text content for pre-filter
           const textContent = await this.renderer.getTextContent(pageNum);
 
-          // 4b. Heuristic page filter
-          const category = PageAnalyzer.categorize(textContent, 0, pageNum);
-          if (category === "skip") {
-            this.progressDialog.recordResult("skipped");
-            continue;
-          }
+          // 4b. Categorize page
+          const category = PageAnalyzer.categorize(textContent);
 
-          // 4c. Render page to base64
+          // 4c. Render page to image
           this.progressDialog.updateProgress(pageNum, `Rendering page ${pageNum}...`);
-          const base64 = await this.renderer.renderPageToBase64(pageNum);
+          const canvas = await this.renderer.renderPageToCanvas(pageNum);
 
-          // 4d. Send to vision API (with retry)
-          this.progressDialog.updateProgress(pageNum, `AI analyzing page ${pageNum}...`);
-          const result = await this._callVisionWithRetry(base64, pageNum, previousContext, maxRetries);
+          // 4d. Handle by category
+          if (category === "art") {
+            // Full-page illustration — embed in a journal entry
+            const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/webp", 0.85));
+            const artPath = `vox-pdf-imports/${this._safeName()}/art`;
+            const result = await FilePicker.upload("data", artPath, new File([blob], `page_${pageNum}.webp`), {}, { notify: false });
+            const imgSrc = result.path;
 
-          // 4e. Process results
-          if (result.has_content) {
-            const sd = result.structured_data;
-            const type = sd?.type;
+            const journal = await JournalEntry.createDocuments([{
+              name: `Art — Page ${pageNum}`,
+              folder: folders.JournalEntry,
+              pages: [{
+                name: `Page ${pageNum}`,
+                type: "text",
+                text: { content: `<p><img src="${imgSrc}" style="width:100%;max-width:100%;"></p>`, format: 1 },
+              }],
+            }]);
+            this.results.journals++;
+            this.progressDialog.recordResult("success");
+            previousContext = `Previous page: art/illustration`;
+          } else {
+            // statblock, narrative, or map — send to vision API
+            const base64 = canvas.toDataURL("image/png");
+            this.progressDialog.updateProgress(pageNum, `AI analyzing page ${pageNum}...`);
+            const result = await this._callVisionWithRetry(base64, pageNum, previousContext, maxRetries);
 
-            if (type === "npc") {
-              const actors = await ActorCreator.createFromParsedData([sd], folders.Actor);
-              this.results.actors += actors.length;
-              this.progressDialog.recordResult("success");
-            } else if (type === "narrative" && game.settings.get(MODULE_ID, "createJournals")) {
-              const journal = await JournalCreator.createFromParsedData(sd, folders.JournalEntry);
-              if (journal) {
-                this.results.journals++;
+            if (result.has_content) {
+              const sd = result.structured_data;
+              const type = sd?.type;
+
+              if (type === "npc") {
+                const actors = await ActorCreator.createFromParsedData([sd], folders.Actor);
+                this.results.actors += actors.length;
                 this.progressDialog.recordResult("success");
+              } else if (type === "narrative" && game.settings.get(MODULE_ID, "createJournals")) {
+                const journal = await JournalCreator.createFromParsedData(sd, folders.JournalEntry);
+                if (journal) {
+                  this.results.journals++;
+                  this.progressDialog.recordResult("success");
+                }
+              } else {
+                this.progressDialog.recordResult("skipped");
               }
-            } else if (type === "map" && game.settings.get(MODULE_ID, "createScenes")) {
-              const scenes = await SceneCreator.createFromParsedData([sd], folders.Scene);
-              this.results.scenes += scenes.length;
-              this.progressDialog.recordResult("success");
+              previousContext = this._summarizeContext(sd);
             } else {
               this.progressDialog.recordResult("skipped");
             }
-
-            previousContext = this._summarizeContext(sd);
-          } else {
-            this.progressDialog.recordResult("skipped");
           }
         } catch (err) {
           console.error(`Vox PDF | Page ${pageNum} failed:`, err);
