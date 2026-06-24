@@ -1,0 +1,39 @@
+<form class="flexcol">
+  <section>
+    <h2>{{localize "VOXPDF.Title"}}</h2>
+    <p class="notes">{{localize "VOXPDF.SelectPdf"}}</p>
+    <hr>
+
+    <div class="form-group">
+      <label>{{localize "VOXPDF.Title"}}</label>
+      <div class="form-fields">
+        <input type="text" name="pdfPath" placeholder="path/to/adventure.pdf" value="{{pdfPath}}">
+        <button type="button" class="file-picker" data-type="data" data-target="pdfPath" data-extensions=".pdf">
+          <i class="fas fa-file-import"></i>
+        </button>
+      </div>
+    </div>
+
+    <hr>
+
+    <div class="form-group">
+      <label>{{localize "VOXPDF.Settings.CreateScenes"}}</label>
+      <div class="form-fields">
+        <input type="checkbox" name="createScenes" checked>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>{{localize "VOXPDF.Settings.CreateJournals"}}</label>
+      <div class="form-fields">
+        <input type="checkbox" name="createJournals" checked>
+      </div>
+    </div>
+
+    <hr>
+
+    <button type="button" class="vox-pdf-start-btn">
+      <i class="fas fa-brain"></i> {{localize "VOXPDF.ImportBtn"}}
+    </button>
+  </section>
+</form>

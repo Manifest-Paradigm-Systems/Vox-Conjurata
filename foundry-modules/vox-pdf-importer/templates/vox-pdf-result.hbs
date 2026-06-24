@@ -1,0 +1,30 @@
+<form class="flexcol">
+  <section>
+    <h2>{{localize "VOXPDF.Complete"}}</h2>
+    <hr>
+
+    <div class="vox-pdf-result-stats">
+      <div class="vox-pdf-stat">
+        <span class="vox-pdf-stat-label">{{localize "VOXPDF.ActorsCreated"}}</span>
+        <span class="vox-pdf-stat-value success">{{actors}}</span>
+      </div>
+      <div class="vox-pdf-stat">
+        <span class="vox-pdf-stat-label">{{localize "VOXPDF.JournalsCreated"}}</span>
+        <span class="vox-pdf-stat-value success">{{journals}}</span>
+      </div>
+      <div class="vox-pdf-stat">
+        <span class="vox-pdf-stat-label">{{localize "VOXPDF.ScenesCreated"}}</span>
+        <span class="vox-pdf-stat-value success">{{scenes}}</span>
+      </div>
+      <div class="vox-pdf-stat">
+        <span class="vox-pdf-stat-label">{{localize "VOXPDF.PagesProcessed"}}</span>
+        <span class="vox-pdf-stat-value">{{processed}}</span>
+      </div>
+    </div>
+
+    <hr>
+    <button type="button" class="vox-pdf-done-btn">
+      <i class="fas fa-check"></i> {{localize "VOXPDF.Complete"}}
+    </button>
+  </section>
+</form>
