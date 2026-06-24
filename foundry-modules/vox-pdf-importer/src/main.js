@@ -272,6 +272,10 @@ class VoxPdfImport {
     return "";
   }
 
+  _safeName() {
+    return this.pdfFilename.replace(/\.pdf$/i, "").replace(/[^a-zA-Z0-9_-]+/g, "_").replace(/^_|_$/g, "").toLowerCase();
+  }
+
   // ─── UI Helpers ─────────────────────────────────────────────────────
 
   async _promptForPdf() {
