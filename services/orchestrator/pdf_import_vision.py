@@ -140,10 +140,62 @@ def _build_pf2e_prompt(previous_context: str) -> str:
     )
 
 
+def _build_dnd5e_prompt(previous_context: str) -> str:
+    """D&D 5e stat block extraction prompt for MiniCPM-V."""
+    context_block = ""
+    if previous_context:
+        context_block = f"\nCONTEXT FROM PREVIOUS PAGE:\n{previous_context}\n\n"
+
+    return (
+        "You are a D&D 5e PDF reader. Extract ALL game statistics and text from this page image.\n"
+        f"{context_block}"
+        "TASKS (in order of priority):\n"
+        "1. If this page contains an NPC or creature stat block, extract ALL of the following:\n"
+        "   - NPC/Creature Name\n"
+        "   - Challenge Rating (CR, e.g., 1/4, 3, 8)\n"
+        "   - Armor Class (AC)\n"
+        "   - Hit Points (HP)\n"
+        "   - Speed (e.g., 30 ft., fly 60 ft.)\n"
+        "   - Ability Scores: Strength, Dexterity, Constitution, Intelligence, Wisdom, Charisma\n"
+        "   - Saving Throws (e.g., Str +5, Dex +3)\n"
+        "   - Skills (e.g., Stealth +5, Perception +3)\n"
+        "   - Damage Resistances, Immunities, Vulnerabilities\n"
+        "   - Condition Immunities\n"
+        "   - Senses (e.g., darkvision 60 ft., passive Perception 13)\n"
+        "   - Languages\n"
+        "   - Size and Type (e.g., Medium humanoid, Huge dragon)\n"
+        "   - Alignment\n"
+        "   - Traits/Abilities (name and description)\n"
+        "   - Actions (name, attack bonus, damage dice, damage type)\n"
+        "   - Bonus Actions, Reactions, Legendary Actions\n"
+        "   - Spellcasting (spell list with levels)\n"
+        "   - Equipment carried\n\n"
+        "2. If this page contains narrative text, extract the full text preserving paragraphs.\n"
+        "3. If this page is a map, describe it and note 'MAP PAGE'.\n"
+        "4. If this page is art only, respond with just: NO_CONTENT\n\n"
+        "OUTPUT FORMAT:\n"
+        "For stat blocks, output JSON in code fences:\n"
+        '```json\n{"type":"npc","name":"...","challenge":N,"ac":N,"hp":N,'
+        '"speed":"...","abilities":{"str":N,"dex":N,"con":N,"int":N,"wis":N,"cha":N},'
+        '"saves":{"str":N,"dex":N,"con":N,"int":N,"wis":N,"cha":N},'
+        '"skills":{"skill_name":N,...},'
+        '"damage_resistances":[...],"damage_immunities":[...],"condition_immunities":[...],'
+        '"senses":"...","languages":[...],"size":"...","alignment":"...","type":"...",'
+        '"traits":[{"name":"...","description":"..."}],'
+        '"attacks":[{"name":"...","bonus":N,"damage":"...","damage_type":"..."}],'
+        '"spells":[{"level":N,"spells":[...]}],"equipment":[...]}\n```\n'
+        "For narrative pages:\n"
+        '```json\n{"type":"narrative","title":"...","text":"..."}\n```\n'
+        "For maps:\n"
+        '```json\n{"type":"map","name":"...","description":"..."}\n```\n'
+        "Be thorough - extract EVERY number and modifier visible on the page."
+    )
+
+
 async def _refine_to_json(raw_text: str, page_number: int) -> dict:
     """Send vision raw output to vox-llm-core for structured JSON refinement."""
     prompt = (
-        "Convert the following Pathfinder 2e stat block extraction into a clean JSON object. "
+        "Convert the following stat block extraction into a clean JSON object. "
         "Fix any formatting issues. "
         "If content is narrative, wrap as {\"type\":\"narrative\",\"text\":\"...\"}. "
         "If no useful content, return {\"type\":\"empty\"}.\n\n"
