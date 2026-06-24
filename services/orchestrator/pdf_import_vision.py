@@ -119,7 +119,8 @@ def _build_pf2e_prompt(previous_context: str) -> str:
         "   - Special abilities (name, description)\n"
         "   - Spells (list with levels and names)\n"
         "   - Items carried\n"
-        "   - Source book name if visible\n\n"
+        "   - Source book name if visible\n"
+        "5. If the NPC has a character portrait or illustration on this page, estimate its bounding box as `portrait: {x, y, w, h}` in pixel coordinates (0,0 = top-left of page, use page dimensions to estimate). Skip if no portrait visible.\n\n"
         "2. If this page contains narrative text, extract the full text preserving paragraphs.\n"
         "3. If this page is a map, describe it and note 'MAP PAGE'.\n"
         "4. If this page is art only, respond with just: NO_CONTENT\n\n"
@@ -131,7 +132,8 @@ def _build_pf2e_prompt(previous_context: str) -> str:
         '"hp":N,"ac":N,"saves":{"fort":N,"ref":N,"will":N},'
         '"speed":"...","attacks":[{"name":"...","bonus":N,"damage":"...","traits":[...]}],'
         '"abilities_list":[{"name":"...","description":"..."}],'
-        '"spells":[{"level":N,"spells":[...]}],"items":[...]}\n```\n'
+        '"spells":[{"level":N,"spells":[...]}],"items":[...],'
+        '"portrait":{"x":N,"y":N,"w":N,"h":N}}\n```\n'
         "For narrative pages:\n"
         '```json\n{"type":"narrative","title":"...","text":"..."}\n```\n'
         "For maps:\n"
@@ -169,7 +171,8 @@ def _build_dnd5e_prompt(previous_context: str) -> str:
         "   - Actions (name, attack bonus, damage dice, damage type)\n"
         "   - Bonus Actions, Reactions, Legendary Actions\n"
         "   - Spellcasting (spell list with levels)\n"
-        "   - Equipment carried\n\n"
+        "   - Equipment carried\n"
+        "5. If the NPC has a character portrait or illustration on this page, estimate its bounding box as `portrait: {x, y, w, h}` in pixel coordinates (0,0 = top-left of page). Skip if no portrait visible.\n\n"
         "2. If this page contains narrative text, extract the full text preserving paragraphs.\n"
         "3. If this page is a map, describe it and note 'MAP PAGE'.\n"
         "4. If this page is art only, respond with just: NO_CONTENT\n\n"
@@ -183,7 +186,8 @@ def _build_dnd5e_prompt(previous_context: str) -> str:
         '"senses":"...","languages":[...],"size":"...","alignment":"...","type":"...",'
         '"traits":[{"name":"...","description":"..."}],'
         '"attacks":[{"name":"...","bonus":N,"damage":"...","damage_type":"..."}],'
-        '"spells":[{"level":N,"spells":[...]}],"equipment":[...]}\n```\n'
+        '"spells":[{"level":N,"spells":[...]}],"equipment":[...],'
+        '"portrait":{"x":N,"y":N,"w":N,"h":N}}\n```\n'
         "For narrative pages:\n"
         '```json\n{"type":"narrative","title":"...","text":"..."}\n```\n'
         "For maps:\n"
