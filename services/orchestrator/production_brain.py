@@ -60,6 +60,7 @@ app.mount("/sessions", StaticFiles(directory=str(SESSION_LIBRARY_DIR)), name="se
 # Register PDF import vision router
 app.include_router(pdf_import_vision_router)
 app.include_router(bg_removal_router)
+app.include_router(aon_scraper_router)
 
 # Global memory map tracking active execution loops for cancellation
 ACTIVE_TASKS: dict[str, asyncio.Task] = {}
