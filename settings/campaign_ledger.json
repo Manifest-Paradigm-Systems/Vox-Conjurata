@@ -3,7 +3,7 @@
   "stripe_customer_id": null,
   "personal_wallets": {
     "gm": 979.7102499999966,
-    "G3SJW9rRHe7J3AOH": 208.97400000000002,
+    "G3SJW9rRHe7J3AOH": 208.97100000000003,
     "nXnKU6oZYzdg0xSY": 9.891499999999994
   },
   "session_allowances": {
@@ -16,7 +16,7 @@
   },
   "session_spent": {
     "gm": 0.5172500000000002,
-    "G3SJW9rRHe7J3AOH": 0.026,
+    "G3SJW9rRHe7J3AOH": 0.028999999999999998,
     "nXnKU6oZYzdg0xSY": 0.11075000000000006
   },
   "transactions": [
@@ -2035,6 +2035,12 @@
       "amount": 0.003,
       "description": "Voice Forging for Soulbound Doll",
       "timestamp": 1782207694.3842096
+    },
+    {
+      "user_id": "G3SJW9rRHe7J3AOH",
+      "amount": 0.003,
+      "description": "Vision Scan for scene zyE2L5uGqn0iHrL7",
+      "timestamp": 1782411439.1689234
     }
   ]
 }
