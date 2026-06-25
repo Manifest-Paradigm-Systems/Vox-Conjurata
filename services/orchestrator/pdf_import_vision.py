@@ -26,6 +26,7 @@ class PdfImportVisionRequest(BaseModel):
     page_image: str  # base64-encoded data URI
     page_number: int
     game_system: str = "pf2e"  # "pf2e" or "dnd5e"
+    bestiary_mode: bool = False  # when True, use short prompt (name + portrait only)
     previous_context: str = ""
     max_tokens: int = 2048
     temperature: float = 0.1
@@ -40,8 +41,10 @@ async def pdf_import_vision(req: PdfImportVisionRequest):
     Returns:
         { page, raw_extraction, structured_data, has_content }
     """
-    # Step 1: Build vision prompt for the selected game system
-    if req.game_system == "dnd5e":
+    # Step 1: Build vision prompt
+    if req.bestiary_mode:
+        vision_prompt = _build_bestiary_prompt(req.previous_context)
+    elif req.game_system == "dnd5e":
         vision_prompt = _build_dnd5e_prompt(req.previous_context)
     else:
         vision_prompt = _build_pf2e_prompt(req.previous_context)
@@ -139,6 +142,20 @@ def _build_pf2e_prompt(previous_context: str) -> str:
         "For maps:\n"
         '```json\n{"type":"map","name":"...","description":"..."}\n```\n'
         "Be thorough - extract EVERY number and modifier visible on the page."
+    )
+
+
+def _build_bestiary_prompt(previous_context: str) -> str:
+    """Short prompt for bestiary mode — just NPC name + portrait position."""
+    context_block = ""
+    if previous_context:
+        context_block = f"\nCONTEXT FROM PREVIOUS PAGE:\n{previous_context}\n\n"
+    return (
+        "Extract the NPC/creature name and character portrait bounding box from this bestiary page.\n"
+        f"{context_block}"
+        "Return JSON:\n"
+        '```json\n{"type":"npc","name":"Creature Name","portrait":{"x":N,"y":N,"w":N,"h":N}}\n```\n'
+        "If no portrait visible, omit portrait. If no content, respond: NO_CONTENT"
     )
 
 
