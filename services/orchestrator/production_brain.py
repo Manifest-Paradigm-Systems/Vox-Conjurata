@@ -18,6 +18,7 @@ import subprocess
 
 from chronicle import VoxChronicleSystem
 from pdf_import_vision import router as pdf_import_vision_router
+from bg_removal_proxy import router as bg_removal_router
 from vision_reader import MonsterSightSystem
 from resource_manager import resource_manager
 from foundry_client import push_to_foundry, log_to_foundry

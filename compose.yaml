@@ -261,6 +261,16 @@ services:
     - vox-net
     restart: unless-stopped
 
+  vox-bg-remover:
+    build:
+      context: ./services/vox-bg-remover
+    container_name: vox-bg-remover
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - vox-net
+    restart: unless-stopped
+
 networks:
   vox-net:
     name: vox-net
