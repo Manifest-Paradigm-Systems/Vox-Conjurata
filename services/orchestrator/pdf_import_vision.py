@@ -151,11 +151,12 @@ def _build_bestiary_prompt(previous_context: str) -> str:
     if previous_context:
         context_block = f"\nCONTEXT FROM PREVIOUS PAGE:\n{previous_context}\n\n"
     return (
-        "Extract the NPC/creature name and character portrait bounding box from this bestiary page.\n"
+        "Extract the NPC name and portrait from this bestiary page.\n"
         f"{context_block}"
+        "For the portrait, give the bounding box with 20px extra margin on all sides so nothing is cut off. "
+        "If no portrait visible, omit portrait. If no content, respond: NO_CONTENT.\n"
         "Return JSON:\n"
-        '```json\n{"type":"npc","name":"Creature Name","portrait":{"x":N,"y":N,"w":N,"h":N}}\n```\n'
-        "If no portrait visible, omit portrait. If no content, respond: NO_CONTENT"
+        '```json\n{"type":"npc","name":"Creature Name","portrait":{"x":N,"y":N,"w":N,"h":N}}\n```'
     )
 
 
