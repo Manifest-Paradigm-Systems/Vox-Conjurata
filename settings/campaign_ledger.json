@@ -8,14 +8,14 @@
   },
   "session_allowances": {
     "G3SJW9rRHe7J3AOH": 0.0,
-    "gm": 99.45874999999971
+    "gm": 99.44074999999971
   },
   "session_caps": {
     "G3SJW9rRHe7J3AOH": 0.0,
     "gm": 100.0
   },
   "session_spent": {
-    "gm": 0.5412500000000002,
+    "gm": 0.5592500000000002,
     "G3SJW9rRHe7J3AOH": 0.028999999999999998,
     "nXnKU6oZYzdg0xSY": 0.11075000000000006
   },
@@ -2089,6 +2089,42 @@
       "amount": 0.003,
       "description": "Voice Forging for Utto",
       "timestamp": 1782461212.0322037
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Insidiator",
+      "timestamp": 1782461289.5593302
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Insidiator",
+      "timestamp": 1782461291.2375987
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Basilisk",
+      "timestamp": 1782461292.919754
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Basilisk",
+      "timestamp": 1782461293.5316658
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Lair",
+      "timestamp": 1782461295.2127864
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Lair",
+      "timestamp": 1782461296.8881881
     }
   ]
 }
