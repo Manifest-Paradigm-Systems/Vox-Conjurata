@@ -167,7 +167,8 @@ def _build_pf2e_prompt(previous_context: str) -> str:
         "For narrative pages:\n"
         '```json\n{"type":"narrative","title":"...","text":"..."}\n```\n'
         "For maps:\n"
-        '```json\n{"type":"map","name":"...","description":"..."}\n```\n'
+        '```json\n{"type":"map","name":"...","description":"...","rooms":[{"name":"Room Name","x":N,"y":N,"w":N,"h":N}]}\n```\n'
+        "For each labeled room/area on the map, include a rooms entry with its name and bounding box.\n"
         "Be thorough - extract EVERY number and modifier visible on the page."
     )
 
