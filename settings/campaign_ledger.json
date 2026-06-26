@@ -8,14 +8,14 @@
   },
   "session_allowances": {
     "G3SJW9rRHe7J3AOH": 0.0,
-    "gm": 99.44074999999971
+    "gm": 99.37474999999971
   },
   "session_caps": {
     "G3SJW9rRHe7J3AOH": 0.0,
     "gm": 100.0
   },
   "session_spent": {
-    "gm": 0.5592500000000002,
+    "gm": 0.6252500000000003,
     "G3SJW9rRHe7J3AOH": 0.028999999999999998,
     "nXnKU6oZYzdg0xSY": 0.11075000000000006
   },
@@ -2125,6 +2125,138 @@
       "amount": 0.003,
       "description": "Voice Forging for Lair",
       "timestamp": 1782461296.8881881
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Glint",
+      "timestamp": 1782461298.572375
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Glint",
+      "timestamp": 1782461298.7818153
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Novice Hellknight Armiger",
+      "timestamp": 1782461300.2866962
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Novice Hellknight Armiger",
+      "timestamp": 1782461301.9636695
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Adjutant Hellknight Armiger",
+      "timestamp": 1782461303.646
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Adjutant Hellknight Armiger",
+      "timestamp": 1782461304.2816498
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Skeleton",
+      "timestamp": 1782461305.538629
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Skeleton",
+      "timestamp": 1782461307.2144067
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Large Sack",
+      "timestamp": 1782461308.8950279
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Large Sack",
+      "timestamp": 1782461309.2815356
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Elite Adjutant Hellknight Armiger",
+      "timestamp": 1782461310.9620595
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Elite Adjutant Hellknight Armiger",
+      "timestamp": 1782461312.6390233
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Bedrolls",
+      "timestamp": 1782461314.32255
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Bedrolls",
+      "timestamp": 1782461314.7813997
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Ritual Backlash",
+      "timestamp": 1782461316.2861748
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Ritual Backlash",
+      "timestamp": 1782461317.9616184
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Ort",
+      "timestamp": 1782461319.6411746
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Ort",
+      "timestamp": 1782461320.2818499
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Viro Ahala",
+      "timestamp": 1782461321.9620342
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Viro Ahala",
+      "timestamp": 1782461323.6384623
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Ritual Materials",
+      "timestamp": 1782461325.3736138
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Ritual Materials",
+      "timestamp": 1782461325.7817068
     }
   ]
 }
