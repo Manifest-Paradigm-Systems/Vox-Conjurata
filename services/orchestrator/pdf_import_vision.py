@@ -4,6 +4,7 @@ Takes a rendered PDF page image, sends it to MiniCPM-V for stat block / text ext
 then refines the response into structured JSON using vox-llm-core.
 """
 
+import asyncio
 import base64
 import httpx
 import json
@@ -54,33 +55,30 @@ async def pdf_import_vision(req: PdfImportVisionRequest):
     if image_b64.startswith("data:"):
         image_b64 = image_b64.split(",", 1)[1]
 
-    # Step 3: Call vox-vision-reader (MiniCPM-V 2.6)
-    vision_payload = {
-        "model": "MiniCPM-V-2_6-Int4",
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": vision_prompt},
-                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_b64}"}}
-                ]
-            }
-        ],
-        "max_tokens": req.max_tokens,
-        "temperature": req.temperature,
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.post(
-                f"{VISION_READER_URL}/v1/chat/completions",
-                json=vision_payload
-            )
-            resp.raise_for_status()
-            raw_text = resp.json()["choices"][0]["message"]["content"]
-    except Exception as e:
-        logger.error(f"Vision reader failed for page {req.page_number}: {e}")
-        raise HTTPException(status_code=502, detail=f"Vision API failed: {str(e)}")
+    # Step 3: Call vox-vision-reader (MiniCPM-V 2.6) with retry for transient 500s
+    raw_text = None
+    vision_retries = 2
+    for attempt in range(vision_retries + 1):
+        try:
+            async with httpx.AsyncClient(timeout=180.0) as client:
+                resp = await client.post(
+                    f"{VISION_READER_URL}/v1/chat/completions",
+                    json=vision_payload
+                )
+                resp.raise_for_status()
+                raw_text = resp.json()["choices"][0]["message"]["content"]
+                break
+        except httpx.HTTPStatusError as e:
+            if attempt < vision_retries and e.response.status_code >= 500:
+                wait = 2 ** attempt
+                logger.warning(f"Vision reader 500 on page {req.page_number}, retry {attempt + 1}/{vision_retries} in {wait}s")
+                await asyncio.sleep(wait)
+                continue
+            logger.error(f"Vision reader failed for page {req.page_number}: {e}")
+            raise HTTPException(status_code=502, detail=f"Vision API failed: {str(e)}")
+        except Exception as e:
+            logger.error(f"Vision reader failed for page {req.page_number}: {e}")
+            raise HTTPException(status_code=502, detail=f"Vision API failed: {str(e)}")
 
     # Step 4: Refine into structured JSON via vox-llm-core
     json_result = None
