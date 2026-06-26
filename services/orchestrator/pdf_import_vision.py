@@ -50,10 +50,14 @@ async def pdf_import_vision(req: PdfImportVisionRequest):
     else:
         vision_prompt = _build_pf2e_prompt(req.previous_context)
 
-    # Step 2: Strip data URI prefix if present
+    # Step 2: Strip data URI prefix if present and fix base64 padding
     image_b64 = req.page_image
     if image_b64.startswith("data:"):
         image_b64 = image_b64.split(",", 1)[1]
+    # llama-cpp-python is strict about base64 padding — ensure it's correct
+    padding = (4 - len(image_b64) % 4) % 4
+    if padding:
+        image_b64 += "=" * padding
 
     # Step 3: Call vox-vision-reader (MiniCPM-V 2.6) with retry for transient 500s
     vision_payload = {
