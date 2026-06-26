@@ -31,6 +31,7 @@ class PdfImportVisionRequest(BaseModel):
     previous_context: str = ""
     max_tokens: int = 2048
     temperature: float = 0.1
+    page_hint: str = "auto"  # "auto", "map_or_art" — from pdf.js image detection
 
 
 @router.post("/api/v1/pdf-import-vision")
