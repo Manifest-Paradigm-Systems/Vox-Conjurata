@@ -51,6 +51,16 @@ async def pdf_import_vision(req: PdfImportVisionRequest):
     else:
         vision_prompt = _build_pf2e_prompt(req.previous_context)
 
+    # Adjust prompt based on page_hint from pdf.js image detection
+    if req.page_hint == "map_or_art":
+        vision_prompt = (
+            "IMPORTANT: This page appears to be a MAP or ILLUSTRATION based on its image content.\n"
+            "If this is a battlemap, dungeon map, or area map with grid lines or room labels, you MUST output:\n"
+            '```json\n{"type":"map","name":"...","description":"..."}\n```\n'
+            "If this is a decorative illustration, full-page art, or handout with no game statistics, respond with: NO_CONTENT\n"
+            "Only output stat blocks or narrative text if the page actually contains readable game content.\n\n"
+        ) + vision_prompt
+
     # Step 2: Strip data URI prefix if present and fix base64 padding
     image_b64 = req.page_image
     if image_b64.startswith("data:"):
