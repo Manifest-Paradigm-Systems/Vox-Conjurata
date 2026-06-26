@@ -56,6 +56,20 @@ async def pdf_import_vision(req: PdfImportVisionRequest):
         image_b64 = image_b64.split(",", 1)[1]
 
     # Step 3: Call vox-vision-reader (MiniCPM-V 2.6) with retry for transient 500s
+    vision_payload = {
+        "model": "MiniCPM-V-2_6-Int4",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": vision_prompt},
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_b64}"}}
+                ]
+            }
+        ],
+        "max_tokens": req.max_tokens,
+        "temperature": req.temperature,
+    }
     raw_text = None
     vision_retries = 2
     for attempt in range(vision_retries + 1):
