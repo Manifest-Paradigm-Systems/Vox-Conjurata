@@ -8,14 +8,14 @@
   },
   "session_allowances": {
     "G3SJW9rRHe7J3AOH": 0.0,
-    "gm": 99.48274999999971
+    "gm": 99.47074999999971
   },
   "session_caps": {
     "G3SJW9rRHe7J3AOH": 0.0,
     "gm": 100.0
   },
   "session_spent": {
-    "gm": 0.5172500000000002,
+    "gm": 0.5292500000000002,
     "G3SJW9rRHe7J3AOH": 0.028999999999999998,
     "nXnKU6oZYzdg0xSY": 0.11075000000000006
   },
@@ -2041,6 +2041,30 @@
       "amount": 0.003,
       "description": "Vision Scan for scene zyE2L5uGqn0iHrL7",
       "timestamp": 1782411439.1689234
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Chelaxian Loyalist",
+      "timestamp": 1782461194.2276843
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Chelaxian Loyalist",
+      "timestamp": 1782461195.906828
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Ethran's Gift",
+      "timestamp": 1782461197.604204
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Ethran's Gift",
+      "timestamp": 1782461198.0316179
     }
   ]
 }
