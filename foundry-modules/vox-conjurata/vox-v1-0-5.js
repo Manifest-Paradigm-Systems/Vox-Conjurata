@@ -435,12 +435,15 @@ async function handleVoxCommand(command, param) {
  * V12 / PF2e compatible message creator. 
  */
 async function createVoxChatMessage(data) {
-    const messageData = { ...data, style: 2 };
+    // Foundry v14 CHAT_MESSAGE_STYLES: OTHER=0, OOC=1, IC=2, EMOTE=3
+    // Use OTHER (0) for generic voice-transcription chat cards
+    const messageData = { ...data, style: CONST.CHAT_MESSAGE_STYLES.OTHER };
     try {
         const message = new ChatMessage(messageData);
         return await ChatMessage.create(message.toObject());
     } catch (err) {
-        return await ChatMessage.create({ ...data, type: 2 });
+        console.warn("Vox | ChatMessage fallback creation:", err);
+        return await ChatMessage.create({ ...data, style: CONST.CHAT_MESSAGE_STYLES.OTHER });
     }
 }
 
