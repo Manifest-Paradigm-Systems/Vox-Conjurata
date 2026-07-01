@@ -206,5 +206,13 @@
     "is_archetype": false,
     "archetype_key": "monster_undead",
     "created_at": "2026-07-01T07:38:48"
+  },
+  "test_voice_pipeline": {
+    "engine": "vox-audio-core",
+    "seed_path": "test_voice_pipeline.wav",
+    "voice_prompt": "A deep, resonant voice with a slight echo, suggesting a character of mystery and intrigue.",
+    "is_archetype": false,
+    "archetype_key": "human_male_british",
+    "created_at": "2026-07-01T07:58:05"
   }
 }
