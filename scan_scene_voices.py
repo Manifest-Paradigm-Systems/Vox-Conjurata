@@ -11,12 +11,10 @@ This script:
 import json
 import os
 import sys
-import shutil
 import tempfile
 import subprocess
 import httpx
 import time
-import re
 
 # Paths
 FOUNDRY_WORLD_DIR = "/home/EvokeStudio/foundry/data/Data/worlds/pathfinder"
@@ -24,9 +22,10 @@ FOUNDRY_ACTORS_DB = os.path.join(FOUNDRY_WORLD_DIR, "data/actors")
 FOUNDRY_SCENES_DB = os.path.join(FOUNDRY_WORLD_DIR, "data/scenes")
 FOUNDRY_APP_NODE = "/home/EvokeStudio/foundry/app"
 ORCHESTRATOR_URL = "http://localhost:8080"
+NODE_BIN = "/home/linuxbrew/.linuxbrew/bin/node"
 
-# Node.js script to read LevelDB (we call it as a subprocess)
-NODE_READ_SCRIPT = """
+# Template for Node.js script - uses {scenes_db} and {actors_db} as placeholders
+NODE_SCRIPT_TEMPLATE = r'''
 const { ClassicLevel } = require('classic-level');
 const fs = require('fs');
 const path = require('path');
@@ -55,7 +54,6 @@ async function readActiveScene() {
             if (key.startsWith('!scenes!')) {
                 const parsed = JSON.parse(value);
                 if (parsed.active === true && parsed.name) {
-                    // Get token IDs from the scene's tokens array
                     const result = {
                         id: parsed._id,
                         name: parsed.name,
@@ -71,30 +69,30 @@ async function readActiveScene() {
         console.log(JSON.stringify({ error: 'No active scene found' }));
     } catch(e) {
         console.log(JSON.stringify({ error: e.message }));
-    }}
+    }
     await db.close();
     cleanup(tmpDir);
 }
 
-async function readSceneTokens(sceneId) {{
+async function readSceneTokens(sceneId) {
     const tmpDir = '/tmp/foundry_scan_tokens_' + Date.now();
     const dbDir = process.argv[4] || '{scenes_db}';
     copyDb(dbDir, tmpDir);
 
-    const db = new ClassicLevel(tmpDir, {{ valueEncoding: 'utf8', keyEncoding: 'utf8' }});
+    const db = new ClassicLevel(tmpDir, { valueEncoding: 'utf8', keyEncoding: 'utf8' });
     const formatKey = (...parts) => parts.join('.');
     const tokenSublevel = db.sublevel(formatKey('scenes', 'tokens'));
 
     const tokens = [];
     const prefix = sceneId + '.';
 
-    try {{
-        for await (const [key, value] of tokenSublevel.iterator({{
+    try {
+        for await (const [key, value] of tokenSublevel.iterator({
             gte: prefix,
             lte: prefix + '~'
-        }})) {{
+        })) {
             const parsed = JSON.parse(value);
-            tokens.push({{
+            tokens.push({
                 id: parsed._id,
                 name: parsed.name || 'Unknown',
                 actorId: parsed.actorId || null,
@@ -103,91 +101,87 @@ async function readSceneTokens(sceneId) {{
                 texture: parsed.texture?.src || null,
                 x: parsed.x,
                 y: parsed.y
-            }});
-        }}
-    }} catch(e) {{
-        console.log(JSON.stringify({{ error: e.message, tokens: tokens }}));
+            });
+        }
+    } catch(e) {
+        console.log(JSON.stringify({ error: e.message, tokens: tokens }));
         await db.close();
         cleanup(tmpDir);
         return;
-    }}
+    }
 
-    const result = {{ tokens: tokens }};
+    const result = { tokens: tokens };
     console.log(JSON.stringify(result));
     await db.close();
     cleanup(tmpDir);
 }
 
-async function readActors(actorIdsStr) {{
+async function readActors(actorIdsStr) {
     const actorIds = JSON.parse(actorIdsStr);
     const tmpDir = '/tmp/foundry_scan_actors_' + Date.now();
     const dbDir = process.argv[4] || '{actors_db}';
     copyDb(dbDir, tmpDir);
 
-    const db = new ClassicLevel(tmpDir, {{ valueEncoding: 'utf8', keyEncoding: 'utf8' }});
+    const db = new ClassicLevel(tmpDir, { valueEncoding: 'utf8', keyEncoding: 'utf8' });
     const actors = [];
 
-    try {{
-        for await (const [key, value] of db.iterator()) {{
-            if (key.startsWith('!actors!')) {{
+    try {
+        for await (const [key, value] of db.iterator()) {
+            if (key.startsWith('!actors!')) {
                 const parsed = JSON.parse(value);
-                if (actorIds.includes(parsed._id)) {{
-                    actors.push({{
+                if (actorIds.includes(parsed._id)) {
+                    actors.push({
                         id: parsed._id,
                         name: parsed.name || 'Unknown',
                         type: parsed.type || 'npc',
                         img: parsed.img || '',
-                        system: parsed.system || {{}},
-                        prototypeToken: parsed.prototypeToken || {{}},
-                        flags: parsed.flags || {{}}
-                    }});
-                }}
-            }}
-        }}
-    }} catch(e) {{
-        console.log(JSON.stringify({{ error: e.message, actors: actors }}));
+                        system: parsed.system || {},
+                        prototypeToken: parsed.prototypeToken || {},
+                        flags: parsed.flags || {}
+                    });
+                }
+            }
+        }
+    } catch(e) {
+        console.log(JSON.stringify({ error: e.message, actors: actors }));
         await db.close();
         cleanup(tmpDir);
         return;
-    }}
+    }
 
-    console.log(JSON.stringify({{ actors: actors }}));
+    console.log(JSON.stringify({ actors: actors }));
     await db.close();
     cleanup(tmpDir);
 }
 
-function copyDb(src, dst) {{
-    fs.rmSync(dst, {{ recursive: true, force: true }});
-    fs.mkdirSync(dst, {{ recursive: true }});
-    for (const f of fs.readdirSync(src)) {{
+function copyDb(src, dst) {
+    fs.rmSync(dst, { recursive: true, force: true });
+    fs.mkdirSync(dst, { recursive: true });
+    for (const f of fs.readdirSync(src)) {
         fs.copyFileSync(path.join(src, f), path.join(dst, f));
-    }}
-}}
+    }
+}
 
-function cleanup(dir) {{
-    try {{ fs.rmSync(dir, {{ recursive: true, force: true }}); }} catch(e) {{}}
-}}
+function cleanup(dir) {
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch(e) {}
+}
 
-main().catch(e => {{
-    console.log(JSON.stringify({{ error: e.message }}));
+main().catch(e => {
+    console.log(JSON.stringify({ error: e.message }));
     process.exit(1);
-}});
-"""
+});
+'''
 
 # Build the Node.js script with correct paths
 def build_node_script():
-    script = NODE_READ_SCRIPT.replace(
+    return NODE_SCRIPT_TEMPLATE.replace(
         "{scenes_db}", FOUNDRY_SCENES_DB
     ).replace(
         "{actors_db}", FOUNDRY_ACTORS_DB
     )
-    return script
-
-NODE_BIN = "/home/linuxbrew/.linuxbrew/bin/node"
 
 def run_node(script_content, *args):
     """Execute a Node.js script with arguments and return parsed JSON."""
-    # Write script to temp file
     fd, script_path = tempfile.mkstemp(suffix='.js')
     with os.fdopen(fd, 'w') as f:
         f.write(script_content)
@@ -202,7 +196,7 @@ def run_node(script_content, *args):
         )
 
         if result.returncode != 0:
-            print(f"Node.js error (stderr): {result.stderr[:500]}")
+            print(f"  Node.js error (stderr): {result.stderr[:500]}")
             return None
 
         # Parse the last line of stdout (which should be our JSON output)
@@ -215,13 +209,13 @@ def run_node(script_content, *args):
                 except json.JSONDecodeError:
                     continue
 
-        print(f"Could not find JSON in output: {result.stdout[:500]}")
+        print(f"  Could not find JSON in output: {result.stdout[:500]}")
         return None
     except subprocess.TimeoutExpired:
-        print("Node.js subprocess timed out")
+        print("  Node.js subprocess timed out")
         return None
     except Exception as e:
-        print(f"Error running Node.js: {e}")
+        print(f"  Error running Node.js: {e}")
         return None
     finally:
         try:
@@ -229,11 +223,10 @@ def run_node(script_content, *args):
         except:
             pass
 
+
 def get_actor_lore(actor_data):
     """Extract lore/description from actor data."""
     system = actor_data.get('system', {})
-
-    # Try various PF2e lore field locations
     lore = (
         system.get('details', {}).get('biography', {}).get('value', '') or
         system.get('details', {}).get('publicBiography', '') or
@@ -241,29 +234,26 @@ def get_actor_lore(actor_data):
         system.get('details', {}).get('description', '') or
         ''
     )
-
     return lore
+
 
 def get_actor_stats(actor_data):
     """Extract stats from actor data."""
     system = actor_data.get('system', {})
     details = system.get('details', {})
-
     stats = {
         "race": details.get('race', {}).get('name', '') or details.get('race', '') or system.get('race', ''),
         "gender": details.get('gender', '') or details.get('sex', '') or '',
         "level": details.get('level', {}).get('value', 0) or details.get('level', 0) or 0,
     }
-
     return stats
+
 
 def is_monster_actor(actor_data):
     """Determine if an actor is a monster."""
     actor_type = actor_data.get('type', '')
     if actor_type == 'character':
         return False
-
-    # Check if it's an NPC with non-humanoid type
     system = actor_data.get('system', {})
     details = system.get('details', {})
     creature_type = details.get('type', {})
@@ -271,12 +261,13 @@ def is_monster_actor(actor_data):
         type_value = creature_type.get('value', '')
     else:
         type_value = str(creature_type)
-
     return actor_type == 'npc' and type_value.lower() != 'humanoid'
+
 
 def get_actor_image(actor_data):
     """Get the actor's image/art path."""
     return actor_data.get('img', '') or actor_data.get('prototypeToken', {}).get('texture', {}).get('src', '')
+
 
 def ingest_actor(actor_id, name, lore, stats, is_monster, art_path):
     """Call the orchestrator's ingest-actor endpoint."""
@@ -291,7 +282,6 @@ def ingest_actor(actor_id, name, lore, stats, is_monster, art_path):
     }
 
     try:
-        # Use the orchestrator directly (not through Caddy, since we're on the host)
         resp = httpx.post(
             f"{ORCHESTRATOR_URL}/api/ingest-actor",
             json=payload,
@@ -313,6 +303,7 @@ def ingest_actor(actor_id, name, lore, stats, is_monster, art_path):
         return 'timeout'
     except Exception as e:
         return f'exception: {e}'
+
 
 def main():
     print("=" * 60)
@@ -356,16 +347,13 @@ def main():
 
     # Separate linked actors and synthetic tokens
     linked_actor_ids = []
-    synthetic_tokens = []
 
     for t in tokens:
         if t.get('actorLink') and t.get('actorId'):
             linked_actor_ids.append(t['actorId'])
-        elif not t.get('actorLink') and t.get('hasDelta'):
-            synthetic_tokens.append(t)
 
     print(f"  Linked actors: {len(linked_actor_ids)}")
-    print(f"  Synthetic tokens (embedded): {len(synthetic_tokens)}")
+    print(f"  Synthetic tokens (embedded delta): {sum(1 for t in tokens if not t.get('actorLink') and t.get('hasDelta'))}")
 
     # Step 3: Read actor data from actors LevelDB
     actors_map = {}
@@ -394,18 +382,17 @@ def main():
             continue
 
         if actor_id in actors_map:
-            # Linked actor
             a = actors_map[actor_id]
+            lore = get_actor_lore(a)
             actors_to_ingest.append({
                 "actorId": actor_id,
                 "name": a.get('name', token_name),
-                "lore": get_actor_lore(a),
+                "lore": lore,
                 "stats": get_actor_stats(a),
                 "isMonster": is_monster_actor(a),
                 "artPath": get_actor_image(a)
             })
         elif t.get('hasDelta'):
-            # Synthetic token with embedded delta (try to extract basic info)
             actors_to_ingest.append({
                 "actorId": actor_id,
                 "name": token_name,
@@ -415,7 +402,6 @@ def main():
                 "artPath": t.get('texture', '') or "icons/svg/mystery-man.svg"
             })
         else:
-            # Token with actorId but not found in actors DB (might be a compendium actor)
             actors_to_ingest.append({
                 "actorId": actor_id,
                 "name": token_name,
@@ -447,16 +433,15 @@ def main():
         )
 
         if result == 'created':
-            print("✅ Voice seed created")
+            print("created")
             results['created'].append(name)
         elif result == 'cached':
-            print("⏭️  Already cached")
+            print("cached")
             results['cached'].append(name)
         else:
-            print(f"❌ {result}")
+            print(f"FAILED: {result}")
             results['failed'].append((name, result))
 
-        # Small delay between ingest calls to not overwhelm the orchestrator
         if i < len(actors_to_ingest):
             time.sleep(0.5)
 
@@ -464,14 +449,15 @@ def main():
     print("\n" + "=" * 60)
     print("SUMMARY")
     print("=" * 60)
-    print(f"  ✅ Created:  {len(results['created'])}")
-    print(f"  ⏭️  Cached:   {len(results['cached'])}")
-    print(f"  ❌ Failed:   {len(results['failed'])}")
+    print(f"  Created: {len(results['created'])}")
+    print(f"  Cached:  {len(results['cached'])}")
+    print(f"  Failed:  {len(results['failed'])}")
     if results['failed']:
         for name, reason in results['failed']:
             print(f"     - {name}: {reason}")
 
     print("\nDone!")
+
 
 if __name__ == "__main__":
     main()

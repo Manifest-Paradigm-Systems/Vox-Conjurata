@@ -8,14 +8,14 @@
   },
   "session_allowances": {
     "G3SJW9rRHe7J3AOH": 0.0,
-    "gm": 99.3447499999997
+    "gm": 99.3267499999997
   },
   "session_caps": {
     "G3SJW9rRHe7J3AOH": 0.0,
     "gm": 100.0
   },
   "session_spent": {
-    "gm": 0.6552500000000003,
+    "gm": 0.6732500000000003,
     "G3SJW9rRHe7J3AOH": 0.028999999999999998,
     "nXnKU6oZYzdg0xSY": 0.11075000000000006
   },
@@ -2317,6 +2317,42 @@
       "amount": 0.003,
       "description": "Voice Forging for Night's Prize Remains",
       "timestamp": 1782464491.6416078
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Utto",
+      "timestamp": 1782891505.627175
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Utto",
+      "timestamp": 1782891506.5885155
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Amiri (Beginner Box)",
+      "timestamp": 1782891510.333376
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Amiri (Beginner Box)",
+      "timestamp": 1782891510.9974644
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Captain Lamperia Bane",
+      "timestamp": 1782891514.4909272
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Voice Forging for Captain Lamperia Bane",
+      "timestamp": 1782891515.2289112
     }
   ]
 }

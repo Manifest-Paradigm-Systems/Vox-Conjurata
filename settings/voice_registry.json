@@ -166,5 +166,29 @@
     "is_archetype": false,
     "archetype_key": "monster_beast",
     "created_at": "2026-06-23T09:41:37"
+  },
+  "KlsX5oDvJWHWpMBG": {
+    "engine": "vox-audio-core",
+    "seed_path": "KlsX5oDvJWHWpMBG.wav",
+    "voice_prompt": "Utto's voice is deep and resonant, carrying a hint of mystery and an air of quiet confidence.",
+    "is_archetype": false,
+    "archetype_key": "monster_beast",
+    "created_at": "2026-07-01T07:38:29"
+  },
+  "eNfOvBhZXg978Drw": {
+    "engine": "vox-audio-core",
+    "seed_path": "eNfOvBhZXg978Drw.wav",
+    "voice_prompt": "A strong, deep voice with a slight rasp, hinting at a life of adventure and battle.",
+    "is_archetype": false,
+    "archetype_key": "human_female_british",
+    "created_at": "2026-07-01T07:38:33"
+  },
+  "6rBzmdt0OsbnNgaD": {
+    "engine": "vox-audio-core",
+    "seed_path": "6rBzmdt0OsbnNgaD.wav",
+    "voice_prompt": "A commanding female voice resonates through the air, echoing with authority and a hint of mystery.",
+    "is_archetype": false,
+    "archetype_key": "monster_beast",
+    "created_at": "2026-07-01T07:38:38"
   }
 }
