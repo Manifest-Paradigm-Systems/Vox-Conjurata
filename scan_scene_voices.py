@@ -56,11 +56,11 @@ async function readActiveScene() {
                 const parsed = JSON.parse(value);
                 if (parsed.active === true && parsed.name) {
                     // Get token IDs from the scene's tokens array
-                    const result = {{
+                    const result = {
                         id: parsed._id,
                         name: parsed.name,
                         tokenIds: parsed.tokens || []
-                    }};
+                    };
                     console.log(JSON.stringify(result));
                     await db.close();
                     cleanup(tmpDir);
@@ -68,9 +68,9 @@ async function readActiveScene() {
                 }
             }
         }
-        console.log(JSON.stringify({{ error: 'No active scene found' }}));
-    } catch(e) {{
-        console.log(JSON.stringify({{ error: e.message }}));
+        console.log(JSON.stringify({ error: 'No active scene found' }));
+    } catch(e) {
+        console.log(JSON.stringify({ error: e.message }));
     }}
     await db.close();
     cleanup(tmpDir);
