@@ -95,7 +95,7 @@ def generate_with_cache(
     text: str,
     seed_path: str,
     dialogue_text: str = "",
-    inference_timesteps: int = 6,
+    inference_timesteps: int = 8,
     cfg_value: float = 2.0,
     max_retries: int = 2
 ) -> np.ndarray:
@@ -145,7 +145,7 @@ def generate_stream_with_cache(
     text: str,
     seed_path: str,
     dialogue_text: str = "",
-    inference_timesteps: int = 6,
+    inference_timesteps: int = 8,
     cfg_value: float = 2.0
 ) -> Generator[np.ndarray, None, None]:
     text = text.replace("\n", " ")
