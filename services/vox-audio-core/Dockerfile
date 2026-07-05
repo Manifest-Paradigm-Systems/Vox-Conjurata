@@ -26,7 +26,8 @@ RUN wget -q https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/
     dpkg -i cuda-keyring_1.1-1_all.deb && \
     apt-get update && apt-get install -y cuda-libraries-12-6 && \
     rm -f cuda-keyring_1.1-1_all.deb && \
-    rm -rf /var/lib/apt/lists/*
+    rm -rf /var/lib/apt/lists/* && \
+    ln -sf /usr/local/cuda-12.6/targets/x86_64-linux/lib/libcudart.so.12 /usr/lib/x86_64-linux-gnu/libcudart.so.13
 
 # Install dependencies
 COPY requirements.txt .
