@@ -147,26 +147,27 @@ def generate_stream_with_cache(
     inference_timesteps: int = 4,
     cfg_value: float = 2.0
 ) -> Generator[np.ndarray, None, None]:
-    prompt_cache = get_or_create_prompt_cache(seed_path)
     text = text.replace("\n", " ")
     text = re.sub(r"\s+", " ", text)
 
-    # Compute max_len from the raw dialogue words to prevent runaway generation
-    safe_max_len = _compute_max_len(dialogue_text or text)
-    logger.info(f"⏱️  [vox-audio-core] STREAM max_len cap: {safe_max_len}")
-    
-    gen = vox_engine.tts_model._generate_with_prompt_cache(
-        target_text=text,
-        prompt_cache=prompt_cache,
-        max_len=safe_max_len,
+    # Use voice-cloned streaming via reference_wav_path
+    # VoxCPM2 streaming with reference_wav_path uses the seed voice
+    gen = vox_engine._generate(
+        text=text,
+        reference_wav_path=seed_path,
         inference_timesteps=inference_timesteps,
         cfg_value=cfg_value,
         retry_badcase=False,
         streaming=True
     )
     try:
-        for wav, _, _ in gen:
-            yield wav.squeeze(0).cpu().numpy()
+        for wav in gen:
+            arr = wav.squeeze(0).cpu().numpy()
+            # NaN filter per chunk
+            if np.isnan(arr).sum() > max(1, arr.size // 100):
+                logger.warning("⚠️ Streaming chunk dropped (NaN)")
+                continue
+            yield arr
     finally:
         gen.close()
 
