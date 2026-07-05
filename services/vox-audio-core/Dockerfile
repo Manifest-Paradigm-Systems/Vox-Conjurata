@@ -18,10 +18,8 @@ RUN apt-get update && apt-get install -y \
     git curl ffmpeg libsndfile1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install CUDA compat layer for torchaudio (ROCm 6.x ships without libcudart)
-RUN pip3 install --no-cache-dir nvidia-cuda-runtime-cu12 && \
-    ln -s /usr/local/lib/python3.10/site-packages/nvidia/cuda_runtime/lib/libcudart.so.12 /usr/lib/libcudart.so.13 2>/dev/null || \
-    find / -name "libcudart*" -type f 2>/dev/null | head -5
+# Reinstall torchaudio built for ROCm (stock one links against libcudart)
+RUN pip3 install --no-cache-dir --force-reinstall torchaudio --index-url https://download.pytorch.org/whl/rocm6.2
 
 # Pin numpy < 2.0.0
 RUN pip3 install --no-cache-dir "numpy<2.0.0"

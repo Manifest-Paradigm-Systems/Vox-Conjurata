@@ -52,9 +52,8 @@ async def vram_flusher_loop():
                 if before > after:
                     logger.info(f"🧹 VRAM Flusher: Cleaned PyTorch cache. Freed {(before - after)/1024**2:.2f} MB. Reserved: {after/1024**2:.2f} MB")
 
-# ROCm 7.x bf16 can be unstable for VoxCPM2 — force float32 computation
-torch.set_float32_matmul_precision('highest')
-torch.backends.cuda.matmul.allow_fp16_reduced_precision_reduction = False
+# Enable TF32 for much faster matrix multiplication on supported GPUs
+torch.set_float32_matmul_precision('high')
 
 # Initialize the 2B Tokenizer-Free Diffusion Model (bfloat16)
 # Set load_denoiser=False to keep VRAM at exactly 4.2 GB
