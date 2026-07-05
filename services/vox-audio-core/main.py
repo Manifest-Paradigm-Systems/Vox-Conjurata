@@ -146,6 +146,13 @@ def generate_stream_with_cache(
     seed_path: str,
     dialogue_text: str = "",
     inference_timesteps: int = 6,
+    cfg_value: float = 2.0
+) -> Generator[np.ndarray, None, None]:
+    text = text.replace("\n", " ")
+    text = re.sub(r"\s+", " ", text)
+
+    # Streaming via _generate with streaming=True
+    # Retry once if initial chunks are NaN
     for attempt in range(2):
         gen = vox_engine._generate(
             text=text,
