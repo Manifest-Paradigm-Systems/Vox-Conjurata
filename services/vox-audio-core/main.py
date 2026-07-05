@@ -114,8 +114,8 @@ def generate_with_cache(
             cfg_value=retry_cfg,
             inference_timesteps=inference_timesteps,
             retry_badcase=True,
-            retry_badcase_max_times=1,       # Minimal retry (model needs ≥1 for internal vars)
-            retry_badcase_ratio_threshold=12.0  # Higher threshold to prevent false positives
+            retry_badcase_max_times=1,       # Model needs ≥1 for internal var init
+            retry_badcase_ratio_threshold=50.0  # Very high to prevent false positives on short TTS
         )
         t_gen = time.time() - t_gen_start
         arr = wav
@@ -160,7 +160,7 @@ def generate_stream_with_cache(
             cfg_value=cfg_value,
             retry_badcase=True,
             retry_badcase_max_times=1,
-            retry_badcase_ratio_threshold=12.0,
+            retry_badcase_ratio_threshold=50.0,
             streaming=True
         )
         chunk_count = 0
