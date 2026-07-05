@@ -176,16 +176,20 @@ class VoxEventQueueHUD extends Application {
                 title: "Gift / Transfer Credits",
                 content: `
                     <div style="padding: 10px; font-family: 'Signika', sans-serif;">
-                        <div class="form-group" style="margin-bottom: 12px;">
+                        <style>
+                            .vox-transfer-dialog select, .vox-transfer-dialog option { background: #111 !important; color: #eee !important; border-color: #444; }
+                            .vox-transfer-dialog select:focus option:hover { background: #333 !important; }
+                        </style>
+                        <div class="form-group vox-transfer-dialog" style="margin-bottom: 12px;">
                             <label>Source Bucket:</label>
-                            <select id="vox-transfer-source" style="width: 160px; background: #222; color: #eee; border: 1px solid #444;">
+                            <select id="vox-transfer-source" style="width: 160px; background: #111; color: #eee; border: 1px solid #444;">
                                 <option value="personal">My Persistent Wallet</option>
                                 <option value="session">My Session Grant</option>
                             </select>
                         </div>
-                        <div class="form-group" style="margin-bottom: 12px;">
+                        <div class="form-group vox-transfer-dialog" style="margin-bottom: 12px;">
                             <label>Recipient:</label>
-                            <select id="vox-transfer-target" style="width: 160px; background: #222; color: #eee; border: 1px solid #444;">
+                            <select id="vox-transfer-target" style="width: 160px; background: #111; color: #eee; border: 1px solid #444;">
                                 ${userOptions}
                             </select>
                         </div>
