@@ -1,7 +1,6 @@
 # vox-audio-core (VoxCPM2 + Pedalboard)
 # Optimized for AMD ROCm / RDNA3 (gfx1201)
-# Pinned to ROCm 6.4.2 for VoxCPM2 generation stability (7.x has NaN regression)
-FROM docker.io/rocm/pytorch:rocm6.4.2_ubuntu22.04_py3.10_pytorch_release_2.6.0
+FROM docker.io/rocm/pytorch:latest
 
 ENV HSA_OVERRIDE_GFX_VERSION=12.0.1
 ENV DEBIAN_FRONTEND=noninteractive
