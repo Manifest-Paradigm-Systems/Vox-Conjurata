@@ -18,8 +18,8 @@ RUN apt-get update && apt-get install -y \
     git curl ffmpeg libsndfile1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Reinstall torchaudio built for ROCm (stock one links against libcudart)
-RUN pip3 install --no-cache-dir --force-reinstall torchaudio --index-url https://download.pytorch.org/whl/rocm6.2
+# Pin torchao to version compatible with PyTorch 2.6.0
+RUN pip3 install --no-cache-dir "torchao<0.14.0"
 
 # Pin numpy < 2.0.0
 RUN pip3 install --no-cache-dir "numpy<2.0.0"
