@@ -141,7 +141,6 @@ def generate_stream_with_cache(
         text=text,
         inference_timesteps=inference_timesteps,
         cfg_value=cfg_value,
-        retry_badcase=False,
         streaming=True
     )
     try:
@@ -248,8 +247,7 @@ async def initialize_npc(request: NPCIdentityRequest):
             raw_wav = vox_engine.generate(
                 text=birth_prompt,
                 cfg_value=2.5,          # Forces model adherence to text criteria
-                inference_timesteps=12,
-                retry_badcase=False     # Badcase retry produces all-NaN on ROCm
+                inference_timesteps=12
             )
 
             # NaN guard abort if the birth clip is unusable
