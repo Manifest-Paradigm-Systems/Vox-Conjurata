@@ -97,7 +97,7 @@ def generate_with_cache(
     dialogue_text: str = "",
     inference_timesteps: int = 4,
     cfg_value: float = 2.0,
-    max_retries: int = 3
+    max_retries: int = 2
 ) -> np.ndarray:
     t_start = time.time()
 
@@ -106,13 +106,15 @@ def generate_with_cache(
 
     arr = None
     for attempt in range(max_retries + 1):
+        # Vary cfg_value slightly on retry to escape NaN path
+        retry_cfg = cfg_value + (attempt * 0.5)
         t_gen_start = time.time()
         wav = vox_engine.generate(
             text=text,
-            cfg_value=cfg_value,
+            cfg_value=retry_cfg,
             inference_timesteps=inference_timesteps,
             retry_badcase=True,
-            retry_badcase_max_times=2
+            retry_badcase_max_times=3
         )
         t_gen = time.time() - t_gen_start
         arr = wav
@@ -125,9 +127,11 @@ def generate_with_cache(
             logger.info(f"⏱️  [vox-audio-core] Generate OK (attempt {attempt+1}): {t_gen:.4f}s | {text[:60]}")
             break
         else:
-            logger.warning(f"⚠️ Attempt {attempt+1}/{max_retries+1} NaN ({nan_count}/{arr.size}) — retrying...")
-            # Small delay before retry to let GPU state recover
-            time.sleep(0.5)
+            logger.warning(f"⚠️ Attempt {attempt+1}/{max_retries+1} NaN ({nan_count}/{arr.size}) — clearing cache and retrying with cfg={retry_cfg:.1f}")
+            # Clear GPU cache to recover from corrupted state
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                gc.collect()
 
     if arr is None or np.isnan(arr).sum() > max(1, arr.size // 100):
         logger.error(f"❌ All {max_retries+1} attempts failed (NaN). Returning silence.")
