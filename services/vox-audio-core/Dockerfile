@@ -21,16 +21,19 @@ RUN apt-get update && apt-get install -y \
 # Pin numpy < 2.0.0
 RUN pip3 install --no-cache-dir "numpy<2.0.0"
 
+# Install CUDA 12 runtime for torchaudio (ROCm image lacks libcudart)
+RUN wget -q https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb && \
+    dpkg -i cuda-keyring_1.1-1_all.deb && \
+    apt-get update && apt-get install -y cuda-libraries-12-6 && \
+    rm -f cuda-keyring_1.1-1_all.deb && \
+    rm -rf /var/lib/apt/lists/*
+
 # Install dependencies
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Pin torchao to version compatible with PyTorch 2.6.0
 RUN pip3 install --no-cache-dir "torchao<0.14.0"
-
-# Reinstall torchaudio from ROCm 6.2 whl to avoid CUDA dependency
-RUN pip3 install --no-cache-dir --force-reinstall --no-deps torchaudio --index-url https://download.pytorch.org/whl/rocm6.2 \
-    && pip3 install --no-cache-dir soundfile
 
 # Copy application code
 COPY main.py .
