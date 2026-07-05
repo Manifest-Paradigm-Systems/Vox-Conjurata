@@ -220,6 +220,7 @@ class VoxEventQueueHUD extends Application {
                                 });
                                 if (resp.ok) {
                                     ui.notifications.info(`🎁 Gift of $${(amount ?? 0).toFixed(6)} sent successfully!`);
+                                    game.socket.emit("module.vox-conjurata", { type: "balance-refresh" });
                                     this.render(true);
                                 } else {
                                     const err = await resp.json();
@@ -1231,7 +1232,10 @@ class VoxVoiceManager extends Application {
  */
 Hooks.on("ready", () => {
     game.socket.on("module.vox-conjurata", async (data) => {
-        if (data.type === "display-image") {
+        if (data.type === "balance-refresh") {
+            // When anyone sends/receives credits, refresh all clients' HUD
+            try { voxHUD.render(true); } catch(e) {}
+        } else if (data.type === "display-image") {
             const { imageType, imageUrl, prompt } = data;
             
             if (imageType === "atmosphere") {
