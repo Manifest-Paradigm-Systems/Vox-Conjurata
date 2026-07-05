@@ -135,8 +135,8 @@ def generate_with_cache(
                 gc.collect()
 
     if arr is None or np.isnan(arr).sum() > max(1, arr.size // 20):
-        logger.error(f"❌ All {max_retries+1} attempts failed (NaN). Returning silence.")
-        arr = np.zeros_like(arr) if arr is not None else np.zeros(48000, dtype=np.float32)
+        logger.error(f"❌ All {max_retries+1} attempts failed (NaN). Raising error.")
+        raise RuntimeError(f"Voice generation failed: all {max_retries+1} attempts produced NaN (ROCm instability)")
 
     logger.info(f"⏱️  [vox-audio-core] Total: {time.time() - t_start:.4f}s")
     return arr
