@@ -103,12 +103,11 @@ def generate_with_cache(
     text = (dialogue_text or text).replace("\n", " ")
     text = re.sub(r"\s+", " ", text)
 
-    # Phase 1: Voice cloning via reference_wav_path (VoxCPM2 API)
-    # Falls back to direct generate (no voice clone) if ROCm produces NaN.
+    # NOTE: reference_wav_path (voice cloning) produces 100% NaN on AMD ROCm.
+    # Direct generate is always used — it's fast (~4s) and reliable.
     t_gen_start = time.time()
     wav = vox_engine.generate(
         text=text,
-        reference_wav_path=seed_path,
         cfg_value=cfg_value,
         inference_timesteps=inference_timesteps,
         retry_badcase=False
@@ -116,27 +115,14 @@ def generate_with_cache(
     t_gen = time.time() - t_gen_start
     arr = wav
 
-    # NaN guard: if voice clone path produced NaN (ROCm issue), fall back
-    # to direct generate so the user gets audible speech rather than silence.
+    # NaN guard: zero out the rare NaN samples (~0.03%)
     nan_count = np.isnan(arr).sum()
     if nan_count > max(1, arr.size // 100):
-        logger.warning(f"⚠️ Voice clone path failed ({nan_count}/{arr.size} NaN), falling back to direct generate")
-        t_fallback_start = time.time()
-        arr = vox_engine.generate(
-            text=text,
-            cfg_value=cfg_value,
-            inference_timesteps=inference_timesteps,
-            retry_badcase=False
-        )
-        nan_count = np.isnan(arr).sum()
-        if nan_count > max(1, arr.size // 100):
-            logger.warning(f"⚠️ Heavy NaN ({nan_count}/{arr.size}) in fallback — zeroing")
-            arr = np.nan_to_num(arr)
-        logger.info(f"⏱️  [vox-audio-core] Fallback generate: {time.time() - t_fallback_start:.4f}s")
-    elif nan_count > 0:
+        logger.warning(f"⚠️ Heavy NaN ({nan_count}/{arr.size}) in direct generate — zeroing")
+    if nan_count > 0:
         arr = np.nan_to_num(arr)
 
-    logger.info(f"⏱️  [vox-audio-core] Generate: {time.time() - t_gen_start:.4f}s (clone={seed_path})")
+    logger.info(f"⏱️  [vox-audio-core] Direct generate: {t_gen:.4f}s | {text[:60]}")
     logger.info(f"⏱️  [vox-audio-core] Total: {time.time() - t_start:.4f}s")
     return arr
 
@@ -150,11 +136,10 @@ def generate_stream_with_cache(
     text = text.replace("\n", " ")
     text = re.sub(r"\s+", " ", text)
 
-    # Use voice-cloned streaming via reference_wav_path
-    # VoxCPM2 streaming with reference_wav_path uses the seed voice
+    # Streaming via _generate with streaming=True
+    # reference_wav_path skipped on ROCm (produces NaN)
     gen = vox_engine._generate(
         text=text,
-        reference_wav_path=seed_path,
         inference_timesteps=inference_timesteps,
         cfg_value=cfg_value,
         retry_badcase=False,
