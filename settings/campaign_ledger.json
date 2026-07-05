@@ -1,9 +1,9 @@
 {
-  "campaign_pool": 1.980499999999978,
+  "campaign_pool": 3.980499999999978,
   "stripe_customer_id": null,
   "personal_wallets": {
     "gm": 979.7102499999966,
-    "G3SJW9rRHe7J3AOH": 207.97100000000003,
+    "G3SJW9rRHe7J3AOH": 205.97100000000003,
     "nXnKU6oZYzdg0xSY": 9.891499999999994
   },
   "session_allowances": {
@@ -2396,6 +2396,22 @@
       "amount": 1.0,
       "description": "GIFT: G3SJW9rRHe7J3AOH -> POOL",
       "timestamp": 1783231494.5524056,
+      "is_gift": true
+    },
+    {
+      "user_id": "G3SJW9rRHe7J3AOH",
+      "target_user_id": "POOL",
+      "amount": 1.0,
+      "description": "GIFT: G3SJW9rRHe7J3AOH -> POOL",
+      "timestamp": 1783231648.238284,
+      "is_gift": true
+    },
+    {
+      "user_id": "G3SJW9rRHe7J3AOH",
+      "target_user_id": "POOL",
+      "amount": 1.0,
+      "description": "GIFT: G3SJW9rRHe7J3AOH -> POOL",
+      "timestamp": 1783231649.4665477,
       "is_gift": true
     }
   ]
