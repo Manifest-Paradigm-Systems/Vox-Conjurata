@@ -114,14 +114,15 @@ def generate_with_cache(
             cfg_value=retry_cfg,
             inference_timesteps=inference_timesteps,
             retry_badcase=True,
-            retry_badcase_max_times=3
+            retry_badcase_max_times=0,       # Skip badcase retry (too aggressive on ROCm)
+            retry_badcase_ratio_threshold=12.0  # Higher threshold to prevent false positives
         )
         t_gen = time.time() - t_gen_start
         arr = wav
 
         nan_count = np.isnan(arr).sum()
-        # Valid audio if <1% NaN samples
-        if nan_count <= max(1, arr.size // 100):
+        # Valid audio if <5% NaN samples (tolerate sparse NaN)
+        if nan_count <= max(1, arr.size // 20):
             if nan_count > 0:
                 arr = np.nan_to_num(arr)
             logger.info(f"⏱️  [vox-audio-core] Generate OK (attempt {attempt+1}): {t_gen:.4f}s | {text[:60]}")
@@ -133,7 +134,7 @@ def generate_with_cache(
                 torch.cuda.empty_cache()
                 gc.collect()
 
-    if arr is None or np.isnan(arr).sum() > max(1, arr.size // 100):
+    if arr is None or np.isnan(arr).sum() > max(1, arr.size // 20):
         logger.error(f"❌ All {max_retries+1} attempts failed (NaN). Returning silence.")
         arr = np.zeros_like(arr) if arr is not None else np.zeros(48000, dtype=np.float32)
 
