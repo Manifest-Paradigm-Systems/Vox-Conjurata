@@ -159,6 +159,8 @@ def generate_stream_with_cache(
             inference_timesteps=inference_timesteps,
             cfg_value=cfg_value,
             retry_badcase=True,
+            retry_badcase_max_times=0,
+            retry_badcase_ratio_threshold=12.0,
             streaming=True
         )
         chunk_count = 0
