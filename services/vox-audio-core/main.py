@@ -109,8 +109,7 @@ def generate_with_cache(
     wav = vox_engine.generate(
         text=text,
         cfg_value=cfg_value,
-        inference_timesteps=inference_timesteps,
-        retry_badcase=False
+        inference_timesteps=inference_timesteps
     )
     t_gen = time.time() - t_gen_start
     arr = wav
