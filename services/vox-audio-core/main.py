@@ -96,32 +96,43 @@ def generate_with_cache(
     seed_path: str,
     dialogue_text: str = "",
     inference_timesteps: int = 4,
-    cfg_value: float = 2.0
+    cfg_value: float = 2.0,
+    max_retries: int = 3
 ) -> np.ndarray:
     t_start = time.time()
 
     text = (dialogue_text or text).replace("\n", " ")
     text = re.sub(r"\s+", " ", text)
 
-    # NOTE: reference_wav_path (voice cloning) produces 100% NaN on AMD ROCm.
-    # Direct generate is always used — it's fast (~4s) and reliable.
-    t_gen_start = time.time()
-    wav = vox_engine.generate(
-        text=text,
-        cfg_value=cfg_value,
-        inference_timesteps=inference_timesteps
-    )
-    t_gen = time.time() - t_gen_start
-    arr = wav
+    arr = None
+    for attempt in range(max_retries + 1):
+        t_gen_start = time.time()
+        wav = vox_engine.generate(
+            text=text,
+            cfg_value=cfg_value,
+            inference_timesteps=inference_timesteps,
+            retry_badcase=True,
+            retry_badcase_max_times=2
+        )
+        t_gen = time.time() - t_gen_start
+        arr = wav
 
-    # NaN guard: zero out the rare NaN samples (~0.03%)
-    nan_count = np.isnan(arr).sum()
-    if nan_count > max(1, arr.size // 100):
-        logger.warning(f"⚠️ Heavy NaN ({nan_count}/{arr.size}) in direct generate — zeroing")
-    if nan_count > 0:
-        arr = np.nan_to_num(arr)
+        nan_count = np.isnan(arr).sum()
+        # Valid audio if <1% NaN samples
+        if nan_count <= max(1, arr.size // 100):
+            if nan_count > 0:
+                arr = np.nan_to_num(arr)
+            logger.info(f"⏱️  [vox-audio-core] Generate OK (attempt {attempt+1}): {t_gen:.4f}s | {text[:60]}")
+            break
+        else:
+            logger.warning(f"⚠️ Attempt {attempt+1}/{max_retries+1} NaN ({nan_count}/{arr.size}) — retrying...")
+            # Small delay before retry to let GPU state recover
+            time.sleep(0.5)
 
-    logger.info(f"⏱️  [vox-audio-core] Direct generate: {t_gen:.4f}s | {text[:60]}")
+    if arr is None or np.isnan(arr).sum() > max(1, arr.size // 100):
+        logger.error(f"❌ All {max_retries+1} attempts failed (NaN). Returning silence.")
+        arr = np.zeros_like(arr) if arr is not None else np.zeros(48000, dtype=np.float32)
+
     logger.info(f"⏱️  [vox-audio-core] Total: {time.time() - t_start:.4f}s")
     return arr
 
@@ -136,23 +147,34 @@ def generate_stream_with_cache(
     text = re.sub(r"\s+", " ", text)
 
     # Streaming via _generate with streaming=True
-    # reference_wav_path skipped on ROCm (produces NaN)
-    gen = vox_engine._generate(
-        text=text,
-        inference_timesteps=inference_timesteps,
-        cfg_value=cfg_value,
-        streaming=True
-    )
-    try:
-        for wav in gen:
-            arr = wav.squeeze(0).cpu().numpy()
-            # NaN filter per chunk
-            if np.isnan(arr).sum() > max(1, arr.size // 100):
-                logger.warning("⚠️ Streaming chunk dropped (NaN)")
-                continue
-            yield arr
-    finally:
-        gen.close()
+    # Retry once if initial chunks are NaN
+    for attempt in range(2):
+        gen = vox_engine._generate(
+            text=text,
+            inference_timesteps=inference_timesteps,
+            cfg_value=cfg_value,
+            retry_badcase=True,
+            streaming=True
+        )
+        chunk_count = 0
+        nan_count = 0
+        try:
+            for wav in gen:
+                arr = wav.squeeze(0).cpu().numpy()
+                chunk_count += 1
+                if np.isnan(arr).sum() > max(1, arr.size // 100):
+                    nan_count += 1
+                    logger.warning("⚠️ Streaming chunk dropped (NaN)")
+                    continue
+                yield arr
+        finally:
+            gen.close()
+        # If all chunks were NaN and we haven't exhausted retries, try once more
+        if chunk_count > 0 and nan_count == chunk_count and attempt == 0:
+            logger.warning("⚠️ All streaming chunks NaN — retrying...")
+            time.sleep(0.5)
+            continue
+        break
 
 class NPCIdentityRequest(BaseModel):
     npc_id: str
