@@ -100,32 +100,44 @@ def generate_with_cache(
 ) -> np.ndarray:
     t_start = time.time()
 
-    # NOTE: _generate_with_prompt_cache produces 100% NaN on AMD ROCm (RDNA3)
-    # and corrupts the model's internal GPU state. Direct generate is used
-    # instead — voice cloning via prompt cache will be restored once the
-    # ROCm compatibility issue is resolved upstream.
     text = (dialogue_text or text).replace("\n", " ")
     text = re.sub(r"\s+", " ", text)
 
+    # Phase 1: Voice cloning via reference_wav_path (VoxCPM2 API)
+    # Falls back to direct generate (no voice clone) if ROCm produces NaN.
     t_gen_start = time.time()
     wav = vox_engine.generate(
         text=text,
+        reference_wav_path=seed_path,
         cfg_value=cfg_value,
         inference_timesteps=inference_timesteps,
         retry_badcase=False
     )
     t_gen = time.time() - t_gen_start
-    logger.info(f"⏱️  [vox-audio-core] Direct generate: {t_gen:.4f}s")
-    logger.info(f"⏱️  [vox-audio-core] Total: {time.time() - t_start:.4f}s")
     arr = wav
 
-    # NaN guard: zero out the rare NaN samples (~0.03%)
+    # NaN guard: if voice clone path produced NaN (ROCm issue), fall back
+    # to direct generate so the user gets audible speech rather than silence.
     nan_count = np.isnan(arr).sum()
-    if nan_count > 0:
+    if nan_count > max(1, arr.size // 100):
+        logger.warning(f"⚠️ Voice clone path failed ({nan_count}/{arr.size} NaN), falling back to direct generate")
+        t_fallback_start = time.time()
+        arr = vox_engine.generate(
+            text=text,
+            cfg_value=cfg_value,
+            inference_timesteps=inference_timesteps,
+            retry_badcase=False
+        )
+        nan_count = np.isnan(arr).sum()
         if nan_count > max(1, arr.size // 100):
-            logger.warning(f"⚠️ Heavy NaN ({nan_count}/{arr.size}) in direct generate — zeroing")
+            logger.warning(f"⚠️ Heavy NaN ({nan_count}/{arr.size}) in fallback — zeroing")
+            arr = np.nan_to_num(arr)
+        logger.info(f"⏱️  [vox-audio-core] Fallback generate: {time.time() - t_fallback_start:.4f}s")
+    elif nan_count > 0:
         arr = np.nan_to_num(arr)
 
+    logger.info(f"⏱️  [vox-audio-core] Generate: {time.time() - t_gen_start:.4f}s (clone={seed_path})")
+    logger.info(f"⏱️  [vox-audio-core] Total: {time.time() - t_start:.4f}s")
     return arr
 
 def generate_stream_with_cache(
