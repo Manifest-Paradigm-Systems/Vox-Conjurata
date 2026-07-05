@@ -168,8 +168,8 @@ class VoxEventQueueHUD extends Application {
         });
 
         $(html).find(".vox-open-transfer").click(async () => {
-            const users = game.users.filter(u => u.active && u.id !== game.user.id);
-            let userOptions = users.map(u => `<option value="${u.id}">${u.name}</option>`).join("");
+            const users = game.users.filter(u => u.id !== game.user.id).sort((a, b) => (b.isGM ? 1 : 0) - (a.isGM ? 1 : 0));
+            let userOptions = users.map(u => `<option value="${u.id}">${u.isGM ? "👑 " : ""}${u.name}${u.active ? "" : " (offline)"}</option>`).join("");
             userOptions = `<option value="POOL">--- Campaign Pool ---</option>` + userOptions;
 
             new Dialog({
