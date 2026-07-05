@@ -24,8 +24,6 @@ RUN pip3 install --no-cache-dir "numpy<2.0.0"
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# Install dependencies
-
 # Copy application code
 COPY main.py .
 
