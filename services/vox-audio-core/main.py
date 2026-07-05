@@ -95,7 +95,7 @@ def generate_with_cache(
     text: str,
     seed_path: str,
     dialogue_text: str = "",
-    inference_timesteps: int = 4,
+    inference_timesteps: int = 6,
     cfg_value: float = 2.0,
     max_retries: int = 2
 ) -> np.ndarray:
@@ -145,14 +145,7 @@ def generate_stream_with_cache(
     text: str,
     seed_path: str,
     dialogue_text: str = "",
-    inference_timesteps: int = 4,
-    cfg_value: float = 2.0
-) -> Generator[np.ndarray, None, None]:
-    text = text.replace("\n", " ")
-    text = re.sub(r"\s+", " ", text)
-
-    # Streaming via _generate with streaming=True
-    # Retry once if initial chunks are NaN
+    inference_timesteps: int = 6,
     for attempt in range(2):
         gen = vox_engine._generate(
             text=text,
@@ -276,7 +269,7 @@ async def initialize_npc(request: NPCIdentityRequest):
             raw_wav = vox_engine.generate(
                 text=birth_prompt,
                 cfg_value=2.5,          # Forces model adherence to text criteria
-                inference_timesteps=12
+                inference_timesteps=8
             )
 
             # NaN guard abort if the birth clip is unusable
