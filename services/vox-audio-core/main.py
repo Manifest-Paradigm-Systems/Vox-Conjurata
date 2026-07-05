@@ -52,8 +52,8 @@ async def vram_flusher_loop():
                 if before > after:
                     logger.info(f"🧹 VRAM Flusher: Cleaned PyTorch cache. Freed {(before - after)/1024**2:.2f} MB. Reserved: {after/1024**2:.2f} MB")
 
-# Enable TF32 for much faster matrix multiplication on supported GPUs
-torch.set_float32_matmul_precision('high')
+# TF32 matmul precision can cause NaN on ROCm 7.x — use medium for stability
+torch.set_float32_matmul_precision('medium')
 
 # Initialize the 2B Tokenizer-Free Diffusion Model (bfloat16)
 # Set load_denoiser=False to keep VRAM at exactly 4.2 GB
