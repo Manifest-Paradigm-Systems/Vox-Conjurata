@@ -321,7 +321,7 @@ async def generate_audio(request: DialogueRequest):
             text=final_text,
             seed_path=seed_path,
             dialogue_text=request.dialogue_text,
-            inference_timesteps=4
+            inference_timesteps=6
         )
 
         logger.info(f"📊 [vox-audio-core] clean_audio: NaN count={np.isnan(clean_audio).sum()}, min={np.min(clean_audio)}, max={np.max(clean_audio)}")
