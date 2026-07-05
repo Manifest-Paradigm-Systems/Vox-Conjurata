@@ -3,8 +3,9 @@
   "stripe_customer_id": null,
   "personal_wallets": {
     "gm": 979.7102499999966,
-    "G3SJW9rRHe7J3AOH": 215.97100000000003,
-    "nXnKU6oZYzdg0xSY": 19.891499999999994
+    "G3SJW9rRHe7J3AOH": 214.97100000000003,
+    "nXnKU6oZYzdg0xSY": 19.891499999999994,
+    "m6nkAzEdfbjIGhdz": 1.0
   },
   "session_allowances": {
     "G3SJW9rRHe7J3AOH": 0.0,
@@ -2427,6 +2428,14 @@
       "description": "ADMIN OVERRIDE: GM credit distribution",
       "timestamp": 1783231844.6857145,
       "is_admin_action": true
+    },
+    {
+      "user_id": "G3SJW9rRHe7J3AOH",
+      "target_user_id": "m6nkAzEdfbjIGhdz",
+      "amount": 1.0,
+      "description": "GIFT: G3SJW9rRHe7J3AOH -> m6nkAzEdfbjIGhdz",
+      "timestamp": 1783232297.486629,
+      "is_gift": true
     }
   ]
 }
