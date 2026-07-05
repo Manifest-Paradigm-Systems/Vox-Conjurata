@@ -114,7 +114,7 @@ def generate_with_cache(
             cfg_value=retry_cfg,
             inference_timesteps=inference_timesteps,
             retry_badcase=True,
-            retry_badcase_max_times=0,       # Skip badcase retry (too aggressive on ROCm)
+            retry_badcase_max_times=1,       # Minimal retry (model needs ≥1 for internal vars)
             retry_badcase_ratio_threshold=12.0  # Higher threshold to prevent false positives
         )
         t_gen = time.time() - t_gen_start
@@ -159,7 +159,7 @@ def generate_stream_with_cache(
             inference_timesteps=inference_timesteps,
             cfg_value=cfg_value,
             retry_badcase=True,
-            retry_badcase_max_times=0,
+            retry_badcase_max_times=1,
             retry_badcase_ratio_threshold=12.0,
             streaming=True
         )
