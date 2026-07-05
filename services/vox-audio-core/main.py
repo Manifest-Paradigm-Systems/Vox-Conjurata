@@ -52,8 +52,9 @@ async def vram_flusher_loop():
                 if before > after:
                     logger.info(f"🧹 VRAM Flusher: Cleaned PyTorch cache. Freed {(before - after)/1024**2:.2f} MB. Reserved: {after/1024**2:.2f} MB")
 
-# TF32 matmul precision can cause NaN on ROCm 7.x — use medium for stability
-torch.set_float32_matmul_precision('medium')
+# ROCm 7.x bf16 can be unstable for VoxCPM2 — force float32 computation
+torch.set_float32_matmul_precision('highest')
+torch.backends.cuda.matmul.allow_fp16_reduced_precision_reduction = False
 
 # Initialize the 2B Tokenizer-Free Diffusion Model (bfloat16)
 # Set load_denoiser=False to keep VRAM at exactly 4.2 GB
