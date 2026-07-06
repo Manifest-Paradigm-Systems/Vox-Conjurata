@@ -43,36 +43,41 @@ async def transcribe_audio(
 ):
     logger.info(f"Received transcription request: {file.filename} ({file.content_type})")
 
-    # Save incoming audio to temp file (could be WebM, WAV, or other)
-    raw_suffix = ".webm" if "webm" in file.content_type else ".wav"
-    with tempfile.NamedTemporaryFile(delete=False, suffix=raw_suffix) as temp_raw:
+    # Save incoming audio to temp file
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as temp_raw:
         shutil.copyfileobj(file.file, temp_raw)
         raw_path = temp_raw.name
 
-    # Convert to 16kHz mono WAV via ffmpeg (Whisper's audio backends are picky)
-    wav_path = raw_path + "_conv.wav"
+    # Convert to 16kHz mono WAV for Whisper
+    wav_path = raw_path + ".wav"
     try:
-        result = subprocess.run(
-            ["ffmpeg", "-i", raw_path, "-ar", "16000", "-ac", "1", "-sample_fmt", "s16", "-y", wav_path],
-            capture_output=True, timeout=30
-        )
-        if result.returncode != 0:
-            logger.error(f"ffmpeg conversion failed: {result.stderr.decode()[:200]}")
-            if os.path.exists(raw_path): os.remove(raw_path)
-            return {"text": "", "error": f"Audio conversion failed (return code {result.returncode})"}
-        if not os.path.exists(wav_path) or os.path.getsize(wav_path) == 0:
-            logger.error("ffmpeg produced empty output")
-            if os.path.exists(raw_path): os.remove(raw_path)
-            return {"text": "", "error": "Audio conversion produced empty file"}
-    except subprocess.TimeoutExpired:
-        logger.error("ffmpeg conversion timed out")
-        if os.path.exists(raw_path): os.remove(raw_path)
-        return {"text": "", "error": "Audio conversion timed out"}
+        # Try soundfile first (handles WAV/FLAC/OGG natively)
+        data, sr = sf.read(raw_path)
+        if sr != 16000:
+            # Simple linear resample to 16kHz
+            ratio = 16000 / sr
+            new_len = int(len(data) * ratio)
+            indices = np.round(np.linspace(0, len(data) - 1, new_len)).astype(int)
+            data = data[indices]
+        if data.ndim > 1:
+            data = data.mean(axis=1)  # mono mix
+        sf.write(wav_path, data, 16000, subtype='PCM_16')
+        logger.info(f"Converted to WAV: {os.path.getsize(wav_path)} bytes")
     except Exception as e:
-        logger.error(f"Audio conversion failed: {e}")
-        if os.path.exists(raw_path): os.remove(raw_path)
-        if os.path.exists(wav_path): os.remove(wav_path)
-        return {"text": "", "error": f"Audio conversion failed: {str(e)}"}
+        logger.warning(f"soundfile failed ({e}), trying ffmpeg fallback...")
+        try:
+            result = subprocess.run(
+                ["ffmpeg", "-i", raw_path, "-ar", "16000", "-ac", "1", "-sample_fmt", "s16", "-y", wav_path],
+                capture_output=True, timeout=30
+            )
+            if result.returncode != 0:
+                logger.error(f"ffmpeg also failed: {result.stderr.decode()[:200]}")
+                if os.path.exists(raw_path): os.remove(raw_path)
+                return {"text": "", "error": "Audio conversion failed"}
+        except Exception as e2:
+            logger.error(f"ffmpeg fallback failed: {e2}")
+            if os.path.exists(raw_path): os.remove(raw_path)
+            return {"text": "", "error": f"Audio conversion failed: {str(e2)}"}
 
     try:
         segments, info = model.transcribe(wav_path, beam_size=5, language=language)
