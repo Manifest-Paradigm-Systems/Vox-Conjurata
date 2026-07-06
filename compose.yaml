@@ -63,7 +63,7 @@ services:
     container_name: caddy
     restart: unless-stopped
     ports:
-      - "30000:30000"
+      - "30001:30001"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:z
     networks:
