@@ -5,6 +5,9 @@ import os
 import shutil
 import subprocess
 import tempfile
+import soundfile as sf
+import numpy as np
+import io
 from faster_whisper import WhisperModel
 
 logging.basicConfig(level=logging.INFO)
