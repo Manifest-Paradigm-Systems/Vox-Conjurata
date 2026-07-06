@@ -635,6 +635,15 @@ function registerKeybindings() {
             activeKeys.add(code);
             console.log(`🎙️ Vox: Hotkey ${code} pressed (PTT OPEN)`);
 
+            // Suppress Foundry broadcast when PTT opens if the checkbox is checked
+            // (prevents players hearing both raw mic and AI voice simultaneously)
+            const shouldSuppress = (
+                code === "KeyH" || // Puppet always suppresses
+                (code === "KeyY" && game.settings.get("vox-conjurata", "suppressRawVoice_narrator")) ||
+                (code === "KeyI" && game.settings.get("vox-conjurata", "suppressRawVoice_character"))
+            );
+            if (shouldSuppress) toggleFoundryAudio(false);
+
             try { playAudio("sounds/lock.wav", 0.1); } catch (e) {}
             
             if (code === "KeyY" && game.user.isGM) {
@@ -698,6 +707,9 @@ function registerKeybindings() {
             event.stopImmediatePropagation();
             activeKeys.delete(code);
             console.log(`🎙️ Vox: Hotkey ${code} released (PTT CLOSED)`);
+
+            // Re-enable Foundry broadcast that was suppressed on PTT open
+            toggleFoundryAudio(true);
 
             if (code === "KeyY") { globalThis.voxState.narratorActive = false; stopRecording(); statusMessage("Narrator Mic [Y]: CLOSED", false); }
             else if (code === "KeyH") { globalThis.voxState.puppetActive = false; stopRecording(); statusMessage(`Puppeteer Mic [H] (${globalThis.voxState.activeSpeakerName}): CLOSED`, false); }
