@@ -5,7 +5,7 @@
     "gm": 979.7102499999966,
     "G3SJW9rRHe7J3AOH": 204.97100000000003,
     "nXnKU6oZYzdg0xSY": 19.891499999999994,
-    "m6nkAzEdfbjIGhdz": 0.9812500000000002
+    "m6nkAzEdfbjIGhdz": 0.9790000000000002
   },
   "session_allowances": {
     "G3SJW9rRHe7J3AOH": 0.0,
@@ -19,7 +19,7 @@
     "gm": 0.6912500000000004,
     "G3SJW9rRHe7J3AOH": 0.028999999999999998,
     "nXnKU6oZYzdg0xSY": 0.11075000000000006,
-    "m6nkAzEdfbjIGhdz": 0.01875
+    "m6nkAzEdfbjIGhdz": 0.020999999999999998
   },
   "transactions": [
     {
@@ -2493,6 +2493,12 @@
       "amount": 0.00225,
       "description": "AI Orchestration Fee: Ezren",
       "timestamp": 1783303439.331923
+    },
+    {
+      "user_id": "m6nkAzEdfbjIGhdz",
+      "amount": 0.00225,
+      "description": "AI Orchestration Fee: Ezren",
+      "timestamp": 1783303876.071328
     }
   ]
 }
