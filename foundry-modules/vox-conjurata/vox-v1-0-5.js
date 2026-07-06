@@ -631,7 +631,17 @@ function registerKeybindings() {
             event.stopImmediatePropagation();
             activeKeys.add(code);
             console.log(`🎙️ Vox: Hotkey ${code} pressed (PTT OPEN)`);
-            
+
+            // Determine if suppression is active for this category BEFORE recording
+            let suppress = false;
+            if (code === "KeyY") suppress = game.settings.get("vox-conjurata", "suppressRawVoice_narrator") ?? false;
+            else if (code === "KeyH") suppress = true; // Puppet always suppresses (AI voice)
+            else if (code === "KeyI") suppress = game.settings.get("vox-conjurata", "suppressRawVoice_character") ?? false;
+            globalThis.voxState.useVoxVoice = suppress;
+
+            // Mute Foundry AV broadcast so raw voice isn't heard alongside AI voice
+            if (suppress) toggleFoundryAudio(false);
+
             try { playAudio("sounds/lock.wav", 0.1); } catch (e) {}
             
             if (code === "KeyY" && game.user.isGM) {
