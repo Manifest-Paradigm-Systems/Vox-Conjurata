@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import logging
 import os
 import shutil
+import subprocess
 import tempfile
 from faster_whisper import WhisperModel
 
@@ -38,25 +39,39 @@ async def transcribe_audio(
     language: str = Form("en")
 ):
     logger.info(f"Received transcription request: {file.filename} ({file.content_type})")
-    
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as temp_audio:
-        shutil.copyfileobj(file.file, temp_audio)
-        temp_path = temp_audio.name
+
+    # Save incoming WebM to temp file
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as temp_webm:
+        shutil.copyfileobj(file.file, temp_webm)
+        webm_path = temp_webm.name
+
+    # Convert WebM to WAV via ffmpeg (Whisper's audio backends can't parse WebM)
+    wav_path = webm_path + ".wav"
+    try:
+        subprocess.run(
+            ["ffmpeg", "-i", webm_path, "-ar", "16000", "-ac", "1", "-sample_fmt", "s16", "-y", wav_path],
+            capture_output=True, timeout=30
+        )
+    except Exception as e:
+        logger.error(f"Audio conversion failed: {e}")
+        if os.path.exists(webm_path): os.remove(webm_path)
+        if os.path.exists(wav_path): os.remove(wav_path)
+        return {"text": "", "error": f"Audio conversion failed: {str(e)}"}
 
     try:
-        segments, info = model.transcribe(temp_path, beam_size=5, language=language)
+        segments, info = model.transcribe(wav_path, beam_size=5, language=language)
         text = " ".join([segment.text for segment in segments]).strip()
-        
+
         logger.info(f"Transcription complete: '{text}'")
         return {"text": text}
-    
+
     except Exception as e:
         logger.error(f"Transcription failed: {e}")
         return {"text": "", "error": str(e)}
-    
+
     finally:
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
+        if os.path.exists(webm_path): os.remove(webm_path)
+        if os.path.exists(wav_path): os.remove(wav_path)
 
 if __name__ == "__main__":
     import uvicorn
