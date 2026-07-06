@@ -632,15 +632,13 @@ function registerKeybindings() {
             activeKeys.add(code);
             console.log(`🎙️ Vox: Hotkey ${code} pressed (PTT OPEN)`);
 
-            // Determine if suppression is active for this category BEFORE recording
-            let suppress = false;
-            if (code === "KeyY") suppress = game.settings.get("vox-conjurata", "suppressRawVoice_narrator") ?? false;
-            else if (code === "KeyH") suppress = true; // Puppet always suppresses (AI voice)
-            else if (code === "KeyI") suppress = game.settings.get("vox-conjurata", "suppressRawVoice_character") ?? false;
-            globalThis.voxState.useVoxVoice = suppress;
-
+            // Determine if Foundry broadcast should be suppressed for this category
+            globalThis.voxState.suppressBroadcast = (
+                code === "KeyH" || // Puppet always suppresses (AI voice)
+                game.settings.get("vox-conjurata", `suppressRawVoice_${code === "KeyY" ? "narrator" : "character"}`) ?? false
+            );
             // Mute Foundry AV broadcast so raw voice isn't heard alongside AI voice
-            if (suppress) toggleFoundryAudio(false);
+            if (globalThis.voxState.suppressBroadcast) toggleFoundryAudio(false);
 
             try { playAudio("sounds/lock.wav", 0.1); } catch (e) {}
             
@@ -708,8 +706,7 @@ function registerKeybindings() {
 
             // Only re-enable Foundry broadcast if suppression was active for this category
             // (avoids fighting Foundry's own mute/unmute state when user has suppression off)
-            const wasSuppressed = globalThis.voxState.useVoxVoice === true;
-            if (wasSuppressed) toggleFoundryAudio(true);
+            if (globalThis.voxState.suppressBroadcast) toggleFoundryAudio(true);
 
             if (code === "KeyY") { globalThis.voxState.narratorActive = false; stopRecording(); statusMessage("Narrator Mic [Y]: CLOSED", false); }
             else if (code === "KeyH") { globalThis.voxState.puppetActive = false; stopRecording(); statusMessage(`Puppeteer Mic [H] (${globalThis.voxState.activeSpeakerName}): CLOSED`, false); }
