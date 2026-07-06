@@ -541,7 +541,7 @@ function toggleFoundryAudio(state) {
         // Only toggle if the client is fully initialized (has broadcastStream or peers)
         if (client && typeof client.toggleBroadcast === 'function' && client.broadcastStreams) {
             client.toggleBroadcast(state);
-            console.log(`🎙️ Vox | Foundry Broadcast: ${state ? 'ENABLED' : 'DISABLED'} (Suppression System)`);
+            console.log(`🎙️ Vox | Foundry AV: ${state ? 'UNMUTED' : 'MUTED'} (AI Voice active)`);
         } else {
             console.log(`🎙️ Vox | Foundry AV not ready yet, skipping toggle (${state})`);
         }
@@ -861,8 +861,8 @@ class VoxEngineConfigApp extends Application {
             <p style="font-size: 11px; color: #888; margin-bottom: 20px;">Offload text token costs and context KV memory chains directly to your local hardware.</p>
 
             <div class="form-group-box" style="background: rgba(0, 150, 255, 0.05); padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #004d40;">
-                <h3 style="font-size: 14px; margin-top: 0; color: #00ffcc;"><i class="fas fa-mask"></i> Audio Suppression (Puppeteer Mode)</h3>
-                <p style="font-size: 10px; color: #888; margin-bottom: 10px;">Automatically mutes your raw voice in Foundry A/V while holding these hotkeys, so players only hear the AI.</p>
+                <h3 style="font-size: 14px; margin-top: 0; color: #00ffcc;"><i class="fas fa-robot"></i> Generate Voice</h3>
+                <p style="font-size: 10px; color: #888; margin-bottom: 10px;">When checked, your mic feeds the AI voice engine and Foundry AV is suppressed to prevent double audio. When unchecked, your natural voice passes through. Transcription goes to chat either way.</p>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                     <label style="font-size: 12px;"><input type="checkbox" class="vox-suppress-toggle" data-cat="narrator" ${getSafeSetting("vox-conjurata", "suppressRawVoice_narrator") ? "checked" : ""}> <i class="fas fa-robot"></i> Narrator [Y]</label>
                     <label style="font-size: 12px;"><input type="checkbox" class="vox-suppress-toggle" data-cat="character" ${getSafeSetting("vox-conjurata", "suppressRawVoice_character") ? "checked" : ""}> <i class="fas fa-robot"></i> Character [I]</label>
@@ -1027,7 +1027,7 @@ class VoxEngineConfigApp extends Application {
             const cat = ev.currentTarget.dataset.cat;
             const val = ev.currentTarget.checked;
             await game.settings.set("vox-conjurata", `suppressRawVoice_${cat}`, val);
-            ui.notifications.info(`✅ Suppression for ${cat.toUpperCase()} set to ${val ? "ON" : "OFF"}`);
+            ui.notifications.info(`✅ ${cat.charAt(0).toUpperCase() + cat.slice(1)} Voice: ${val ? "AI-GENERATED (Foundry AV muted)" : "NATURAL (pass through)"}`);
         });
 
         $(html).find(".set-allowance-btn").click(async () => {
