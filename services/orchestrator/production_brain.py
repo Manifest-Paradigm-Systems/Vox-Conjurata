@@ -645,8 +645,19 @@ async def prewarm_voice_registry_caches():
     This eliminates the ~16s cold-cache build penalty on the first dialogue request
     after a container restart.
     """
-    # Small delay to let vox-audio-core finish loading its model (~60s)
-    await asyncio.sleep(75)
+    # Wait for vox-audio-core to finish loading its model (poll health, up to 120s)
+    async with httpx.AsyncClient(timeout=5.0) as hc:
+        for attempt in range(60):
+            try:
+                r = await hc.get(f"{TTS_ACTOR_URL}/health")
+                if r.status_code == 200:
+                    logger.info(f"vox-audio-core ready after ~{attempt*2}s")
+                    break
+            except Exception:
+                pass
+            await asyncio.sleep(2)
+        else:
+            logger.warning("vox-audio-core health check did not return 200 within 120s — proceeding anyway")
     registry = load_voice_registry()
     if not registry:
         logger.info("Voice registry empty — skipping cache pre-warm.")

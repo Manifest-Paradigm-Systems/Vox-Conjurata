@@ -225,6 +225,7 @@ services:
     - model_storage:/models:z
     - ./services/orchestrator/voice_seeds:/app/voice_seeds:z
     - ./cache/huggingface:/root/.cache/huggingface:z
+    - ./settings:/app/settings:z
     networks:
     - vox-net
     restart: unless-stopped
