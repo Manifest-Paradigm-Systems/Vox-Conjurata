@@ -694,9 +694,9 @@ function registerKeybindings() {
                     globalThis.voxState.isAutonomousTrigger = false;
                 }
 
-                startRecording("vox-conjurata-player-mic"); 
+                startRecording("vox-conjurata-player-mic");
                 if (!globalThis.voxState.isAutonomousTrigger) {
-                    statusMessage(`Character Mic [I] (${globalThis.voxState.activeSpeakerName}): OPEN (Triggers Active)`, true);
+                    statusMessage(`Character Mic [I] (${globalThis.voxState.activeSpeakerName}): OPEN [Voice: ${globalThis.voxState.useVoxVoice ? 'AI' : 'NATURAL'}] (Triggers Active)`, true);
                 }
             }
         }
