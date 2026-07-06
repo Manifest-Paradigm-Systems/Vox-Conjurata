@@ -1233,17 +1233,24 @@ async def _execute_voice_conversion_pipeline(task_id: str, audio_bytes: bytes, a
         # 1. Transcription
         t_stt_start = time.time()
         # Convert WebM to WAV for Whisper (the STT service's ffmpeg is too old for Opus)
-        import subprocess as _sp
+        import tempfile, subprocess as _sp
+        _tmp_in = tempfile.NamedTemporaryFile(suffix=".webm", delete=False)
+        _tmp_in.write(audio_bytes)
+        _tmp_in.close()
+        _tmp_out = _tmp_in.name + ".wav"
         try:
-            conv = _sp.run(["ffmpeg", "-i", "pipe:0", "-ar", "16000", "-ac", "1", "-sample_fmt", "s16", "-f", "wav", "pipe:1"],
-                          input=audio_bytes, capture_output=True, timeout=30)
-            if conv.returncode == 0 and len(conv.stdout) > 44:
-                audio_bytes = conv.stdout
-                audio_content_type = "audio/wav"
-                audio_filename = "audio.wav"
-                logger.info(f"🎙️ Vox | Converted audio to WAV ({len(audio_bytes)} bytes)")
+            _sp.run(["ffmpeg", "-i", _tmp_in.name, "-ar", "16000", "-ac", "1", "-sample_fmt", "s16", "-y", _tmp_out],
+                    capture_output=True, timeout=30, check=True)
+            with open(_tmp_out, "rb") as _f:
+                audio_bytes = _f.read()
+            audio_content_type = "audio/wav"
+            audio_filename = "audio.wav"
+            logger.info(f"🎙️ Vox | Converted audio to WAV ({len(audio_bytes)} bytes)")
         except Exception as e:
             logger.warning(f"🎙️ Vox | Audio conversion failed, sending raw: {e}")
+        finally:
+            if os.path.exists(_tmp_in.name): os.remove(_tmp_in.name)
+            if os.path.exists(_tmp_out): os.remove(_tmp_out)
         async with httpx.AsyncClient(timeout=300.0) as client:
             stt_resp = await client.post(f"{STT_URL}/v1/audio/transcriptions", files={"file": (audio_filename, audio_bytes, audio_content_type)}, data={"model": "tiny.en", "language": "en"})
             transcription = stt_resp.json().get("text", "").strip()
