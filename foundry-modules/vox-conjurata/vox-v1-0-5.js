@@ -538,9 +538,12 @@ function toggleFoundryAudio(state) {
     if (typeof game === 'undefined' || !game.webrtc) return;
     try {
         const client = game.webrtc.client;
-        if (client && typeof client.toggleBroadcast === 'function') {
+        // Only toggle if the client is fully initialized (has broadcastStream or peers)
+        if (client && typeof client.toggleBroadcast === 'function' && client.broadcastStreams) {
             client.toggleBroadcast(state);
             console.log(`🎙️ Vox | Foundry Broadcast: ${state ? 'ENABLED' : 'DISABLED'} (Suppression System)`);
+        } else {
+            console.log(`🎙️ Vox | Foundry AV not ready yet, skipping toggle (${state})`);
         }
     } catch (err) {
         console.warn("🎙️ Vox | Failed to toggle Foundry A/V broadcast:", err);
