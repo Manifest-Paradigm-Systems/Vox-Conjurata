@@ -40,21 +40,34 @@ async def transcribe_audio(
 ):
     logger.info(f"Received transcription request: {file.filename} ({file.content_type})")
 
-    # Save incoming WebM to temp file
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as temp_webm:
-        shutil.copyfileobj(file.file, temp_webm)
-        webm_path = temp_webm.name
+    # Save incoming audio to temp file (could be WebM, WAV, or other)
+    raw_suffix = ".webm" if "webm" in file.content_type else ".wav"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=raw_suffix) as temp_raw:
+        shutil.copyfileobj(file.file, temp_raw)
+        raw_path = temp_raw.name
 
-    # Convert WebM to WAV via ffmpeg (Whisper's audio backends can't parse WebM)
-    wav_path = webm_path + ".wav"
+    # Convert to 16kHz mono WAV via ffmpeg (Whisper's audio backends are picky)
+    wav_path = raw_path + "_conv.wav"
     try:
-        subprocess.run(
-            ["ffmpeg", "-i", webm_path, "-ar", "16000", "-ac", "1", "-sample_fmt", "s16", "-y", wav_path],
+        result = subprocess.run(
+            ["ffmpeg", "-i", raw_path, "-ar", "16000", "-ac", "1", "-sample_fmt", "s16", "-y", wav_path],
             capture_output=True, timeout=30
         )
+        if result.returncode != 0:
+            logger.error(f"ffmpeg conversion failed: {result.stderr.decode()[:200]}")
+            if os.path.exists(raw_path): os.remove(raw_path)
+            return {"text": "", "error": f"Audio conversion failed (return code {result.returncode})"}
+        if not os.path.exists(wav_path) or os.path.getsize(wav_path) == 0:
+            logger.error("ffmpeg produced empty output")
+            if os.path.exists(raw_path): os.remove(raw_path)
+            return {"text": "", "error": "Audio conversion produced empty file"}
+    except subprocess.TimeoutExpired:
+        logger.error("ffmpeg conversion timed out")
+        if os.path.exists(raw_path): os.remove(raw_path)
+        return {"text": "", "error": "Audio conversion timed out"}
     except Exception as e:
         logger.error(f"Audio conversion failed: {e}")
-        if os.path.exists(webm_path): os.remove(webm_path)
+        if os.path.exists(raw_path): os.remove(raw_path)
         if os.path.exists(wav_path): os.remove(wav_path)
         return {"text": "", "error": f"Audio conversion failed: {str(e)}"}
 
@@ -70,7 +83,7 @@ async def transcribe_audio(
         return {"text": "", "error": str(e)}
 
     finally:
-        if os.path.exists(webm_path): os.remove(webm_path)
+        if os.path.exists(raw_path): os.remove(raw_path)
         if os.path.exists(wav_path): os.remove(wav_path)
 
 if __name__ == "__main__":
