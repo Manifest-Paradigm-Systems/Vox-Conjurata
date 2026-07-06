@@ -567,11 +567,13 @@ function registerKeybindings() {
         default: "speech"
     });
 
-    // Suppression Settings (Puppeteer Mode)
+    // Voice Generation Settings
+    // When checked: Foundry AV is suppressed, AI voice is generated, transcription goes to chat
+    // When unchecked: raw mic passes through Foundry AV, no AI voice, transcription goes to chat
     ["narrator", "character", "npc", "monster"].forEach(cat => {
         game.settings.register("vox-conjurata", `suppressRawVoice_${cat}`, {
-            name: `Suppress Raw Voice: ${cat.toUpperCase()}`,
-            hint: `If enabled, your raw microphone audio to other players is muted while this category's hotkey is held.`,
+            name: `Generate Voice: ${cat === "narrator" ? "Narrator [Y]" : cat === "character" ? "Character [I]" : cat === "npc" ? "NPC Puppet [H]" : "Monster Puppet [H]"}`,
+            hint: `When checked, microphone is sent to the AI voice engine. When unchecked, your natural voice passes through. Transcription goes to chat either way.`,
             scope: "client",
             config: true,
             type: Boolean,
@@ -862,10 +864,10 @@ class VoxEngineConfigApp extends Application {
                 <h3 style="font-size: 14px; margin-top: 0; color: #00ffcc;"><i class="fas fa-mask"></i> Audio Suppression (Puppeteer Mode)</h3>
                 <p style="font-size: 10px; color: #888; margin-bottom: 10px;">Automatically mutes your raw voice in Foundry A/V while holding these hotkeys, so players only hear the AI.</p>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                    <label style="font-size: 12px;"><input type="checkbox" class="vox-suppress-toggle" data-cat="narrator" ${getSafeSetting("vox-conjurata", "suppressRawVoice_narrator") ? "checked" : ""}> Narrator [Y]</label>
-                    <label style="font-size: 12px;"><input type="checkbox" class="vox-suppress-toggle" data-cat="character" ${getSafeSetting("vox-conjurata", "suppressRawVoice_character") ? "checked" : ""}> Character [I]</label>
-                    <label style="font-size: 12px;"><input type="checkbox" class="vox-suppress-toggle" data-cat="npc" ${getSafeSetting("vox-conjurata", "suppressRawVoice_npc") ? "checked" : ""}> NPC Puppet [H]</label>
-                    <label style="font-size: 12px;"><input type="checkbox" class="vox-suppress-toggle" data-cat="monster" ${getSafeSetting("vox-conjurata", "suppressRawVoice_monster") ? "checked" : ""}> Monster Puppet [H]</label>
+                    <label style="font-size: 12px;"><input type="checkbox" class="vox-suppress-toggle" data-cat="narrator" ${getSafeSetting("vox-conjurata", "suppressRawVoice_narrator") ? "checked" : ""}> <i class="fas fa-robot"></i> Narrator [Y]</label>
+                    <label style="font-size: 12px;"><input type="checkbox" class="vox-suppress-toggle" data-cat="character" ${getSafeSetting("vox-conjurata", "suppressRawVoice_character") ? "checked" : ""}> <i class="fas fa-robot"></i> Character [I]</label>
+                    <label style="font-size: 12px;"><input type="checkbox" class="vox-suppress-toggle" data-cat="npc" ${getSafeSetting("vox-conjurata", "suppressRawVoice_npc") ? "checked" : ""}> <i class="fas fa-robot"></i> NPC [H]</label>
+                    <label style="font-size: 12px;"><input type="checkbox" class="vox-suppress-toggle" data-cat="monster" ${getSafeSetting("vox-conjurata", "suppressRawVoice_monster") ? "checked" : ""}> <i class="fas fa-robot"></i> Monster [H]</label>
                 </div>
             </div>
 
