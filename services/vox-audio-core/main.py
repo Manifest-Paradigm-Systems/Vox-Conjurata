@@ -171,8 +171,10 @@ def generate_stream_with_cache(
     for attempt in range(2):
         gen = vox_engine._generate(
             text=text,
+            reference_wav_path=seed_path,
             inference_timesteps=inference_timesteps,
             cfg_value=cfg_value,
+            max_len=_compute_max_len(dialogue_text),
             retry_badcase=True,
             retry_badcase_max_times=1,
             retry_badcase_ratio_threshold=50.0,
