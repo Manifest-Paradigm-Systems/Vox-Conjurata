@@ -184,7 +184,8 @@ def generate_stream_with_cache(
         nan_count = 0
         try:
             for wav in gen:
-                arr = wav.squeeze(0).cpu().numpy()
+                # Wrapper already yields numpy arrays (squeezed, cpu'd)
+                arr = wav if isinstance(wav, np.ndarray) else wav.squeeze(0).cpu().numpy()
                 chunk_count += 1
                 if np.isnan(arr).sum() > max(1, arr.size // 100):
                     nan_count += 1
