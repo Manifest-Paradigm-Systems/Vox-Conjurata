@@ -1232,20 +1232,31 @@ async def _execute_voice_conversion_pipeline(task_id: str, audio_bytes: bytes, a
 
         # 1. Transcription
         t_stt_start = time.time()
-        # Convert WebM to WAV for Whisper (the STT service's ffmpeg is too old for Opus)
+        # Convert WebM to WAV for Whisper (browser MediaRecorder produces live WebM
+        # that ffmpeg needs extra flags to fully parse)
         import tempfile, subprocess as _sp
         _tmp_in = tempfile.NamedTemporaryFile(suffix=".webm", delete=False)
         _tmp_in.write(audio_bytes)
         _tmp_in.close()
         _tmp_out = _tmp_in.name + ".wav"
         try:
-            _sp.run(["ffmpeg", "-i", _tmp_in.name, "-ar", "16000", "-ac", "1", "-sample_fmt", "s16", "-y", _tmp_out],
+            _sp.run(["ffmpeg",
+                     "-fflags", "+genpts+igndts",
+                     "-analyzeduration", "100M",
+                     "-probesize", "100M",
+                     "-i", _tmp_in.name,
+                     "-ar", "16000", "-ac", "1", "-sample_fmt", "s16",
+                     "-y", _tmp_out],
                     capture_output=True, timeout=30, check=True)
-            with open(_tmp_out, "rb") as _f:
-                audio_bytes = _f.read()
-            audio_content_type = "audio/wav"
-            audio_filename = "audio.wav"
-            logger.info(f"🎙️ Vox | Converted audio to WAV ({len(audio_bytes)} bytes)")
+            _size = os.path.getsize(_tmp_out)
+            if _size > 16000:  # at least 0.5s of 16kHz mono 16-bit
+                with open(_tmp_out, "rb") as _f:
+                    audio_bytes = _f.read()
+                audio_content_type = "audio/wav"
+                audio_filename = "audio.wav"
+                logger.info(f"🎙️ Vox | Converted audio to WAV ({len(audio_bytes)} bytes)")
+            else:
+                logger.warning(f"🎙️ Vox | Converted WAV too small ({_size} bytes), sending raw")
         except Exception as e:
             logger.warning(f"🎙️ Vox | Audio conversion failed, sending raw: {e}")
         finally:
