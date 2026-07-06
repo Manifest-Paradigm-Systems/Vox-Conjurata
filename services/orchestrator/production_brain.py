@@ -1256,6 +1256,7 @@ async def _execute_voice_conversion_pipeline(task_id: str, audio_bytes: bytes, a
                      "-analyzeduration", "100M",
                      "-probesize", "100M",
                      "-i", _tmp_in.name,
+                     "-filter:a", "volume=2.0",
                      "-ar", "16000", "-ac", "1", "-sample_fmt", "s16",
                      "-y", _tmp_out],
                     capture_output=True, timeout=30, check=True)
