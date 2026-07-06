@@ -24,9 +24,6 @@ RUN pip3 install --no-cache-dir "numpy<2.0.0"
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# Pin torchao to version compatible with PyTorch 2.3
-RUN pip3 install --no-cache-dir "torchao>=0.7.0,<0.11.0"
-
 # Copy application code
 COPY main.py .
 
