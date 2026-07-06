@@ -1751,7 +1751,7 @@ async function processAndSendAudio() {
     }
 
     const formData = new FormData(); 
-    formData.append("audio_blob", blob, "v.webm");
+    formData.append("audio_blob", blob, "v.wav");
     formData.append("metadata", JSON.stringify({ 
         activeSpeakerName, 
         actorId: activeActorId, 
