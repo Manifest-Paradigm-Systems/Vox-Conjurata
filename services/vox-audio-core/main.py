@@ -15,10 +15,9 @@ import asyncio
 from voxcpm import VoxCPM
 from pedalboard import Pedalboard, PitchShift, Distortion, Chorus, Reverb, HighpassFilter
 import logging
+from collections import OrderedDict
 
 logging.basicConfig(level=logging.INFO)
-from torchao.quantization import quantize_, Int8WeightOnlyConfig
-from voxcpm.core import next_and_close
 import re
 
 logger = logging.getLogger("vox-audio-core")
@@ -29,6 +28,13 @@ app = FastAPI(title="Vox Conjurata Core Audio Engine")
 _seed_lock = asyncio.Lock()
 
 last_used_time = time.time()
+
+# Startup readiness flag — set to True once model is loaded
+startup_complete = False
+
+# Bounded prompt cache: max 64 entries, LRU eviction
+MAX_PROMPT_CACHE_SIZE = 64
+_prompt_cache = OrderedDict()
 
 def update_last_used():
     global last_used_time
@@ -62,7 +68,7 @@ logger.info("Loading VoxCPM2 model...")
 vox_engine = VoxCPM.from_pretrained("openbmb/VoxCPM2", load_denoiser=False, optimize=False)
 logger.info("Model loaded.")
 
-SEED_DIR = os.getenv("SEED_DIR", "/app/seeds/")
+SEED_DIR = os.getenv("SEED_DIR", "/app/voice_seeds/")
 os.makedirs(SEED_DIR, exist_ok=True)
 
 _prompt_cache = {}
