@@ -695,10 +695,13 @@ function registerKeybindings() {
             event.stopImmediatePropagation();
             activeKeys.delete(code);
             console.log(`🎙️ Vox: Hotkey ${code} released (PTT CLOSED)`);
-            
-            toggleFoundryAudio(true);
-            
-            if (code === "KeyY") { globalThis.voxState.narratorActive = false; stopRecording(); statusMessage("Narrator Mic [Y]: CLOSED", false); } 
+
+            // Only re-enable Foundry broadcast if suppression was active for this category
+            // (avoids fighting Foundry's own mute/unmute state when user has suppression off)
+            const wasSuppressed = globalThis.voxState.useVoxVoice === true;
+            if (wasSuppressed) toggleFoundryAudio(true);
+
+            if (code === "KeyY") { globalThis.voxState.narratorActive = false; stopRecording(); statusMessage("Narrator Mic [Y]: CLOSED", false); }
             else if (code === "KeyH") { globalThis.voxState.puppetActive = false; stopRecording(); statusMessage(`Puppeteer Mic [H] (${globalThis.voxState.activeSpeakerName}): CLOSED`, false); }
             else if (code === "KeyI") { globalThis.voxState.playerActive = false; stopRecording(); statusMessage(`Character Mic [I] (${globalThis.voxState.activeSpeakerName}): CLOSED`, false); }
         }
