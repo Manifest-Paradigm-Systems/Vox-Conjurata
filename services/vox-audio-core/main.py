@@ -66,19 +66,27 @@ torch.set_float32_matmul_precision('high')
 logger.info("Loading VoxCPM2 model...")
 # Load in eager mode to prevent long Inductor compilation overhead of quantized weights
 vox_engine = VoxCPM.from_pretrained("openbmb/VoxCPM2", load_denoiser=False, optimize=False)
+startup_complete = True
 logger.info("Model loaded.")
 
 SEED_DIR = os.getenv("SEED_DIR", "/app/voice_seeds/")
 os.makedirs(SEED_DIR, exist_ok=True)
 
-_prompt_cache = {}
+def get_or_create_prompt_cache(seed_path: str) -> dict:
+    """Build or retrieve a prompt cache for the given seed WAV.
 
-def get_or_create_prompt_cache(seed_path: str):
-    if seed_path not in _prompt_cache:
-        logger.info(f"Building prompt cache for: {seed_path}")
-        prompt_cache = vox_engine.tts_model.build_prompt_cache(reference_wav_path=seed_path)
-        _prompt_cache[seed_path] = prompt_cache
-    return _prompt_cache[seed_path]
+    Cache is bounded to MAX_PROMPT_CACHE_SIZE entries with LRU eviction.
+    """
+    if seed_path in _prompt_cache:
+        _prompt_cache.move_to_end(seed_path)  # LRU — mark as recently used
+        return _prompt_cache[seed_path]
+    logger.info(f"Building prompt cache for: {seed_path}")
+    prompt_cache = vox_engine.tts_model.build_prompt_cache(reference_wav_path=seed_path)
+    if len(_prompt_cache) >= MAX_PROMPT_CACHE_SIZE:
+        evicted = _prompt_cache.popitem(last=False)
+        logger.info(f"Evicted prompt cache: {evicted[0]}")
+    _prompt_cache[seed_path] = prompt_cache
+    return prompt_cache
 
 def _compute_max_len(dialogue_text: str) -> int:
     """
@@ -112,16 +120,17 @@ def generate_with_cache(
 
     arr = None
     for attempt in range(max_retries + 1):
-        # Vary cfg_value slightly on retry to escape NaN path
         retry_cfg = cfg_value + (attempt * 0.5)
         t_gen_start = time.time()
         wav = vox_engine.generate(
             text=text,
+            reference_wav_path=seed_path,
             cfg_value=retry_cfg,
             inference_timesteps=inference_timesteps,
+            max_len=_compute_max_len(dialogue_text),
             retry_badcase=True,
-            retry_badcase_max_times=1,       # Model needs ≥1 for internal var init
-            retry_badcase_ratio_threshold=50.0  # Very high to prevent false positives on short TTS
+            retry_badcase_max_times=1,
+            retry_badcase_ratio_threshold=50.0,
         )
         t_gen = time.time() - t_gen_start
         arr = wav
@@ -251,6 +260,21 @@ def encode_wav_header(sample_rate: int, num_channels: int = 1, bits_per_sample: 
         b"data", 0xFFFFFFFF,         # data chunk (unknown size)
     )
     return header
+
+@app.get("/health")
+async def health():
+    """Readiness probe. Returns 200 once model is loaded, 503 otherwise."""
+    if not startup_complete:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=503, content={"status": "loading", "model": "VoxCPM2"})
+    seed_count = len([f for f in os.listdir(SEED_DIR) if f.endswith(".wav")]) if os.path.isdir(SEED_DIR) else 0
+    return {
+        "status": "ok",
+        "model": "VoxCPM2",
+        "model_loaded": True,
+        "voice_seeds": seed_count,
+        "prompt_cache_size": len(_prompt_cache),
+    }
 
 @app.post("/initialize")
 async def initialize_npc(request: NPCIdentityRequest):
