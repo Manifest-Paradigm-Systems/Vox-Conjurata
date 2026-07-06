@@ -510,27 +510,53 @@ function resolveActiveToken(isGM) {
 // ==========================================
 // 2. AUDIO & PTT ENGINE
 // ==========================================
+// Encode raw float32 PCM samples as a WAV file (16-bit mono)
+function encodeWAV(samples, sampleRate) {
+    const buffer = new ArrayBuffer(44 + samples.length * 2);
+    const view = new DataView(buffer);
+    const writeStr = (off, str) => { for (let i = 0; i < str.length; i++) view.setUint8(off + i, str.charCodeAt(i)); };
+    writeStr(0, 'RIFF');
+    view.setUint32(4, 36 + samples.length * 2, true);
+    writeStr(8, 'WAVE');
+    writeStr(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);       // PCM
+    view.setUint16(22, 1, true);       // mono
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    writeStr(36, 'data');
+    view.setUint32(40, samples.length * 2, true);
+    for (let i = 0; i < samples.length; i++) {
+        const s = Math.max(-1, Math.min(1, samples[i]));
+        view.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    }
+    return new Blob([buffer], { type: "audio/wav" });
+}
+
+let voxAudioCtx = null;
+let voxScriptNode = null;
+let voxSourceNode = null;
+
 (async function initAudio() {
     if (!navigator.mediaDevices?.getUserMedia) return;
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        
-        // Clone the stream to isolate Vox recording from Foundry's internal A/V
-        const voxStream = new MediaStream(stream.getAudioTracks().map(track => track.clone()));
-        
-        const recorder = new MediaRecorder(voxStream);
-        globalThis.voxState.mediaRecorder = recorder;
-        recorder.ondataavailable = (e) => { 
-            if (e.data.size > 0) {
-                globalThis.voxState.audioChunks.push(e.data);
-                console.log(`🎙️ Vox | Received audio chunk: ${e.data.size} bytes`);
-            }
+        voxAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        voxSourceNode = voxAudioCtx.createMediaStreamSource(stream);
+
+        // ScriptProcessorNode for raw PCM capture (bufferSize=4096 ~= 256ms at 16kHz)
+        voxScriptNode = voxAudioCtx.createScriptProcessor(4096, 1, 1);
+        voxScriptNode.onaudioprocess = (e) => {
+            if (!globalThis.voxState._recording) return;
+            const input = e.inputBuffer.getChannelData(0);
+            globalThis.voxState._pcmChunks.push(new Float32Array(input));
         };
-        recorder.onstop = async () => { 
-            console.log("🎙️ Vox | Recording stopped. Processing audio...");
-            await processAndSendAudio(); 
-        };
-        console.log("✅ Vox Audio Engine: Isolated stream initialized.");
+        voxSourceNode.connect(voxScriptNode);
+        voxScriptNode.connect(voxAudioCtx.destination);
+
+        console.log("✅ Vox Audio Engine: WAV capture initialized.");
     } catch (err) { console.error("❌ Vox Audio Fail:", err); }
 })();
 
@@ -1622,13 +1648,18 @@ async function playStreamingAudio(url, vol = 1.0) {
 }
 
 function startRecording(micType) {
-    if (globalThis.voxState.mediaRecorder?.state === "inactive") {
-        globalThis.voxState.audioChunks = []; globalThis.voxState.activeMicType = micType;
-        globalThis.voxState.mediaRecorder.start(250);
-    }
+    globalThis.voxState._pcmChunks = [];
+    globalThis.voxState._recording = true;
+    globalThis.voxState.activeMicType = micType;
 }
 
-function stopRecording() { if (globalThis.voxState.mediaRecorder?.state === "recording") globalThis.voxState.mediaRecorder.stop(); }
+function stopRecording() {
+    globalThis.voxState._recording = false;
+    setTimeout(async () => {
+        console.log("🎙️ Vox | Recording stopped. Processing audio...");
+        await processAndSendAudio();
+    }, 50);
+}
 
 function statusMessage(text, isOpen) {
     createVoxChatMessage({
@@ -1639,13 +1670,26 @@ function statusMessage(text, isOpen) {
 }
 
 async function processAndSendAudio() {
-    const chunks = globalThis.voxState.audioChunks; 
-    console.log(`🎙️ Vox | Processing ${chunks.length} audio chunks...`);
-    if (chunks.length === 0) {
-        console.warn("🎙️ Vox | No audio chunks captured. Stream might have been silent or interrupted.");
+    const pcmChunks = globalThis.voxState._pcmChunks || [];
+    const chunkCount = pcmChunks.length;
+    console.log(`🎙️ Vox | Processing ${chunkCount} audio chunks...`);
+    if (chunkCount === 0) {
+        console.warn("🎙️ Vox | No audio captured.");
         return;
     }
-    
+
+    // Concatenate all PCM chunks and encode as WAV
+    let totalLen = pcmChunks.reduce((s, c) => s + c.length, 0);
+    const allSamples = new Float32Array(totalLen);
+    let offset = 0;
+    for (const chunk of pcmChunks) {
+        allSamples.set(chunk, offset);
+        offset += chunk.length;
+    }
+    const sr = voxAudioCtx ? voxAudioCtx.sampleRate : 48000;
+    const blob = encodeWAV(allSamples, sr);
+    console.log(`🎙️ Vox | WAV blob: ${blob.size} bytes (${(totalLen / sr).toFixed(2)}s at ${sr}Hz)`);
+
     // Pre-flight Credit Check
     try {
         console.log(`🎙️ Vox | Checking credits for ${game.user.name}...`);
@@ -1669,8 +1713,6 @@ async function processAndSendAudio() {
             return;
         }
     } catch (e) {}
-
-    const blob = new Blob(chunks, { type: "audio/webm" });
     const { activeMicType, activeActorId, activeSpeakerName, activeIsMonster, useVoxVoice, isAutonomousTrigger, targetActorId, targetVoxVoice = true } = globalThis.voxState;
     
     // 1. Extract DSP presets from actor flags
