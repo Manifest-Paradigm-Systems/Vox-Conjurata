@@ -17,12 +17,18 @@ RUN apt-get update && apt-get install -y \
     git curl ffmpeg libsndfile1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install application dependencies — exclude torch/torchaudio/torchcodec
-# to preserve the base image's ROCm PyTorch build
+# Install application dependencies (excluding torch/torchcodec)
 COPY requirements.txt .
-RUN grep -vE '^(torch|torchao|torchcodec)' requirements.txt > req_fixed.txt && \
+RUN grep -vE '^(torch|torchcodec)' requirements.txt > req_fixed.txt && \
     pip3 install --no-cache-dir -r req_fixed.txt && \
     rm req_fixed.txt requirements.txt
+
+# Reinstall torchaudio from the ROCm index — pip pulls CUDA builds by default
+# for torchaudio, which links against libcudart.so and crashes at import.
+# Only torchaudio needs this; torch stays at the base image's ROCm 2.7.1 build.
+RUN pip3 install --no-cache-dir --force-reinstall \
+    --index-url https://download.pytorch.org/whl/rocm6.2 \
+    torchaudio
 
 # Copy application code
 COPY main.py .
