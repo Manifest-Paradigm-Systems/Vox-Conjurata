@@ -25,10 +25,10 @@ RUN grep -vE '^(torch|torchcodec)' requirements.txt > req_fixed.txt && \
 
 # Install torchaudio from the ROCm index — pip pulls CUDA builds by default,
 # which link against libcudart.so and crash at import.  The ROCm 6.4 index
-# has torchaudio 2.9.1 for cp312, compatible with torch 2.7.1 and ROCm 6.4.
-RUN pip3 install --no-cache-dir \
+# has torchaudio 2.9.1+rocm6.4 for cp312, compatible with torch 2.7.1.
+RUN pip3 install --no-cache-dir --force-reinstall \
     --index-url https://download.pytorch.org/whl/rocm6.4 \
-    torchaudio
+    "torchaudio>=2.9.0,<2.10.0"
 
 # Copy application code
 COPY main.py .
