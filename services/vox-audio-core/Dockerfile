@@ -1,7 +1,7 @@
 # vox-audio-core (VoxCPM2 + Pedalboard)
-# Optimized for AMD ROCm / RDNA3 (gfx1201)
-# Pinned to ROCm 6.2.2 + PyTorch 2.3 for generation stability (ROCm 7.x has NaN regression)
-FROM docker.io/rocm/pytorch:rocm6.2.2_ubuntu22.04_py3.10_pytorch_release_2.3.0
+# Optimized for AMD ROCm / RDNA4 (gfx1201)
+# ROCm 6.3.2 + PyTorch 2.6 — safe upgrade from 6.2.2 (NaN regression was ROCm 7.x only)
+FROM docker.io/rocm/pytorch:rocm6.3.2_ubuntu24.04_py3.12_pytorch_release_2.6.0
 
 ENV HSA_OVERRIDE_GFX_VERSION=12.0.1
 ENV DEBIAN_FRONTEND=noninteractive
@@ -17,12 +17,12 @@ RUN apt-get update && apt-get install -y \
     git curl ffmpeg libsndfile1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Pin numpy < 2.0.0
-RUN pip3 install --no-cache-dir "numpy<2.0.0"
-
-# Install dependencies
+# Install application dependencies — exclude torch/torchaudio/torchcodec
+# to preserve the base image's ROCm PyTorch build
 COPY requirements.txt .
-RUN pip3 install --no-cache-dir -r requirements.txt
+RUN grep -vE '^(torch|torchao|torchcodec)' requirements.txt > req_fixed.txt && \
+    pip3 install --no-cache-dir -r req_fixed.txt && \
+    rm req_fixed.txt requirements.txt
 
 # Copy application code
 COPY main.py .
