@@ -1244,8 +1244,8 @@ class VoxVoiceManager extends Application {
                         <button class="vox-regen-actor" data-actor-id="${entry.id}" style="height: 26px; line-height: 1; font-size: 11px; flex: 1; background: #b34a00; color: white;"><i class="fas fa-redo"></i> Re-Forge</button>
                     </div>
                     <div style="display:flex;gap:4px;margin-top:4px;align-items:center;">
-                        <input type="text" class="vox-actor-id-input" value="${entry.id}" style="flex:1;background:#222;color:#aaa;border:1px solid #444;border-radius:4px;padding:2px 6px;font-size:10px;font-family:monospace;">
-                        <button class="vox-relink-actor" data-old-id="${entry.id}" style="height:20px;line-height:1;font-size:9px;padding:0 6px;background:#333;color:#ffaa22;border:1px solid #887700;border-radius:4px;cursor:pointer;"><i class="fas fa-link"></i> Link</button>
+                        <input type="text" class="vox-actor-id-input" value="${entry.id}" style="flex:1;background:#222;color:#ccc;border:1px solid #444;border-radius:4px;padding:4px 6px;font-size:11px;font-family:monospace;">
+                        <button class="vox-relink-actor" data-old-id="${entry.id}" style="height:18px;line-height:1;font-size:9px;padding:0 4px;flex:0 0 auto;background:#333;color:#ffaa22;border:1px solid #887700;border-radius:4px;cursor:pointer;"><i class="fas fa-link"></i></button>
                     </div>
                 </li>
             `;
