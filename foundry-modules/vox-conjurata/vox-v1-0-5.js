@@ -1635,6 +1635,7 @@ async function captureAndScanMap() {
         }
     } catch (err) { console.error("❌ Vox Scan fail:", err); }
 }
+globalThis.VoxVoiceManager = VoxVoiceManager;
 
 Hooks.on("getSceneControlButtons", (controls) => {
     
