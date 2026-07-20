@@ -593,6 +593,15 @@ function registerKeybindings() {
         default: "speech"
     });
 
+    game.settings.register("vox-conjurata", "narratorVoiceDesc", {
+        name: "Narrator Voice Description",
+        hint: "Describe the narrator's voice (e.g. 'Deep cinematic male narrator, neutral accent, authoritative'). Used when re-forging the narrator seed.",
+        scope: "world",
+        config: true,
+        type: String,
+        default: "Deep cinematic male narrator, neutral accent, clear, authoritative, slightly resonant"
+    });
+
     // Voice Generation Settings
     // When checked: Foundry AV is suppressed, AI voice is generated, transcription goes to chat
     // When unchecked: raw mic passes through Foundry AV, no AI voice, transcription goes to chat
