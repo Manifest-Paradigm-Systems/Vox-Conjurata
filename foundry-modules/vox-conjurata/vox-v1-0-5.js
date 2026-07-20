@@ -718,7 +718,9 @@ function registerKeybindings() {
 
                 const target = game.user.targets.first();
                 const targetActor = target?.actor;
-                if (targetActor && targetActor.type !== "character") {
+                // Allow autonomous reply for tokens NOT assigned to a specific player
+                // (NPCs, unowned characters). Player-owned tokens only speak when puppeteered.
+                if (targetActor && !targetActor.hasPlayerOwner) {
                     globalThis.voxState.isAutonomousTrigger = targetActor.getFlag("vox-conjurata", "vox-actor") ?? true;
                     globalThis.voxState.targetActorId = targetActor.id;
                     globalThis.voxState.targetVoxVoice = targetActor.getFlag("vox-conjurata", "vox-voice") ?? true;
