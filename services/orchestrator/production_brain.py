@@ -651,6 +651,112 @@ async def transcode_to_opus(wav_bytes: bytes) -> bytes:
         logger.error(f"Audio transcoding to Opus failed: {e}")
         return wav_bytes
 
+def split_quoted_text(text: str) -> list[tuple[str, str]]:
+    """Split text into segments of narration vs dialogue.
+
+    Returns a list of (role, segment) tuples where role is
+    'narration' or 'dialogue'. Narration is text outside quotes,
+    dialogue is text inside quotes (single or double).
+    Uses a simple state-machine approach rather than regex to handle
+    nested asterisks and quotes cleanly.
+    """
+    segments = []
+    i = 0
+    while i < len(text):
+        # Skip whitespace
+        if text[i] in ' \t\n\r':
+            i += 1
+            continue
+        # Check for quoted section
+        if text[i] in '"\'':
+            quote_char = text[i]
+            i += 1
+            start = i
+            while i < len(text) and text[i] != quote_char:
+                i += 1
+            content = text[start:i].strip()
+            if i < len(text):
+                i += 1  # skip closing quote
+            if content:
+                segments.append(("dialogue", content))
+        else:
+            # Narration — collect up to the next quote
+            start = i
+            while i < len(text) and text[i] not in '"\'':
+                i += 1
+            content = text[start:i].strip()
+            if content:
+                segments.append(("narration", content))
+    # If nothing was parsed, treat whole text as dialogue
+    if not segments:
+        segments = [("dialogue", text)]
+    return segments
+
+async def concat_wavs(wav_list: list[bytes]) -> bytes:
+    """Concatenate multiple WAV byte strings into one using ffmpeg."""
+    if not wav_list:
+        return b""
+    if len(wav_list) == 1:
+        return wav_list[0]
+    try:
+        # Write each WAV to a temp pipe, use ffmpeg concat
+        filter_parts = "".join(f"[{i}:a]" for i in range(len(wav_list)))
+        filter_complex = f"{filter_parts}concat=n={len(wav_list)}:v=0:a=1[out]"
+        input_args = []
+        for w in wav_list:
+            input_args += ["-i", "pipe:stdin" if input_args else "pipe:stdin"]
+        # Use multiple -i pipes
+        proc = await asyncio.create_subprocess_exec(
+            "ffmpeg",
+            "-f", "wav", "-i", "pipe:0",
+            "-f", "wav", "-i", "pipe:1" if len(wav_list) > 1 else [],
+            *(["-f", "wav", "-i", f"pipe:{i}" for i in range(2, len(wav_list))] if len(wav_list) > 2 else []),
+            "-filter_complex", filter_complex,
+            "-map", "[out]",
+            "-f", "wav", "pipe:1" if len(wav_list) == 2 else "pipe:2",
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        # Feed all inputs
+        # Simple case: concat with temporary files instead
+        import tempfile, os
+        files = []
+        for w in wav_list:
+            f = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+            f.write(w)
+            f.close()
+            files.append(f.name)
+        file_list = tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False)
+        for fn in files:
+            file_list.write(f"file '{fn}'\n")
+        file_list.close()
+        out_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+        out_file.close()
+
+        proc2 = await asyncio.create_subprocess_exec(
+            "ffmpeg", "-f", "concat", "-safe", "0",
+            "-i", file_list.name,
+            "-c", "copy", out_file.name,
+            stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout2, stderr2 = await proc2.communicate()
+        result = b""
+        if proc2.returncode == 0:
+            with open(out_file.name, "rb") as fh:
+                result = fh.read()
+        # Cleanup
+        for fn in files:
+            os.unlink(fn)
+        os.unlink(file_list.name)
+        os.unlink(out_file.name)
+        return result or wav_list[0]
+    except Exception as e:
+        logger.error(f"WAV concatenation failed: {e}")
+        return wav_list[0]
+
 async def transcode_to_webp(image_bytes: bytes) -> bytes:
     """Converts image bytes to high-efficiency WebP format."""
     try:
