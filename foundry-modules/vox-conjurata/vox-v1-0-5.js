@@ -1910,12 +1910,29 @@ async function onReady() {
 
 if (typeof game !== 'undefined' && game.ready) onReady(); else Hooks.once("ready", onReady);
 
-// Audio cache for chat play buttons
+// Audio cache for chat play buttons — fetches TTS on first click, caches for replay
 window.__voxAudio = window.__voxAudio || {};
 $(document).on('click', '.vox-chat-play', function() {
-    var id = $(this).data('id');
-    var a = window.__voxAudio && window.__voxAudio[id];
-    if (a) new Audio(a).play();
+    var btn = $(this);
+    var text = btn.data('text');
+    var actor = btn.data('actor');
+    if (!text || !actor) return;
+    var key = actor + ":" + text;
+    var cached = window.__voxAudio[key];
+    if (cached) { new Audio(cached).play(); return; }
+    btn.prop('disabled', true).text('...');
+    fetch("/api/v1/tts-chunk", {
+        method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({actor_id: actor, text: text, dsp_presets: {}})
+    }).then(function(r) { return r.json(); }).then(function(d) {
+        if (d.status === "success" && d.audio_data) {
+            window.__voxAudio[key] = d.audio_data;
+            var k = Object.keys(window.__voxAudio);
+            if (k.length > 20) delete window.__voxAudio[k[0]];
+            new Audio(d.audio_data).play();
+        }
+        btn.prop('disabled', false).html('🔊');
+    }).catch(function() { btn.prop('disabled', false).html('🔊'); });
 });
 Hooks.on("canvasReady", async () => { if (game.user.isGM) await scanActiveSceneTokens(); });
 
@@ -2147,7 +2164,7 @@ async function processAndSendAudio() {
             // Handle AI Reply (Autonomous Scenario A)
             if (ai_reply) {
                 const npcMessage = await createVoxChatMessage({
-                    content: ai_reply.audio_data ? `<div style="display:flex;align-items:center;gap:8px;"><button class="vox-chat-play" data-id="${ai_reply.audio_data.slice(0,20)}" style="height:20px;line-height:1;font-size:10px;padding:0 8px;background:#222;color:#00ccff;border:1px solid #0088aa;border-radius:3px;cursor:pointer;flex-shrink:0;">🔊</button><span style="flex:1;">${ai_reply.transcription}</span></div>` : ai_reply.transcription,
+                    content: `<div style="display:flex;align-items:center;gap:8px;"><button class="vox-chat-play" data-text="${(ai_reply.transcription||'').replace(/"/g,'&quot;')}" data-actor="${targetActorId || activeActorId}" style="height:20px;line-height:1;font-size:10px;padding:0 8px;background:#222;color:#00ccff;border:1px solid #0088aa;border-radius:3px;cursor:pointer;flex-shrink:0;">🔊</button><span style="flex:1;">${ai_reply.transcription}</span></div>`,
                     speaker: { actor: targetActorId, alias: npc_context.name },
                     flags: { "vox-conjurata": { type: "npc-reply", audioUrl: ai_reply.audio_data, engine: ai_reply.engine } }
                 });
