@@ -1799,6 +1799,7 @@ Hooks.on("renderActorSheet", (app, html, data) => {
         p.style.left = Math.max(10, rect.left) + "px";
         
         p.innerHTML = "<div style='display:flex;justify-content:space-between;margin-bottom:8px;'><strong style='color:#ff6400;font-size:13px;'>Vox Voice</strong><span id='vox-ss-"+actor.id+"' style='color:#aaa;font-size:11px;'>Loading...</span></div>" +
+        "<div id='vox-sd-' + actor.id + ' style=\"font-size:11px;color:#888;font-style:italic;margin-bottom:6px;padding:4px;background:rgba(0,0,0,0.2);border-radius:3px;\"></div>" +
             "<div style='display:flex;gap:4px;margin-bottom:6px;'>" +
             "<button class='vox-sc' data-a='"+actor.id+"' data-n='"+actor.name+"' style='height:24px;font-size:10px;flex:1;background:#004d00;color:#00ff88;border:1px solid #00aa44;border-radius:3px;cursor:pointer;'>Clone</button>" +
             "<button class='vox-sf' data-a='"+actor.id+"' style='height:24px;font-size:10px;flex:1;background:#664400;color:#ffaa22;border:1px solid #aa7700;border-radius:3px;cursor:pointer;'>Forge</button>" +
@@ -1835,6 +1836,8 @@ async function updateVoxStatus(actorId) {
         var e = r[actorId];
         var el = document.getElementById("vox-ss-" + actorId);
         if (el) el.textContent = e ? (e.approved ? "Active" : "Unapproved") : "No seed";
+        var el2 = document.getElementById("vox-sd-" + actorId);
+        if (el2) { var p = (e && e.voice_prompt) ? e.voice_prompt : ""; el2.innerHTML = p ? '<span style="color:#888;font-style:italic;">' + p + '</span>' : ""; }
     } catch(e) {}
 }
 
