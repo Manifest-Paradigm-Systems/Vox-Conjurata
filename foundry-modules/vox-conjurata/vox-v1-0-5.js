@@ -577,6 +577,7 @@ function toggleFoundryAudio(state) {
 }
 
 function registerKeybindings() {
+    console.log("Vox: registerKeybindings called, voxKeybindingsRegistered=", globalThis.voxKeybindingsRegistered);
     if (globalThis.voxKeybindingsRegistered) return;
     globalThis.voxKeybindingsRegistered = true;
     
@@ -676,8 +677,8 @@ function registerKeybindings() {
             // (prevents players hearing both raw mic and AI voice simultaneously)
             const shouldSuppress = (
                 code === "KeyH" || // Puppet always suppresses
-                (code === "KeyY" && game.settings.get("vox-conjurata", "suppressRawVoice_narrator")) ||
-                (code === "KeyI" && game.settings.get("vox-conjurata", "suppressRawVoice_character"))
+                (code === "KeyY" && (game.settings.settings.has("vox-conjurata.suppressRawVoice_narrator") ? game.settings.get("vox-conjurata", "suppressRawVoice_narrator") : false)) ||
+                (code === "KeyI" && (game.settings.settings.has("vox-conjurata.suppressRawVoice_character") ? game.settings.get("vox-conjurata", "suppressRawVoice_character") : false))
             );
             if (shouldSuppress) toggleFoundryAudio(false);
 
@@ -713,7 +714,7 @@ function registerKeybindings() {
                 globalThis.voxState.activeSpeakerName = a?.name || game.user.name; 
                 globalThis.voxState.activeActorId = a?.id || game.user.id; 
                 globalThis.voxState.activeIsMonster = !!resolveIsMonster(a);
-                globalThis.voxState.useVoxVoice = game.settings.get("vox-conjurata", "suppressRawVoice_character") ?? true;
+                globalThis.voxState.useVoxVoice = (game.settings.settings.has("vox-conjurata.suppressRawVoice_character") ? game.settings.get("vox-conjurata", "suppressRawVoice_character") : true) ?? true;
                 globalThis.voxState.useVoxActor = true; 
 
                 const target = game.user.targets.first();
