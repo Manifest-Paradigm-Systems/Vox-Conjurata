@@ -1720,6 +1720,18 @@ async def relink_voice(request: Request):
     logger.info(f"🔗 Voice relinked: {old_id} → {new_id}")
     return {"status": "success", "oldActorId": old_id, "newActorId": new_id}
 
+@app.delete("/api/v1/registry/{actor_id}")
+async def delete_registry_entry(actor_id: str):
+    """Delete a voice seed from the registry and remove its seed file."""
+    registry = load_voice_registry()
+    if actor_id in registry:
+        del registry[actor_id]
+        save_voice_registry(registry)
+    for p in [VOICE_SEEDS_DIR / f"{actor_id}.wav", PALETTE_DIR / f"{actor_id}.wav"]:
+        if p.exists(): p.unlink()
+    logger.info(f"🗑️ Voice seed deleted: {actor_id}")
+    return {"status": "deleted", "actor_id": actor_id}
+
 @app.post("/api/v1/approve-voice")
 async def approve_voice(request: Request):
     """Mark a voice as approved after playback."""
