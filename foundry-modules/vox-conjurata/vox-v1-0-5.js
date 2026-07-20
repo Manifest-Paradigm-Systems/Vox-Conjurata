@@ -2134,7 +2134,7 @@ async function processAndSendAudio() {
             // Handle AI Reply (Autonomous Scenario A)
             if (ai_reply) {
                 const npcMessage = await createVoxChatMessage({
-                    content: ai_reply.transcription,
+                    content: ai_reply.audio_data ? `<div style="display:flex;align-items:center;gap:8px;"><button class="vox-chat-play" data-audio="${ai_reply.audio_data}" style="height:20px;line-height:1;font-size:10px;padding:0 8px;background:#222;color:#00ccff;border:1px solid #0088aa;border-radius:3px;cursor:pointer;flex-shrink:0;">🔊</button><span style="flex:1;">${ai_reply.transcription}</span></div>` : ai_reply.transcription,
                     speaker: { actor: targetActorId, alias: npc_context.name },
                     flags: { "vox-conjurata": { type: "npc-reply", audioUrl: ai_reply.audio_data, engine: ai_reply.engine } }
                 });
