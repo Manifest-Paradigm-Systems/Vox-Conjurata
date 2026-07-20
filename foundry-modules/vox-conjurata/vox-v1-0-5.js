@@ -811,7 +811,8 @@ function updateIngestionProgress(current, total, name) {
                 btn.onclick = async function() {
                     var t = document.getElementById("chat-message").value.trim();
                     if (!t) { ui.notifications.warn("Enter text."); return; }
-                    btn.disabled = true; btn.textContent = "...";
+                    ui.notifications.info("Sending: " + t.substring(0, 40));
+                    console.log("Narrate text:", t);
                     try {
                         var r = await fetch("/api/v1/tts-chunk", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({actor_id:"narrator",text:t,dsp_presets:{}})});
                         var d = await r.json();
