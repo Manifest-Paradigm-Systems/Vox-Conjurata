@@ -553,12 +553,14 @@ async def generate_ai_reply(player_name: str, player_text: str, ctx: NPCContext)
         f"--- WORLD EVENTS ---\n{ctx.world_lore}\n\n"
         f"OUTPUT FORMAT RULES:\n"
         f"1. Always wrap your reply inside a <Narrative> block.\n"
-        f"2. SPEAK AS {ctx.name.upper()} IN FIRST PERSON. Write only what {ctx.name} actually SAYS out loud — direct dialogue, not narrator prose. No 'the cave trembles', no third-person descriptions.\n"
+        f"2. SPEAK AS {ctx.name.upper()} IN FIRST PERSON. Write only what {ctx.name} actually SAYS out loud — direct dialogue, not narrator prose.\n"
         f"   GOOD: \"Grr! Magic-user dares face my claws? You will bleed for that!\"\n"
         f"   BAD: 'The lizardman snarls menacingly as its scales ripple with fury.'\n"
-        f"3. DIALOGUE LENGTH: Maximum 30 words. Be punchy, feral, in-character. Every word must count.\n"
-        f"4. DYNAMIC IMAGE GENERATION: Append an <ImagePrompt> block ONLY when a scene transition or combat hit occurs. For dialogue replies, OMIT it entirely.\n"
-        f"5. Use ChatML format. Dialogue in \"quotes\". Short physical action in *asterisks* is OK but counts toward the 30-word limit."
+        f"3. IMPORTANT: NEVER say the character's name ({ctx.name}) in the spoken dialogue. You are the character speaking, not narrating about yourself.\n"
+        f"   WRONG: \"Captain Lamperia says you will pay.\"  RIGHT: \"You will pay!\"\n"
+        f"4. DIALOGUE LENGTH: Maximum 30 words.\n"
+        f"5. DYNAMIC IMAGE GENERATION: Append an <ImagePrompt> block ONLY when a scene transition or combat hit occurs. For dialogue replies, OMIT it entirely.\n"
+        f"6. Dialogue in \"quotes\". Short physical action in *asterisks* is OK."
     )
     payload = {
         "model": "EVA-UNIT-01/EVA-Qwen2.5-7B-v0.1",
