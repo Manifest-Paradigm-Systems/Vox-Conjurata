@@ -295,6 +295,29 @@ async def health():
         "prompt_cache_size": len(_prompt_cache),
     }
 
+@app.post("/seed-from-audio")
+async def seed_from_audio(npc_id: str = Form(...), audio: UploadFile = File(...)):
+    """
+    Save uploaded audio as a voice seed for the given NPC.
+    Used for one-shot cloning — record your voice and save it directly
+    as the seed file, bypassing VoxCPM2's text-to-seed generation.
+    """
+    update_last_used()
+    seed_path = os.path.join(SEED_DIR, f"{npc_id}.wav")
+    os.makedirs(os.path.dirname(seed_path), exist_ok=True)
+    try:
+        contents = await audio.read()
+        # Write the uploaded audio directly as the seed WAV
+        with open(seed_path, "wb") as f:
+            f.write(contents)
+        logger.info(f"🎙️ Seed saved from audio for NPC: {npc_id} ({len(contents)} bytes)")
+        # Clear any cached prompt for this NPC so the new seed takes effect
+        _prompt_cache.pop(seed_path, None)
+        return {"status": "success", "seed_path": seed_path}
+    except Exception as e:
+        logger.error(f"Failed to save audio seed for NPC {npc_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/initialize")
 async def initialize_npc(request: NPCIdentityRequest):
     """
