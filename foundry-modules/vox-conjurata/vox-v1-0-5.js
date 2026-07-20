@@ -1204,6 +1204,7 @@ class VoxVoiceManager extends Application {
                     <div style="display: flex; gap: 8px;">
                         ${narratorEntry ? `<button class="vox-play-seed" data-actor-id="narrator" style="height: 28px; line-height: 1; font-size: 12px; flex: 1; background: #222;"><i class="fas fa-play"></i> Preview</button>` : ''}
                         <button class="vox-save-narrator-desc" style="height: 28px; line-height: 1; font-size: 12px; flex: 1; background: #333; color: #ff6400; border: 1px solid #ff6400;"><i class="fas fa-save"></i> Save</button>
+                        <button class="vox-clone-mic" data-actor-id="narrator" data-name="Narrator" style="height: 28px; line-height: 1; font-size: 12px; flex: 1; background: #004d00; color: #00ff88; border: 1px solid #00aa44;"><i class="fas fa-microphone"></i> Clone from Mic</button>
                         <button class="vox-regen-actor" data-actor-id="narrator" style="height: 28px; line-height: 1; font-size: 12px; flex: 2; background: #b34a00; color: white;"><i class="fas fa-redo"></i> Re-Forge Narrator</button>
                     </div>
                 </div>
