@@ -700,28 +700,8 @@ async def concat_wavs(wav_list: list[bytes]) -> bytes:
     if len(wav_list) == 1:
         return wav_list[0]
     try:
-        # Write each WAV to a temp pipe, use ffmpeg concat
-        filter_parts = "".join(f"[{i}:a]" for i in range(len(wav_list)))
-        filter_complex = f"{filter_parts}concat=n={len(wav_list)}:v=0:a=1[out]"
-        input_args = []
-        for w in wav_list:
-            input_args += ["-i", "pipe:stdin" if input_args else "pipe:stdin"]
-        # Use multiple -i pipes
-        proc = await asyncio.create_subprocess_exec(
-            "ffmpeg",
-            "-f", "wav", "-i", "pipe:0",
-            "-f", "wav", "-i", "pipe:1" if len(wav_list) > 1 else [],
-            *(["-f", "wav", "-i", f"pipe:{i}" for i in range(2, len(wav_list))] if len(wav_list) > 2 else []),
-            "-filter_complex", filter_complex,
-            "-map", "[out]",
-            "-f", "wav", "pipe:1" if len(wav_list) == 2 else "pipe:2",
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        # Feed all inputs
-        # Simple case: concat with temporary files instead
         import tempfile, os
+        # Write each WAV to a temp file, use ffmpeg concat with file list
         files = []
         for w in wav_list:
             f = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
@@ -735,7 +715,7 @@ async def concat_wavs(wav_list: list[bytes]) -> bytes:
         out_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
         out_file.close()
 
-        proc2 = await asyncio.create_subprocess_exec(
+        proc = await asyncio.create_subprocess_exec(
             "ffmpeg", "-f", "concat", "-safe", "0",
             "-i", file_list.name,
             "-c", "copy", out_file.name,
@@ -743,9 +723,9 @@ async def concat_wavs(wav_list: list[bytes]) -> bytes:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        stdout2, stderr2 = await proc2.communicate()
+        await proc.communicate()
         result = b""
-        if proc2.returncode == 0:
+        if proc.returncode == 0:
             with open(out_file.name, "rb") as fh:
                 result = fh.read()
         # Cleanup
