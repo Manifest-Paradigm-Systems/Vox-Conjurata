@@ -274,11 +274,12 @@ def save_voice_registry(registry: dict) -> None:
     with open(VOICE_REGISTRY_PATH, "w") as f:
         json.dump(registry, f, indent=2)
 
-def register_character_voice(actor_id: str, engine: str, seed_path: str, voice_prompt: str = "", is_archetype: bool = False, archetype_key: str = "") -> None:
+def register_character_voice(actor_id: str, engine: str, seed_path: str, voice_prompt: str = "", is_archetype: bool = False, archetype_key: str = "", approved: bool = False) -> None:
     registry = load_voice_registry()
     registry[actor_id] = {
         "engine": engine, "seed_path": seed_path, "voice_prompt": voice_prompt,
         "is_archetype": is_archetype, "archetype_key": archetype_key,
+        "approved": approved,
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
     }
     save_voice_registry(registry)
