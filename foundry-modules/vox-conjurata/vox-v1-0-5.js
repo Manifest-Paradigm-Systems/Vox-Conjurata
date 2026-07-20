@@ -1842,9 +1842,15 @@ Hooks.on("renderActorSheet", (app, html, data) => {
 
 Hooks.on("renderActorDirectory", (app, html, data) => {
     if (!game.user.isGM) return;
-    const button = $(`<button type="button" class="vox-registry-btn" style="margin: 5px 0;"><i class="fas fa-dna"></i> Manage Vox Voices</button>`);
+    const $html = $(html);
+    const button = $(`<button type="button" class="vox-registry-btn" style="margin: 5px 0; width: calc(100% - 10px);"><i class="fas fa-dna"></i> Manage Vox Voices</button>`);
     button.click(() => new VoxVoiceManager().render(true));
-    $(html).find(".directory-footer").prepend(button);
+    const footer = $html.find(".directory-footer");
+    if (footer.length) {
+        footer.prepend(button);
+    } else {
+        $html.find(".directory").append(button);
+    }
 });
 
 async function onReady() {
