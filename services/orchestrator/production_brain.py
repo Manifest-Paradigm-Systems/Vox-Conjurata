@@ -600,9 +600,10 @@ async def transcode_to_opus(wav_bytes: bytes) -> bytes:
     """Converts WAV bytes to high-quality Opus (WebM) audio bytes."""
     if not wav_bytes: return wav_bytes
     try:
-        # Use webm container with opus codec
+        # Use webm container with opus codec.
+        # vox-audio-core already normalizes volume, so no additional gain needed.
         proc = await asyncio.create_subprocess_exec(
-            "ffmpeg", "-i", "pipe:0", "-filter:a", "volume=3.0",
+            "ffmpeg", "-i", "pipe:0",
             "-c:a", "libopus", "-b:a", "128k", "-f", "webm", "pipe:1",
             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )

@@ -108,6 +108,7 @@ def _compute_max_len(dialogue_text: str) -> int:
 def generate_with_cache(
     text: str,
     seed_path: str,
+    npc_id: str = "",
     dialogue_text: str = "",
     inference_timesteps: int = 8,
     cfg_value: float = 2.0,
@@ -118,13 +119,26 @@ def generate_with_cache(
     text = (dialogue_text or text).replace("\n", " ")
     text = re.sub(r"\s+", " ", text)
 
+    # Build (or fetch from LRU cache) a deterministic prompt embedding from the
+    # seed WAV.  This eliminates per-call variation in how the reference audio
+    # is encoded, giving each NPC a consistent vocal anchor across sentences.
+    prompt_cache = get_or_create_prompt_cache(seed_path)
+
+    # Fix the random seed per NPC so the diffusion noise is deterministic.
+    # Two sentences with the same text → identical audio characteristics.
+    if npc_id:
+        seed = abs(hash(npc_id)) % (2**31)
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
+
     arr = None
     for attempt in range(max_retries + 1):
         retry_cfg = cfg_value + (attempt * 0.5)
         t_gen_start = time.time()
-        wav = vox_engine.generate(
-            text=text,
-            reference_wav_path=seed_path,
+        audio_tensor, _, _ = vox_engine.tts_model.generate_with_prompt_cache(
+            target_text=text,
+            prompt_cache=prompt_cache,
             cfg_value=retry_cfg,
             inference_timesteps=inference_timesteps,
             max_len=_compute_max_len(dialogue_text),
@@ -133,7 +147,9 @@ def generate_with_cache(
             retry_badcase_ratio_threshold=50.0,
         )
         t_gen = time.time() - t_gen_start
-        arr = wav
+        arr = audio_tensor.squeeze(0).cpu().numpy()
+        if arr.dtype != np.float32:
+            arr = arr.astype(np.float32)
 
         nan_count = np.isnan(arr).sum()
         # Valid audio if <5% NaN samples (tolerate sparse NaN)
@@ -355,11 +371,12 @@ async def generate_audio(request: DialogueRequest):
         final_text = build_voxcpm_text(request.dialogue_text, request.control_instruction)
         logger.info(f"Generating dialogue for NPC: {request.npc_id} | text: '{final_text[:80]}...'")
 
-        # Execute high-fidelity cloning using cached prompt and no retry.
+        # Execute high-fidelity cloning using cached prompt and deterministic seed.
         # Pass dialogue_text separately so max_len is computed from spoken words only.
         clean_audio = generate_with_cache(
             text=final_text,
             seed_path=seed_path,
+            npc_id=request.npc_id,
             dialogue_text=request.dialogue_text,
             inference_timesteps=6
         )
