@@ -1759,119 +1759,86 @@ Hooks.on("getSceneControlButtons", (controls) => {
     }
 });
 
-Hooks.on("renderActorSheet", async (app, html, data) => {
+Hooks.on("renderActorSheet", (app, html, data) => {
     const actor = app.actor;
     const isGM = game.user.isGM;
     if (!isGM && !actor.isOwner) return;
-    const dspFlags = actor.getFlag("vox-conjurata", "dsp_presets") || {
-        pitch_shift: 0, distortion_db: 0, chorus_depth: 0,
-        reverb_size: 0, highpass_hz: 0, voice_description: ""
+    
+    // Check if tab already exists
+    const tabId = "vox-tab-" + actor.id;
+    if (document.getElementById(tabId)) return;
+    
+    // Build the tab
+    var tab = document.createElement("div");
+    tab.id = tabId;
+    tab.style.cssText = "position:absolute;top:0;right:40px;z-index:100;";
+    tab.innerHTML = \`
+        <div class="vox-sheet-tab" style="cursor:pointer;background:#ff6400;color:#fff;padding:2px 10px;border-radius:0 0 4px 4px;font-size:11px;font-family:'Signika',sans-serif;display:inline-block;">
+            VOX
+        </div>
+        <div class="vox-sheet-panel" style="display:none;position:absolute;top:22px;right:0;width:320px;background:#1a1a1a;border:1px solid #ff6400;border-radius:4px;padding:10px;box-shadow:0 4px 20px rgba(0,0,0,0.6);">
+            <div style="font-size:12px;color:#aaa;margin-bottom:6px;">Voice: <strong id="vox-status-${actor.id}">Loading...</strong></div>
+            <div style="display:flex;gap:4px;margin-bottom:6px;flex-wrap:wrap;">
+                <button class="vox-stest" data-aid="${actor.id}" style="height:22px;line-height:1;font-size:10px;padding:0 6px;background:#222;color:#00ccff;border:1px solid #0088aa;border-radius:3px;cursor:pointer;">Test</button>
+                <button class="vox-sclone" data-aid="${actor.id}" data-aname="${actor.name}" style="height:22px;line-height:1;font-size:10px;padding:0 6px;background:#004d00;color:#00ff88;border:1px solid #00aa44;border-radius:3px;cursor:pointer;">Clone</button>
+                <button class="vox-sforge" data-aid="${actor.id}" data-aname="${actor.name}" style="height:22px;line-height:1;font-size:10px;padding:0 6px;background:#664400;color:#ffaa22;border:1px solid #aa7700;border-radius:3px;cursor:pointer;">Forge</button>
+            </div>
+            <textarea class="vox-stext" data-aid="${actor.id}" placeholder="Describe the voice..." style="width:100%;height:40px;background:#222;color:#fff;border:1px solid #444;border-radius:3px;padding:3px 6px;font-size:11px;margin-bottom:4px;"></textarea>
+            <input type="text" class="vox-stesttext" data-aid="${actor.id}" placeholder="Test sentence..." style="width:100%;background:#222;color:#fff;border:1px solid #444;border-radius:3px;padding:3px 6px;font-size:11px;box-sizing:border-box;">
+        </div>
+    \`;
+    
+    // Find the window title bar and append the tab
+    var header = html.parents(".window-app").find(".window-header").first();
+    if (!header.length) header = html.parents(".app").find(".window-header").first();
+    if (header.length) {
+        header.append(tab);
+    } else {
+        // Fallback: add to the sheet body
+        html.find(".sheet-header, .window-content").first().prepend(tab);
+    }
+    
+    // Toggle panel on tab click
+    tab.querySelector(".vox-sheet-tab").onclick = function() {
+        var panel = tab.querySelector(".vox-sheet-panel");
+        var isOpen = panel.style.display !== "none";
+        panel.style.display = isOpen ? "none" : "block";
+        if (!isOpen) updateVoxStatus(actor.id);
     };
-    const voxActor = actor.getFlag("vox-conjurata", "vox-actor") ?? true;
-    const voxVoice = actor.getFlag("vox-conjurata", "vox-voice") ?? true;
-    let voiceStatus = "No voice seed";
-    let voiceDesc = "";
+    
+    // Wire up button handlers
+    tab.querySelector(".vox-stest").onclick = async function() {
+        var text = tab.querySelector(".vox-stesttext").value || "Hello, this is a voice test.";
+        var resp = await fetch("/api/v1/tts-chunk", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({actor_id:actor.id, text, dsp_presets:{}}) });
+        if (resp.ok) { var d = await resp.json(); if(d.audio_data) new Audio(d.audio_data).play(); }
+    };
+    
+    tab.querySelector(".vox-sclone").onclick = function() {
+        // Reuse the clone overlay from the voice manager
+        var ev = new CustomEvent("vox-clone", { detail: { actorId: actor.id, name: actor.name } });
+        document.dispatchEvent(ev);
+    };
+    
+    tab.querySelector(".vox-sforge").onclick = async function() {
+        var desc = tab.querySelector(".vox-stext").value.trim();
+        if (!desc) { ui.notifications.warn("Enter a voice description first."); return; }
+        ui.notifications.info("Forging voice...");
+        var resp = await fetch("/api/ingest-actor?force_refresh=true", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({actorId:actor.id,name:actor.name,lore:"",artPath:"",isMonster:false,customDescription:desc,userId:game.user.id}) });
+        if (resp.ok) { ui.notifications.success("Voice forged!"); updateVoxStatus(actor.id); }
+    };
+});
+
+async function updateVoxStatus(actorId) {
+    var el = document.getElementById("vox-status-" + actorId);
+    if (!el) return;
     try {
-        const reg = await (await fetch("/api/v1/registry")).json();
-        const entry = reg[actor.id];
-        if (entry) { voiceStatus = entry.approved ? "Active" : "Unapproved"; voiceDesc = entry.voice_prompt || ""; }
-    } catch (e) {}
+        var reg = await (await fetch("/api/v1/registry")).json();
+        var entry = reg[actorId];
+        el.textContent = entry ? (entry.approved ? "Active" : "Pending") : "None";
+        el.style.color = entry ? (entry.approved ? "#8d8" : "#ff8") : "#888";
+    } catch(e) { el.textContent = "Error"; }
+}
 
-    const panelHtml = `
-        <div style="margin-top:10px;padding:10px;background:rgba(0,0,0,0.2);border:1px solid #444;border-radius:5px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #ff6400;margin-bottom:10px;padding-bottom:5px;">
-                <h3 style="margin:0;color:#ff6400;border:none;"><i class="fas fa-waveform-path"></i> Vox Conjurata</h3>
-                <div style="display:flex;gap:15px;font-size:11px;font-weight:bold;color:#eee;">
-                    <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" class="vox-ai-toggle" data-prop="vox-actor" ${voxActor?"checked":""}> VOX-ACTOR</label>
-                    <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" class="vox-ai-toggle" data-prop="vox-voice" ${voxVoice?"checked":""}> VOX-VOICE</label>
-                </div>
-            </div>
-            <div style="font-size:12px;color:#aaa;margin-bottom:8px;padding:6px;background:rgba(0,0,0,0.2);border-radius:4px;">
-                Voice: <strong>${voiceStatus}</strong>
-                ${voiceDesc ? '<div style="font-style:italic;color:#888;margin-top:4px;">"'+voiceDesc+'"</div>' : ""}
-            </div>
-            <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
-                <button class="vox-sheet-test" data-actor-id="${actor.id}" style="height:24px;line-height:1;font-size:10px;padding:0 8px;background:#222;color:#00ccff;border:1px solid #0088aa;border-radius:4px;cursor:pointer;">Test</button>
-                <button class="vox-sheet-clone" data-actor-id="${actor.id}" data-name="${actor.name}" style="height:24px;line-height:1;font-size:10px;padding:0 8px;background:#004d00;color:#00ff88;border:1px solid #00aa44;border-radius:4px;cursor:pointer;">Clone</button>
-                <button class="vox-sheet-forge" data-actor-id="${actor.id}" data-name="${actor.name}" style="height:24px;line-height:1;font-size:10px;padding:0 8px;background:#664400;color:#ffaa22;border:1px solid #aa7700;border-radius:4px;cursor:pointer;">Forge</button>
-            </div>
-            <div class="form-group">
-                <label>Voice Description</label>
-                <textarea class="vox-description" style="width:100%;min-height:50px;background:#222;color:#fff;border:1px solid #333;font-size:12px;">${dspFlags.voice_description||""}</textarea>
-            </div>
-        </div>`;
-        var panel = $(panelHtml);
-        // Insert after sheet header or main tab content
-        const sheetHeader = $(html).find('.sheet-header, .sheet-tabs, .tab.active, .window-content > form').first();
-        if (sheetHeader.length) {
-            sheetHeader.after(panel);
-        } else {
-            $(html).prepend(panel);
-        }
-
-        // Sheet-specific test button
-        $(html).find('.vox-sheet-test').on('click', async function() {
-            const aid = $(this).data('actor-id');
-            const text = $(this).closest('.vox-audio-panel-wrapper').find('.vox-description').val() || "Hello, this is a voice test.";
-            const resp = await fetch("/api/v1/tts-chunk", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({actor_id:aid, text, dsp_presets:{}}) });
-            if (resp.ok) { const d = await resp.json(); if(d.audio_data) new Audio(d.audio_data).play(); }
-        });
-
-
-
-    // Listeners for the panel
-    panel.find('.vox-save-identity-btn').click(async ev => {
-        const presets = {
-            pitch_shift: parseInt(panel.find('[data-prop="pitch_shift"]').val()),
-            distortion_db: parseFloat(panel.find('[data-prop="distortion_db"]').val()),
-            chorus_depth: parseFloat(panel.find('[data-prop="chorus_depth"]').val()),
-            reverb_size: parseFloat(panel.find('[data-prop="reverb_size"]').val()),
-            highpass_hz: parseInt(panel.find('[data-prop="highpass_hz"]').val()),
-            voice_description: panel.find('.vox-description').val()
-        };
-        await actor.setFlag("vox-conjurata", "dsp_presets", presets);
-        ui.notifications.info(`🎙️ Vox: Voice matrix locked for ${actor.name}`);
-        
-        await fetch("/api/ingest-actor?force_refresh=true", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                actorId: actor.id, name: actor.name, artPath: actor.img,
-                isMonster: resolveIsMonster(actor),
-                lore: actor.system.details?.biography?.value || "",
-                customDescription: presets.voice_description,
-                userId: game.user.id
-            })
-        });
-    });
-
-    panel.find('.vox-test-voice-btn').click(async ev => {
-        const presets = {
-            pitch_shift: parseInt(panel.find('[data-prop="pitch_shift"]').val()),
-            distortion_db: parseFloat(panel.find('[data-prop="distortion_db"]').val()),
-            chorus_depth: parseFloat(panel.find('[data-prop="chorus_depth"]').val()),
-            reverb_size: parseFloat(panel.find('[data-prop="reverb_size"]').val()),
-            highpass_hz: parseInt(panel.find('[data-prop="highpass_hz"]').val()),
-        };
-        ui.notifications.info("🎙️ Auditioning voice...");
-        const formData = new FormData();
-        formData.append("metadata", JSON.stringify({
-            actorId: actor.id,
-            activeSpeakerName: actor.name,
-            dsp_presets: presets,
-            isMonster: resolveIsMonster(actor),
-            userId: game.user.id
-        }));
-        const dummyBlob = new Blob([new Uint8Array(44)], {type: 'audio/wav'});
-        formData.append("audio_blob", dummyBlob, "test.wav");
-        
-        try {
-            const resp = await fetch("/api/voice-conversion", { method: "POST", body: formData });
-            const data = await resp.json();
-            if (data.audio_data) {
-                const audio = new Audio(data.audio_data);
-                audio.play();
-            }
-        } catch (e) { console.error(e); }
     });
 });
 
