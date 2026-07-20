@@ -1328,12 +1328,61 @@ class VoxVoiceManager extends Application {
             const actorId = ev.currentTarget.dataset.actorId;
             const name = ev.currentTarget.dataset.name || actorId;
 
+            // Voice cloning script that captures a range of emotions
+            const CLONE_SCRIPT =
+`Welcome, friend. It's good to see you.
+(neutral, warm)
+
+I can't believe this is happening! This is incredible news!
+(happy, excited)
+
+Why would you do this? After everything we've been through...
+(sad, hurt)
+
+Enough! This ends now. You will not take another step forward.
+(angry, commanding)
+
+Hmm, I wonder what secrets lie beyond that door.
+(curious, thoughtful)
+
+Together, we can face whatever comes our way.
+(warm, determined)`;
+
+            // First, prompt the user with a dialog showing the script
+            const ready = await new Promise((resolve) => {
+                new Dialog({
+                    title: `Clone Voice: ${name}`,
+                    content: `
+                        <div style="padding: 10px;">
+                            <p style="margin-bottom: 10px; color: #ccc;">Read the following script aloud to capture emotional range. The recording will take about 30 seconds.</p>
+                            <div style="background: #111; border: 1px solid #444; border-radius: 6px; padding: 12px; margin-bottom: 12px; font-family: 'Courier New', monospace; font-size: 13px; line-height: 1.6; white-space: pre-wrap; color: #ddd;">
+${CLONE_SCRIPT}
+                            </div>
+                            <p style="color: #888; font-size: 11px;">Click <strong>Start Recording</strong> when ready, then read the script naturally. A 5-second countdown will appear.</p>
+                        </div>
+                    `,
+                    buttons: {
+                        cancel: { label: "Cancel", callback: () => resolve(false) },
+                        record: { label: "🎙️ Start Recording", callback: () => resolve(true) }
+                    },
+                    default: "record"
+                }).render(true);
+            });
+            if (!ready) return;
+
+            // Request mic access
             let stream;
             try {
                 stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             } catch (e) {
-                ui.notifications.error("🎙️ Microphone access denied. Grant permission and try again.");
+                ui.notifications.error("🎙️ Microphone access denied.");
                 return;
+            }
+
+            // 5-second countdown
+            for (let i = 5; i > 0; i--) {
+                ui.notifications.info(`⏱️ Recording starts in ${i}...`);
+                await new Promise(r => setTimeout(r, 1000));
             }
 
             const chunks = [];
@@ -1345,13 +1394,20 @@ class VoxVoiceManager extends Application {
                 formData.append("audio_blob", blob, "recording.webm");
                 formData.append("actorId", actorId);
 
-                ui.notifications.info(`🎙️ Cloning voice for ${name}...`);
+                ui.notifications.info(`🎙️ Processing voice clone for ${name}...`);
                 try {
                     const resp = await fetch("/api/clone-voice", {
                         method: "POST", body: formData
                     });
                     if (resp.ok) {
                         ui.notifications.success(`✅ Voice cloned for ${name}!`);
+                        // Auto-play the seed for approval
+                        setTimeout(() => {
+                            const audio = new Audio(`/api/v1/registry/audio/${actorId}?t=${Date.now()}`);
+                            audio.play().catch(() => {});
+                        }, 500);
+                        // Show approval notification
+                        ui.notifications.info(`👂 Listen to the preview above, then click "Approve" if it sounds good.`);
                         this.render(true);
                     } else {
                         ui.notifications.error("❌ Voice cloning failed.");
@@ -1362,16 +1418,16 @@ class VoxVoiceManager extends Application {
                 stream.getTracks().forEach(t => t.stop());
             };
 
-            ui.notifications.info(`🎙️ Recording voice for ${name} — speak now...`);
+            ui.notifications.info(`🎙️ Recording for ${name} — read the script naturally...`);
             recorder.start();
-            setTimeout(() => recorder.stop(), 3000);
+            setTimeout(() => recorder.stop(), 35000); // 35 seconds to read the script
 
-            // Visual feedback
+            // Visual feedback — show recording time remaining
             const btn = ev.currentTarget;
             const orig = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-circle" style="color: #ff4444;"></i> Recording...';
+            btn.innerHTML = '<i class="fas fa-circle" style="color: #ff4444;"></i> Recording (35s)...';
             btn.disabled = true;
-            setTimeout(() => { btn.innerHTML = orig; btn.disabled = false; }, 4000);
+            setTimeout(() => { btn.innerHTML = orig; btn.disabled = false; }, 40000);
         });
 
 /**
