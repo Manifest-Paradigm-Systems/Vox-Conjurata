@@ -401,6 +401,7 @@ async def generate_audio(request: DialogueRequest):
             seed_path=seed_path,
             npc_id=request.npc_id,
             dialogue_text=request.dialogue_text,
+            cfg_value=3.5,       # Higher CFG = stronger seed adherence, less voice variance
             inference_timesteps=6
         )
 
