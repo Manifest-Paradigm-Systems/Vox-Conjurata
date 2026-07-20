@@ -1226,7 +1226,7 @@ class VoxVoiceManager extends Application {
             html += `
                 <li style="background: rgba(255,255,255,0.03); margin-bottom: 10px; border-radius: 4px; padding: 12px; border-left: 3px solid #ff6400; box-shadow: 0 2px 5px rgba(0,0,0,0.3);">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                        <strong style="color: #fff; font-size: 14px;">${name}</strong>
+                        <input type="text" class="vox-char-name-input" data-actor-id="${entry.id}" value="${name}" style="flex:1;background:#222;color:#fff;border:1px solid #444;border-radius:4px;padding:2px 6px;font-size:14px;font-family:inherit;font-weight:bold;">
                         <span style="font-size: 10px; color: #ff6400; background: rgba(255,100,0,0.1); padding: 2px 6px; border-radius: 10px;">${entry.engine}</span>
                     </div>
                     <div style="font-size: 11px; color: #aaa; font-style: italic; margin-bottom: 10px; line-height: 1.4; border-left: 2px solid #333; padding-left: 8px;">"${entry.voice_prompt}"</div>
