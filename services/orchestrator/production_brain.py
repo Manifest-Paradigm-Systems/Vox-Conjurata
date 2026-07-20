@@ -1676,6 +1676,45 @@ async def end_dialogue(request: DialogueEndRequest):
 @app.get("/api/status")
 async def get_status(): return {"status": "nominal", "vram_used_gb": get_vram_used_gb()}
 
+@app.get("/api/v1/registry")
+async def get_registry():
+    """Return the full voice registry."""
+    return load_voice_registry()
+
+@app.get("/api/v1/registry/audio/{actor_id}")
+async def get_registry_audio(actor_id: str):
+    """Serve the seed WAV file for preview/playback."""
+    reg = load_voice_registry()
+    entry = reg.get(actor_id)
+    seed_path = None
+    if entry:
+        seed_rel = entry.get("seed_path", "")
+        seed_path = VOICE_SEEDS_DIR / seed_rel
+        if not seed_path.exists():
+            seed_path = None
+    if not seed_path:
+        seed_path = VOICE_SEEDS_DIR / f"{actor_id}.wav"
+    if not seed_path.exists():
+        seed_path = PALETTE_DIR / f"{actor_id}.wav"
+    if not seed_path or not seed_path.exists():
+        raise HTTPException(status_code=404, detail="Seed file not found")
+    return Response(content=seed_path.read_bytes(), media_type="audio/wav")
+
+@app.post("/api/v1/approve-voice")
+async def approve_voice(request: Request):
+    """Mark a voice as approved after playback."""
+    data = await request.json()
+    actor_id = data.get("actorId")
+    if not actor_id:
+        raise HTTPException(status_code=400, detail="actorId required")
+    register_character_voice(
+        actor_id, "vox-audio-core", f"{actor_id}.wav",
+        voice_prompt="", is_archetype=(actor_id == "narrator"),
+        archetype_key="", approved=True
+    )
+    logger.info(f"✅ Voice approved for actor: {actor_id}")
+    return {"status": "success", "actor_id": actor_id}
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8080)
