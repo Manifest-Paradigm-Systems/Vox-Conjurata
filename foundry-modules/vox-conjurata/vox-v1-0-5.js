@@ -1762,6 +1762,7 @@ Hooks.on("getSceneControlButtons", (controls) => {
 Hooks.on("renderActorSheet", async (app, html, data) => {
     const actor = app.actor;
     const isGM = game.user.isGM;
+    if (!isGM && !actor.isOwner) return;
     const dspFlags = actor.getFlag("vox-conjurata", "dsp_presets") || {
         pitch_shift: 0, distortion_db: 0, chorus_depth: 0,
         reverb_size: 0, highpass_hz: 0, voice_description: ""
