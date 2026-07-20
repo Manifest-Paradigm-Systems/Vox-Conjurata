@@ -1921,6 +1921,29 @@ async function playStreamingAudio(url, vol = 1.0) {
 }
 
 function startRecording(micType) {
+    // Resume AudioContext if suspended (Chrome blocks audio on page load)
+    if (typeof voxAudioCtx !== 'undefined' && voxAudioCtx && voxAudioCtx.state === 'suspended') {
+        voxAudioCtx.resume().catch(e => console.warn("Vox | AudioContext resume failed:", e));
+    }
+    // Ensure audio init ran — the IIFE may have failed silently
+    if (typeof voxScriptNode === 'undefined' || voxScriptNode === null) {
+        console.warn("Vox | Audio engine not initialized, re-triggering on user gesture...");
+        (async () => {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const src = ctx.createMediaStreamSource(stream);
+                const node = ctx.createScriptProcessor(4096, 1, 1);
+                node.onaudioprocess = (e) => {
+                    if (!globalThis.voxState._recording) return;
+                    globalThis.voxState._pcmChunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+                };
+                src.connect(node); node.connect(ctx.destination);
+                window.voxAudioCtx = ctx; window.voxScriptNode = node; window.voxSourceNode = src;
+                console.log("✅ Vox Audio: Re-initialized on user gesture.");
+            } catch (err) { console.error("❌ Vox Audio re-init failed:", err); }
+        })();
+    }
     globalThis.voxState._pcmChunks = [];
     globalThis.voxState._recording = true;
     globalThis.voxState.activeMicType = micType;
