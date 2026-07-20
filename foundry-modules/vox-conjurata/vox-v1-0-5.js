@@ -1759,103 +1759,57 @@ Hooks.on("getSceneControlButtons", (controls) => {
     }
 });
 
-Hooks.on("renderActorSheet", (app, html, data) => {
-    if (!game.user.isGM) return;
+Hooks.on("renderActorSheet", async (app, html, data) => {
     const actor = app.actor;
+    const isGM = game.user.isGM;
     const dspFlags = actor.getFlag("vox-conjurata", "dsp_presets") || {
-        pitch_shift: 0,
-        distortion_db: 0,
-        chorus_depth: 0,
-        reverb_size: 0,
-        highpass_hz: 0,
-        voice_description: ""
+        pitch_shift: 0, distortion_db: 0, chorus_depth: 0,
+        reverb_size: 0, highpass_hz: 0, voice_description: ""
     };
-
-    // AI Toggles
     const voxActor = actor.getFlag("vox-conjurata", "vox-actor") ?? true;
     const voxVoice = actor.getFlag("vox-conjurata", "vox-voice") ?? true;
+    let voiceStatus = "No voice seed";
+    let voiceDesc = "";
+    try {
+        const reg = await (await fetch("/api/v1/registry")).json();
+        const entry = reg[actor.id];
+        if (entry) { voiceStatus = entry.approved ? "Active" : "Unapproved"; voiceDesc = entry.voice_prompt || ""; }
+    } catch (e) {}
 
     const panelHtml = `
-        <div class="vox-audio-panel-wrapper" style="margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.2); border: 1px solid #444; border-radius: 5px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ff6400; margin-bottom: 10px; padding-bottom: 5px;">
-                <h3 style="margin: 0; color: #ff6400; border: none;"><i class="fas fa-waveform-path"></i> Vox Conjurata</h3>
-                <div style="display: flex; gap: 15px; font-size: 11px; font-weight: bold; color: #eee;">
-                    <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
-                        <input type="checkbox" class="vox-ai-toggle" data-prop="vox-actor" ${voxActor ? 'checked' : ''}> VOX-ACTOR
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
-                        <input type="checkbox" class="vox-ai-toggle" data-prop="vox-voice" ${voxVoice ? 'checked' : ''}> VOX-VOICE
-                    </label>
+        <div style="margin-top:10px;padding:10px;background:rgba(0,0,0,0.2);border:1px solid #444;border-radius:5px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #ff6400;margin-bottom:10px;padding-bottom:5px;">
+                <h3 style="margin:0;color:#ff6400;border:none;"><i class="fas fa-waveform-path"></i> Vox Conjurata</h3>
+                <div style="display:flex;gap:15px;font-size:11px;font-weight:bold;color:#eee;">
+                    <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" class="vox-ai-toggle" data-prop="vox-actor" ${voxActor?"checked":""}> VOX-ACTOR</label>
+                    <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" class="vox-ai-toggle" data-prop="vox-voice" ${voxVoice?"checked":""}> VOX-VOICE</label>
                 </div>
             </div>
-
+            <div style="font-size:12px;color:#aaa;margin-bottom:8px;padding:6px;background:rgba(0,0,0,0.2);border-radius:4px;">
+                Voice: <strong>${voiceStatus}</strong>
+                ${voiceDesc ? '<div style="font-style:italic;color:#888;margin-top:4px;">"'+voiceDesc+'"</div>' : ""}
+            </div>
+            <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
+                <button class="vox-sheet-test" data-actor-id="${actor.id}" style="height:24px;line-height:1;font-size:10px;padding:0 8px;background:#222;color:#00ccff;border:1px solid #0088aa;border-radius:4px;cursor:pointer;">Test</button>
+                <button class="vox-sheet-clone" data-actor-id="${actor.id}" data-name="${actor.name}" style="height:24px;line-height:1;font-size:10px;padding:0 8px;background:#004d00;color:#00ff88;border:1px solid #00aa44;border-radius:4px;cursor:pointer;">Clone</button>
+                <button class="vox-sheet-forge" data-actor-id="${actor.id}" data-name="${actor.name}" style="height:24px;line-height:1;font-size:10px;padding:0 8px;background:#664400;color:#ffaa22;border:1px solid #aa7700;border-radius:4px;cursor:pointer;">Forge</button>
+            </div>
             <div class="form-group">
-                <label>Base Voice Character Description</label>
-                <textarea class="vox-description" style="width: 100%; min-height: 60px; background: #222; color: #fff; border: 1px solid #333;" placeholder="An elderly, raspy male voice with a slow, menacing hiss...">${dspFlags.voice_description || ""}</textarea>
+                <label>Voice Description</label>
+                <textarea class="vox-description" style="width:100%;min-height:50px;background:#222;color:#fff;border:1px solid #333;font-size:12px;">${dspFlags.voice_description||""}</textarea>
             </div>
-            
-            <hr style="border: 0; border-top: 1px solid #333; margin: 10px 0;">
-            <h4 style="margin-top: 0;"><i class="fas fa-sliders-h"></i> Monster Filter Matrix (Pedalboard DSP)</h4>
-            
-            <div class="form-group" style="display: flex; align-items: center; gap: 10px; margin-bottom: 5px;">
-                <label style="flex: 1;">Pitch Shift</label>
-                <input type="range" class="vox-slider" data-prop="pitch_shift" min="-12" max="12" step="1" value="${dspFlags.pitch_shift}" style="flex: 2;">
-                <span class="vox-value" style="width: 30px; text-align: right;">${dspFlags.pitch_shift}</span>
-            </div>
+        </div>`;
+        $(html).find('.sheet-header').after(panel);
 
-            <div class="form-group" style="display: flex; align-items: center; gap: 10px; margin-bottom: 5px;">
-                <label style="flex: 1;">Vocal Grit (dB)</label>
-                <input type="range" class="vox-slider" data-prop="distortion_db" min="0" max="20" step="0.5" value="${dspFlags.distortion_db}" style="flex: 2;">
-                <span class="vox-value" style="width: 30px; text-align: right;">${dspFlags.distortion_db}</span>
-            </div>
+        // Sheet-specific test button
+        $('.vox-sheet-test').on('click', async function() {
+            const aid = $(this).data('actor-id');
+            const text = $(this).closest('.vox-audio-panel-wrapper').find('.vox-description').val() || "Hello, this is a voice test.";
+            const resp = await fetch("/api/v1/tts-chunk", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({actor_id:aid, text, dsp_presets:{}}) });
+            if (resp.ok) { const d = await resp.json(); if(d.audio_data) new Audio(d.audio_data).play(); }
+        });
 
-            <div class="form-group" style="display: flex; align-items: center; gap: 10px; margin-bottom: 5px;">
-                <label style="flex: 1;">Multi-Voice Depth</label>
-                <input type="range" class="vox-slider" data-prop="chorus_depth" min="0" max="1" step="0.05" value="${dspFlags.chorus_depth}" style="flex: 2;">
-                <span class="vox-value" style="width: 30px; text-align: right;">${dspFlags.chorus_depth}</span>
-            </div>
 
-            <div class="form-group" style="display: flex; align-items: center; gap: 10px; margin-bottom: 5px;">
-                <label style="flex: 1;">Reverb Size</label>
-                <input type="range" class="vox-slider" data-prop="reverb_size" min="0" max="1" step="0.05" value="${dspFlags.reverb_size}" style="flex: 2;">
-                <span class="vox-value" style="width: 30px; text-align: right;">${dspFlags.reverb_size}</span>
-            </div>
-
-            <div class="form-group" style="display: flex; align-items: center; gap: 10px; margin-bottom: 5px;">
-                <label style="flex: 1;">Highpass (Hz)</label>
-                <input type="range" class="vox-slider" data-prop="highpass_hz" min="0" max="2000" step="50" value="${dspFlags.highpass_hz}" style="flex: 2;">
-                <span class="vox-value" style="width: 30px; text-align: right;">${dspFlags.highpass_hz}</span>
-            </div>
-        </div>
-    `;
-
-    const panel = $(panelHtml);
-    
-    panel.find('.vox-ai-toggle').change(async (ev) => {
-        const prop = ev.currentTarget.dataset.prop;
-        const val = ev.currentTarget.checked;
-        await actor.setFlag("vox-conjurata", prop, val);
-        ui.notifications.info(`Vox: ${prop.toUpperCase()} set to ${val ? 'ON' : 'OFF'} for ${actor.name}`);
-    });
-
-    panel.find('.vox-slider').on('input', (ev) => {
-        const val = ev.currentTarget.value;
-        $(ev.currentTarget).next('.vox-value').text(val);
-    });
-
-    panel.find('.vox-slider, .vox-description').on('change', async (ev) => {
-        const updated = {
-            pitch_shift: parseFloat(panel.find('[data-prop="pitch_shift"]').val()),
-            distortion_db: parseFloat(panel.find('[data-prop="distortion_db"]').val()),
-            chorus_depth: parseFloat(panel.find('[data-prop="chorus_depth"]').val()),
-            reverb_size: parseFloat(panel.find('[data-prop="reverb_size"]').val()),
-            highpass_hz: parseFloat(panel.find('[data-prop="highpass_hz"]').val()),
-            voice_description: panel.find('.vox-description').val()
-        };
-        await actor.setFlag("vox-conjurata", "dsp_presets", updated);
-    });
-
-    $(html).find('.sheet-header').after(panel);
 
     // Listeners for the panel
     panel.find('.vox-save-identity-btn').click(async ev => {
