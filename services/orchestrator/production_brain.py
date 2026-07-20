@@ -334,6 +334,8 @@ def resolve_archetype(actor_data: ActorMetadata, vocal_profile: dict) -> str:
         if any(w in monster_text for w in ["goblin", "kobold", "gremlin", "imp", "sprite"]): return "monster_goblin"
         return "monster_beast"
 
+    if gender == "neutral":
+        return "human_neutral_british"
     if "elf" in race or "elven" in race or "elvish" in race: return f"elf_{gender}_french"
     if "dwarf" in race or "dwarven" in race: return f"dwarf_{gender}_scottish"
     if "halfling" in race or "hobbit" in race: return f"halfling_{gender}_irish"
@@ -1390,6 +1392,8 @@ async def _execute_voice_conversion_pipeline(task_id: str, audio_bytes: bytes, a
                     _arch = _entry.get("archetype_key", "")
                     if meta.npc_context.is_monster:
                         npc_control = "Guttural monster."
+                    elif "_neutral_" in _arch:
+                        npc_control = "Neutral voice."
                     elif "_female_" in _arch:
                         npc_control = "Clear female voice."
                     else:
