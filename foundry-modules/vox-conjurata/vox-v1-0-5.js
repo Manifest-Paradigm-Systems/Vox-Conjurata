@@ -1233,16 +1233,17 @@ class VoxVoiceManager extends Application {
                         <input type="text" class="vox-voice-desc-input" data-actor-id="${entry.id}" placeholder="Describe voice (e.g. 'deep gravelly, like a veteran soldier')" style="width: 100%; background: #222; color: #eee; border: 1px solid #444; border-radius: 4px; padding: 4px 8px; font-size: 12px; box-sizing: border-box;">
                         <button class="vox-forge-with-desc" data-actor-id="${entry.id}" data-name="${name}" style="height: 24px; line-height: 1; font-size: 11px; background: #664400; color: #ffaa22; border: 1px solid #aa7700;"><i class="fas fa-pen"></i> Forge with Description</button>
                     </div>
-                    <div style="display: flex; gap: 6px; margin-bottom: 8px;">
-                        <input type="text" class="vox-tts-test-input" data-actor-id="${entry.id}" placeholder="Type test sentence, then click play..." style="flex: 1; background: #222; color: #eee; border: 1px solid #444; border-radius: 4px; padding: 4px 8px; font-size: 12px;">
-                        <button class="vox-tts-test-play" data-actor-id="${entry.id}" style="height: 26px; line-height: 1; font-size: 11px; flex: 0 0 auto; background: #222; color: #00ccff; border: 1px solid #0088aa;"><i class="fas fa-play"></i> Test</button>
+                    <div style="display: flex; gap: 6px; margin-bottom: 6px; align-items: flex-start;">
+                        <textarea class="vox-tts-test-input" data-actor-id="${entry.id}" rows="2" placeholder="Type test sentence, then click play..." style="flex:1;background:#222;color:#eee;border:1px solid #444;border-radius:4px;padding:4px 8px;font-size:12px;resize:vertical;min-height:32px;font-family:inherit;"></textarea>
+                        <button class="vox-tts-test-play" data-actor-id="${entry.id}" style="height:22px;line-height:1;font-size:10px;flex:0 0 36px;padding:0 4px;background:#222;color:#00ccff;border:1px solid #0088aa;border-radius:4px;cursor:pointer;"><i class="fas fa-play"></i></button>
                     </div>
                     <div style="display: flex; gap: 8px;">
                         <button class="vox-play-seed" data-actor-id="${entry.id}" style="height: 26px; line-height: 1; font-size: 11px; flex: 1; background: #222;"><i class="fas fa-play"></i> Preview</button>
                         <button class="vox-clone-mic" data-actor-id="${entry.id}" data-name="${name}" style="height: 26px; line-height: 1; font-size: 11px; flex: 1; background: #004d00; color: #00ff88; border: 1px solid #00aa44;"><i class="fas fa-microphone"></i> Clone</button>
-                        ${entry.approved ? `<span style="flex: 1; text-align: center; font-size: 11px; color: #00ff88; line-height: 26px;"><i class="fas fa-check-circle"></i> Approved</span>` : `<button class="vox-approve-voice" data-actor-id="${entry.id}" style="height: 26px; line-height: 1; font-size: 11px; flex: 1; background: #003300; color: #00ff88; border: 1px solid #00aa44;"><i class="fas fa-thumbs-up"></i> Approve</button>`}
+                        ${entry.approved ? `<span style="flex:1;text-align:center;font-size:11px;color:#00ff88;line-height:26px;"><i class="fas fa-check-circle"></i> Approved</span>` : `<button class="vox-approve-voice" data-actor-id="${entry.id}" style="height:26px;line-height:1;font-size:11px;flex:1;background:#003300;color:#00ff88;border:1px solid #00aa44;"><i class="fas fa-thumbs-up"></i> Approve</button>`}
                         <button class="vox-regen-actor" data-actor-id="${entry.id}" style="height: 26px; line-height: 1; font-size: 11px; flex: 1; background: #b34a00; color: white;"><i class="fas fa-redo"></i> Re-Forge</button>
                     </div>
+                    <div style="font-size:10px;color:#666;margin-top:4px;font-family:monospace;user-select:all;cursor:pointer;" title="Click to copy Actor ID" onclick="navigator.clipboard.writeText('${entry.id}')">ID: ${entry.id}</div>
                 </li>
             `;
         }
