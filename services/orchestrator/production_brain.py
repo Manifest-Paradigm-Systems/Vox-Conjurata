@@ -1429,7 +1429,20 @@ async def _execute_voice_conversion_pipeline(task_id: str, audio_bytes: bytes, a
                 ledger.charge(billing_user_id, cost_tts, f"TTS Generation for {meta.activeSpeakerName}")
                 
                 target_text = enriched.monster_text if meta.isMonster else enriched.instruct_text
-                control = enriched.vocal_delivery_prompt
+                # Use a consistent voice control from the voice registry instead of
+                # the LLM's per-sentence vocal_delivery_prompt, which changes every
+                # sentence and makes the character sound different each time.
+                _entry = load_voice_registry().get(meta.actorId, {})
+                _arch = _entry.get("archetype_key", "")
+                if meta.isMonster:
+                    control = "Guttural monster."
+                elif "_neutral_" in _arch:
+                    control = "Neutral voice."
+                elif "_female_" in _arch:
+                    control = "Clear female voice."
+                else:
+                    control = "Deep male voice."
+                logger.info(f"🎙️ Vox | Consistent voice for {meta.activeSpeakerName}: '{control}' (archetype={_arch})")
                 wav = await engine.generate(target_text, meta.actorId, client, meta.dsp_presets, control_instruction=control)
                 logger.info(f"🎙️ Vox | Engine generated wav: {len(wav) if wav else 0} bytes")
                 if wav: audio_data = f"data:audio/wav;base64,{base64.b64encode(wav).decode('utf-8')}"
