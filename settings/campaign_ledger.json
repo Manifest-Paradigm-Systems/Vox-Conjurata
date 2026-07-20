@@ -5,7 +5,7 @@
     "gm": 979.7102499999966,
     "G3SJW9rRHe7J3AOH": 204.97100000000003,
     "nXnKU6oZYzdg0xSY": 19.891499999999994,
-    "m6nkAzEdfbjIGhdz": 0.9032500000000008
+    "m6nkAzEdfbjIGhdz": 0.9002500000000008
   },
   "session_allowances": {
     "G3SJW9rRHe7J3AOH": 0.0,
@@ -19,7 +19,7 @@
     "gm": 0.7907499999999991,
     "G3SJW9rRHe7J3AOH": 0.028999999999999998,
     "nXnKU6oZYzdg0xSY": 0.11075000000000006,
-    "m6nkAzEdfbjIGhdz": 0.09675000000000004
+    "m6nkAzEdfbjIGhdz": 0.09975000000000005
   },
   "transactions": [
     {
@@ -2859,6 +2859,12 @@
       "amount": 0.003,
       "description": "Voice Forging for Ort",
       "timestamp": 1784519408.7634597
+    },
+    {
+      "user_id": "m6nkAzEdfbjIGhdz",
+      "amount": 0.003,
+      "description": "AI Orchestration Fee: Ezren",
+      "timestamp": 1784521094.2674665
     }
   ]
 }
