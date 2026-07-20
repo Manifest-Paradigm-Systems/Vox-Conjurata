@@ -183,14 +183,6 @@
     "archetype_key": "human_female_british",
     "created_at": "2026-07-01T07:38:33"
   },
-  "6rBzmdt0OsbnNgaD": {
-    "engine": "vox-audio-core",
-    "seed_path": "6rBzmdt0OsbnNgaD.wav",
-    "voice_prompt": "A commanding female voice resonates through the air, echoing with authority and a hint of mystery.",
-    "is_archetype": false,
-    "archetype_key": "monster_beast",
-    "created_at": "2026-07-01T07:38:38"
-  },
   "yoAU5rWYH4KJGPr5": {
     "engine": "vox-audio-core",
     "seed_path": "yoAU5rWYH4KJGPr5.wav",
@@ -214,5 +206,13 @@
     "is_archetype": false,
     "archetype_key": "human_male_british",
     "created_at": "2026-07-01T07:58:05"
+  },
+  "6rBzmdt0OsbnNgaD": {
+    "engine": "vox-audio-core",
+    "seed_path": "6rBzmdt0OsbnNgaD.wav",
+    "voice_prompt": "A strong, authoritative voice with a slight edge, hinting at years of command and unwavering determination.",
+    "is_archetype": false,
+    "archetype_key": "human_female_british",
+    "created_at": "2026-07-20T00:50:44"
   }
 }
