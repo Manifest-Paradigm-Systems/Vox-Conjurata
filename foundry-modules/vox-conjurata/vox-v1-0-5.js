@@ -1235,6 +1235,7 @@ class VoxVoiceManager extends Application {
                     <div style="display: flex; gap: 8px;">
                         <button class="vox-play-seed" data-actor-id="${entry.id}" style="height: 26px; line-height: 1; font-size: 11px; flex: 1; background: #222;"><i class="fas fa-play"></i> Preview</button>
                         <button class="vox-clone-mic" data-actor-id="${entry.id}" data-name="${name}" style="height: 26px; line-height: 1; font-size: 11px; flex: 1; background: #004d00; color: #00ff88; border: 1px solid #00aa44;"><i class="fas fa-microphone"></i> Clone</button>
+                        ${entry.approved ? `<span style="flex: 1; text-align: center; font-size: 11px; color: #00ff88; line-height: 26px;"><i class="fas fa-check-circle"></i> Approved</span>` : `<button class="vox-approve-voice" data-actor-id="${entry.id}" style="height: 26px; line-height: 1; font-size: 11px; flex: 1; background: #003300; color: #00ff88; border: 1px solid #00aa44;"><i class="fas fa-thumbs-up"></i> Approve</button>`}
                         <button class="vox-regen-actor" data-actor-id="${entry.id}" style="height: 26px; line-height: 1; font-size: 11px; flex: 1; background: #b34a00; color: white;"><i class="fas fa-redo"></i> Re-Forge</button>
                     </div>
                 </li>
