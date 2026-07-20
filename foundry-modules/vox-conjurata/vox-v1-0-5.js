@@ -1207,10 +1207,17 @@ class VoxVoiceManager extends Application {
 
                     <div style="display: flex; gap: 8px;">
                         ${narratorEntry ? `<button class="vox-play-seed" data-actor-id="narrator" style="height: 28px; line-height: 1; font-size: 12px; flex: 1; background: #222;"><i class="fas fa-play"></i> Preview</button>` : ''}
-                        ${narratorEntry?.approved ? `<span style="height: 28px; line-height: 28px; flex: 1; text-align: center; font-size: 12px; color: #00ff88;"><i class="fas fa-check-circle"></i> Approved</span>` : (narratorEntry ? `<button class="vox-approve-voice" data-actor-id="narrator" style="height: 28px; line-height: 1; font-size: 12px; flex: 1; background: #004d00; color: #00ff88; border: 1px solid #00aa44;"><i class="fas fa-thumbs-up"></i> Approve</button>` : '')}
-                        <button class="vox-save-narrator-desc" style="height: 28px; line-height: 1; font-size: 12px; flex: 1; background: #333; color: #ff6400; border: 1px solid #ff6400;"><i class="fas fa-save"></i> Save</button>
+                        ${narratorEntry?.approved ? `<span style="height: 28px; line-height: 28px; flex: 1; text-align: center; font-size: 12px; color: #00ff88;"><i class="fas fa-check-circle"></i> Approved</span>` : (narratorEntry ? `<button class="vox-approve-voice" data-actor-id="narrator" style="height: 28px; line-height: 1; font-size: 12px; flex: 1; background: #003300; color: #00ff88; border: 1px solid #00aa44;"><i class="fas fa-thumbs-up"></i> Approve</button>` : '')}
                         <button class="vox-clone-mic" data-actor-id="narrator" data-name="Narrator" style="height: 28px; line-height: 1; font-size: 12px; flex: 1; background: #004d00; color: #00ff88; border: 1px solid #00aa44;"><i class="fas fa-microphone"></i> Clone from Mic</button>
-                        <button class="vox-regen-actor" data-actor-id="narrator" style="height: 28px; line-height: 1; font-size: 12px; flex: 2; background: #b34a00; color: white;"><i class="fas fa-redo"></i> Re-Forge Narrator</button>
+                        <button class="vox-delete-seed" data-actor-id="narrator" data-name="Narrator" style="height:28px;line-height:1;font-size:12px;flex:0 0 28px;background:#440000;color:#ff4444;border:1px solid #880000;border-radius:4px;cursor:pointer;" title="Delete"><i class="fas fa-trash"></i></button>
+                    </div>
+                    <div style="display:flex;gap:6px;margin-top:8px;align-items:flex-start;">
+                        <textarea class="vox-tts-test-input" data-actor-id="narrator" rows="2" placeholder="Type test sentence..." style="flex:1;background:#222;color:#eee;border:1px solid #444;border-radius:4px;padding:4px 8px;font-size:12px;resize:vertical;min-height:32px;font-family:inherit;"></textarea>
+                        <button class="vox-tts-test-play" data-actor-id="narrator" style="height:22px;line-height:1;font-size:10px;flex:0 0 36px;padding:0 4px;background:#222;color:#00ccff;border:1px solid #0088aa;border-radius:4px;cursor:pointer;"><i class="fas fa-play"></i></button>
+                    </div>
+                    <div style="display:flex;gap:4px;margin-top:4px;align-items:center;">
+                        <input type="text" value="narrator" style="flex:1;background:#222;color:#888;border:1px solid #555;border-radius:4px;padding:3px 6px;font-size:10px;font-family:monospace;" readonly>
+                        <button class="vox-save-narrator-desc" style="height:22px;line-height:1;font-size:10px;padding:0 8px;background:#333;color:#ff6400;border:1px solid #ff6400;border-radius:3px;cursor:pointer;"><i class="fas fa-save"></i> Save Desc</button>
                     </div>
                 </div>
 
