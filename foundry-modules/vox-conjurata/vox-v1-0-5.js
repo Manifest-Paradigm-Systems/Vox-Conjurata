@@ -1362,7 +1362,31 @@ class VoxVoiceManager extends Application {
         });
 
         // Test voice — type a sentence and hear it spoken
-        // Relink voice — change the actor ID this seed is registered under
+                // Delete voice seed
+        $(html).find('.vox-delete-seed').click(async (ev) => {
+            const actorId = ev.currentTarget.dataset.actorId;
+            const name = ev.currentTarget.dataset.name || actorId;
+            const confirmed = await Dialog.confirm({
+                title: "Delete Voice Seed",
+                content: `<p>Delete the voice seed for <strong>${name}</strong>? This cannot be undone.</p>`,
+                reject: false
+            });
+            if (!confirmed) return;
+            try {
+                const resp = await fetch("/api/v1/registry/" + actorId, { method: "DELETE" });
+                if (resp.ok) {
+                    ui.notifications.success("🗑️ Voice seed deleted.");
+                    this.render(true);
+                } else {
+                    ui.notifications.error("❌ Failed to delete.");
+                }
+            } catch (e) {
+                ui.notifications.error("❌ Network error.");
+            }
+        });
+
+        // Relink voice
+ — change the actor ID this seed is registered under
         $(html).find('.vox-relink-actor').click(async (ev) => {
             const oldId = ev.currentTarget.dataset.oldId;
             const input = $(html).find(`.vox-actor-id-input[value="${oldId}"]`);
