@@ -1352,6 +1352,29 @@ class VoxVoiceManager extends Application {
         });
 
         // Test voice — type a sentence and hear it spoken
+        // Relink voice — change the actor ID this seed is registered under
+        $(html).find('.vox-relink-actor').click(async (ev) => {
+            const oldId = ev.currentTarget.dataset.oldId;
+            const input = $(html).find(`.vox-actor-id-input[value="${oldId}"]`);
+            const newId = input.val().trim();
+            if (!newId || newId === oldId) return;
+            ui.notifications.info(`🔗 Relinking voice from ${oldId} to ${newId}...`);
+            try {
+                const resp = await fetch("/api/v1/relink-voice", {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ oldActorId: oldId, newActorId: newId })
+                });
+                if (resp.ok) {
+                    ui.notifications.success(`✅ Voice relinked to ${newId}`);
+                    this.render(true);
+                } else {
+                    ui.notifications.error("❌ Relink failed.");
+                }
+            } catch (e) {
+                ui.notifications.error("❌ Network error during relink.");
+            }
+        });
+
         $(html).find('.vox-tts-test-play').click(async (ev) => {
             const actorId = ev.currentTarget.dataset.actorId;
             const input = $(html).find(`.vox-tts-test-input[data-actor-id="${actorId}"]`);
