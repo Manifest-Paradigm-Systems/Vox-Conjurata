@@ -1840,7 +1840,7 @@ Hooks.on("renderActorSheet", (app, html, data) => {
     });
 });
 
-Hooks.on("renderPlaylistDirectory", (app, html, data) => {
+Hooks.on("renderActorDirectory", (app, html, data) => {
     if (!game.user.isGM) return;
     const button = $(`<button type="button" class="vox-registry-btn" style="margin: 5px 0;"><i class="fas fa-dna"></i> Manage Vox Voices</button>`);
     button.click(() => new VoxVoiceManager().render(true));
