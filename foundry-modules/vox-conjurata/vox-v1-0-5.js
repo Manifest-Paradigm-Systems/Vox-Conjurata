@@ -1843,8 +1843,6 @@ Hooks.on("renderActorSheet", (app, html, data) => {
     }
 });
 
-});
-
 async function updateVoxStatus(actorId) {
     var el = document.getElementById("vox-status-" + actorId);
     if (!el) return;
