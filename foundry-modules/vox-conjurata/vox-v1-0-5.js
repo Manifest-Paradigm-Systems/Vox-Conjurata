@@ -1230,6 +1230,7 @@ class VoxVoiceManager extends Application {
                     <div style="font-size: 11px; color: #aaa; font-style: italic; margin-bottom: 10px; line-height: 1.4; border-left: 2px solid #333; padding-left: 8px;">"${entry.voice_prompt}"</div>
                     <div style="display: flex; gap: 8px;">
                         <button class="vox-play-seed" data-actor-id="${entry.id}" style="height: 26px; line-height: 1; font-size: 11px; flex: 1; background: #222;"><i class="fas fa-play"></i> Preview</button>
+                        <button class="vox-clone-mic" data-actor-id="${entry.id}" data-name="${name}" style="height: 26px; line-height: 1; font-size: 11px; flex: 1; background: #004d00; color: #00ff88; border: 1px solid #00aa44;"><i class="fas fa-microphone"></i> Clone</button>
                         <button class="vox-regen-actor" data-actor-id="${entry.id}" style="height: 26px; line-height: 1; font-size: 11px; flex: 1; background: #b34a00; color: white;"><i class="fas fa-redo"></i> Re-Forge</button>
                     </div>
                 </li>
