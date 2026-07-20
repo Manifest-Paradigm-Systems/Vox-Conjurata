@@ -1771,7 +1771,7 @@ Hooks.on("renderActorSheet", (app, html, data) => {
     // Build the tab
     var tab = document.createElement("div");
     tab.id = tabId;
-    tab.style.cssText = "position:absolute;top:0;right:40px;z-index:100;";
+    tab.style.cssText = "";
     tab.innerHTML = `
         <div class="vox-sheet-tab" style="cursor:pointer;background:#ff6400;color:#fff;padding:2px 10px;border-radius:0 0 4px 4px;font-size:11px;font-family:'Signika',sans-serif;display:inline-block;">
             VOX
