@@ -1773,10 +1773,8 @@ Hooks.on("renderActorSheet", (app, html, data) => {
     tab.id = tabId;
     tab.style.cssText = "";
     tab.innerHTML = `
-        <div class="vox-sheet-tab" style="cursor:pointer;background:#ff6400;color:#fff;padding:2px 10px;border-radius:0 0 4px 4px;font-size:11px;font-family:'Signika',sans-serif;display:inline-block;">
-            VOX
-        </div>
-        <div class="vox-sheet-panel" style="display:none;position:absolute;top:22px;right:0;width:320px;background:#1a1a1a;border:1px solid #ff6400;border-radius:4px;padding:10px;box-shadow:0 4px 20px rgba(0,0,0,0.6);">
+        <a class="vox-sheet-tab" style="cursor:pointer;color:#ccc;font-size:12px;padding:0 6px;line-height:32px;text-decoration:none;">VOX</a>
+        <div class="vox-sheet-panel" style="display:none;position:absolute;top:22px;right:0;width:320px;background:#1a1a1a;border:1px solid #444;border-radius:4px;padding:10px;box-shadow:0 4px 20px rgba(0,0,0,0.6);">
             <div style="font-size:12px;color:#aaa;margin-bottom:6px;">Voice: <strong id="vox-status-${actor.id}">Loading...</strong></div>
             <div style="display:flex;gap:4px;margin-bottom:6px;flex-wrap:wrap;">
                 <button class="vox-stest" data-aid="${actor.id}" style="height:22px;line-height:1;font-size:10px;padding:0 6px;background:#222;color:#00ccff;border:1px solid #0088aa;border-radius:3px;cursor:pointer;">Test</button>
@@ -1792,7 +1790,7 @@ Hooks.on("renderActorSheet", (app, html, data) => {
     var header = html.parents(".window-app").find(".window-header").first();
     if (!header.length) header = html.parents(".app").find(".window-header").first();
     if (header.length) {
-        header.append(tab);
+        header.prepend(tab);
     } else {
         // Fallback: add to the sheet body
         html.find(".sheet-header, .window-content").first().prepend(tab);
