@@ -1910,8 +1910,13 @@ async function onReady() {
 
 if (typeof game !== 'undefined' && game.ready) onReady(); else Hooks.once("ready", onReady);
 
-// Chat play button handler
-$(document).on('click', '.vox-chat-play', function() { var a = $(this).data('audio'); if(a) new Audio(a).play(); });
+// Audio cache for chat play buttons
+window.__voxAudio = window.__voxAudio || {};
+$(document).on('click', '.vox-chat-play', function() {
+    var id = $(this).data('id');
+    var a = window.__voxAudio && window.__voxAudio[id];
+    if (a) new Audio(a).play();
+});
 Hooks.on("canvasReady", async () => { if (game.user.isGM) await scanActiveSceneTokens(); });
 
 function playAudio(url, vol = 1.0) {
@@ -2119,7 +2124,7 @@ async function processAndSendAudio() {
             if (audio_data && !shouldWhisper) await playAudio(audio_data, 1.0);
             
             const chatData = {
-                content: audio_data ? `<div style="display:flex;align-items:center;gap:8px;"><button class="vox-chat-play" data-audio="${audio_data}" style="height:20px;line-height:1;font-size:10px;padding:0 8px;background:#222;color:#00ccff;border:1px solid #0088aa;border-radius:3px;cursor:pointer;flex-shrink:0;">🔊</button><span style="flex:1;">${transcription}</span></div>` : transcription,
+                content: audio_data ? `<div style="display:flex;align-items:center;gap:8px;"><button class="vox-chat-play" data-id="${audio_data.slice(0,20)}" style="height:20px;line-height:1;font-size:10px;padding:0 8px;background:#222;color:#00ccff;border:1px solid #0088aa;border-radius:3px;cursor:pointer;flex-shrink:0;">🔊</button><span style="flex:1;">${transcription}</span></div>` : transcription,
                 speaker: { actor: isNarrator ? null : activeActorId, alias: activeSpeakerName },
                 flags: { "vox-conjurata": { type: voxType, audioUrl: audio_data, engine: engine } }
             };
@@ -2134,7 +2139,7 @@ async function processAndSendAudio() {
             // Handle AI Reply (Autonomous Scenario A)
             if (ai_reply) {
                 const npcMessage = await createVoxChatMessage({
-                    content: ai_reply.audio_data ? `<div style="display:flex;align-items:center;gap:8px;"><button class="vox-chat-play" data-audio="${ai_reply.audio_data}" style="height:20px;line-height:1;font-size:10px;padding:0 8px;background:#222;color:#00ccff;border:1px solid #0088aa;border-radius:3px;cursor:pointer;flex-shrink:0;">🔊</button><span style="flex:1;">${ai_reply.transcription}</span></div>` : ai_reply.transcription,
+                    content: ai_reply.audio_data ? `<div style="display:flex;align-items:center;gap:8px;"><button class="vox-chat-play" data-id="${ai_reply.audio_data.slice(0,20)}" style="height:20px;line-height:1;font-size:10px;padding:0 8px;background:#222;color:#00ccff;border:1px solid #0088aa;border-radius:3px;cursor:pointer;flex-shrink:0;">🔊</button><span style="flex:1;">${ai_reply.transcription}</span></div>` : ai_reply.transcription,
                     speaker: { actor: targetActorId, alias: npc_context.name },
                     flags: { "vox-conjurata": { type: "npc-reply", audioUrl: ai_reply.audio_data, engine: ai_reply.engine } }
                 });
