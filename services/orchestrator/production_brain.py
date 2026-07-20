@@ -486,8 +486,11 @@ def _extract_scan_contract(raw_text: str, scene_id: str) -> dict:
 
 async def generate_vocal_profile(actor_data: ActorMetadata, visual_description: str = "") -> dict:
     # First, check the character stats for explicit gender (Foundry usually stores
-    # this as "gender" in the actor's system data).
-    stats_gender = (actor_data.stats or {}).get("gender", "").strip().lower()
+    # this as "gender" in the actor's system data, sometimes as {"value":"female"}).
+    raw_gender = (actor_data.stats or {}).get("gender", "")
+    if isinstance(raw_gender, dict):
+        raw_gender = raw_gender.get("value", raw_gender.get("custom", ""))
+    stats_gender = raw_gender.strip().lower() if isinstance(raw_gender, str) else ""
     if stats_gender:
         norm = _normalize_gender(stats_gender)
         if norm:
