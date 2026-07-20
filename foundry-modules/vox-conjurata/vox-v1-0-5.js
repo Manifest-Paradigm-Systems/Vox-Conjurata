@@ -1987,25 +1987,7 @@ $(document).on('click', '.vox-chat-play', function() {
     }).catch(function() { btn.prop('disabled', false).html('🔊'); });
 });
 
-// "Narrate" button for the chat input bar
-Hooks.on("renderChatLog", function(app, html) {
-    if (document.getElementById("vox-narrate-btn")) return;
-    var inp = html.find("#chat-message");
-    if (!inp.length) return;
-    var btn = $('<button id="vox-narrate-btn" title="Speak text as Narrator" style="height:26px;line-height:1;font-size:12px;padding:0 8px;background:#222;color:#ff6400;border:1px solid #ff6400;border-radius:3px;cursor:pointer;margin:0 4px;flex-shrink:0;">🔊 Narrate</button>');
-    btn.click(async function() {
-        var t = inp.val().trim();
-        if (!t) { ui.notifications.warn("Enter text to narrate."); return; }
-        btn.prop("disabled", true).text("...");
-        try {
-            var r = await fetch("/api/v1/tts-chunk", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({actor_id:"narrator", text:t, dsp_presets:{}})});
-            var d = await r.json();
-            if (d.status === "success" && d.audio_data) new Audio(d.audio_data).play();
-        } catch(e) {}
-        btn.prop("disabled", false).html("🔊 Narrate");
-    });
-    var sb = html.find("#chat-send");
-    if (sb.length) inp.after(btn); else html.find("#chat-controls").append(btn);
+html.find("#chat-controls").append(btn);
 });
 
 Hooks.on("canvasReady", async () => { if (game.user.isGM) await scanActiveSceneTokens(); });
