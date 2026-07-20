@@ -223,5 +223,14 @@
     "archetype_key": "monster_beast",
     "approved": false,
     "created_at": "2026-07-20T03:50:10"
+  },
+  "test_clone": {
+    "engine": "vox-audio-core",
+    "seed_path": "test_clone.wav",
+    "voice_prompt": "Cloned voice from audio sample",
+    "is_archetype": false,
+    "archetype_key": "human_neutral_british",
+    "approved": false,
+    "created_at": "2026-07-20T04:04:42"
   }
 }
