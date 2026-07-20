@@ -1515,16 +1515,27 @@ async def _execute_voice_conversion_pipeline(task_id: str, audio_bytes: bytes, a
                     
                     ai_audio = None
                     if meta.targetVoxVoice:
-                        # Charge DM for AI Reply TTS
                         cost_reply = ledger.calculate_cost("tts", tier)
                         ledger.charge("gm", cost_reply, f"Autonomous NPC Reply: {meta.npc_context.name}")
-                        
-                        # Generate only the first chunk synchronously
+
+                        # Split narration vs dialogue and generate each with the
+                        # appropriate voice seed, then concatenate.
                         t_tts_start = time.time()
-                        wav = await engine.generate(first_chunk, meta.targetActorId, client, {}, control_instruction=npc_control)
+                        segments = split_quoted_text(first_chunk)
+                        wav_parts = []
+                        for role, seg_text in segments:
+                            if role == "narration":
+                                seg_wav = await engine.generate(seg_text, "narrator", client, {},
+                                    control_instruction="Clear, neutral narrator voice.")
+                            else:
+                                seg_wav = await engine.generate(seg_text, meta.targetActorId, client, {},
+                                    control_instruction=npc_control)
+                            if seg_wav:
+                                wav_parts.append(seg_wav)
+                        wav = await concat_wavs(wav_parts) if len(wav_parts) > 1 else (wav_parts[0] if wav_parts else None)
                         t_tts = time.time() - t_tts_start
-                        logger.info(f"⏱️  Pipeline Latency | NPC TTS Chunk 1 (VoxCPM2): {t_tts:.4f}s")
-                        if wav: 
+                        logger.info(f"⏱️  Pipeline Latency | NPC TTS ({len(segments)} segs): {t_tts:.4f}s")
+                        if wav:
                             ai_audio = f"data:audio/wav;base64,{base64.b64encode(wav).decode('utf-8')}"
                     
                     ai_reply_obj = AIReply(
