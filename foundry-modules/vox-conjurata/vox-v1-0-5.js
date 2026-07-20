@@ -1228,6 +1228,10 @@ class VoxVoiceManager extends Application {
                         <span style="font-size: 10px; color: #ff6400; background: rgba(255,100,0,0.1); padding: 2px 6px; border-radius: 10px;">${entry.engine}</span>
                     </div>
                     <div style="font-size: 11px; color: #aaa; font-style: italic; margin-bottom: 10px; line-height: 1.4; border-left: 2px solid #333; padding-left: 8px;">"${entry.voice_prompt}"</div>
+                    <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px;">
+                        <input type="text" class="vox-voice-desc-input" data-actor-id="${entry.id}" placeholder="Describe voice (e.g. 'deep gravelly, like a veteran soldier')" style="width: 100%; background: #222; color: #eee; border: 1px solid #444; border-radius: 4px; padding: 4px 8px; font-size: 12px; box-sizing: border-box;">
+                        <button class="vox-forge-with-desc" data-actor-id="${entry.id}" data-name="${name}" style="height: 24px; line-height: 1; font-size: 11px; background: #664400; color: #ffaa22; border: 1px solid #aa7700;"><i class="fas fa-pen"></i> Forge with Description</button>
+                    </div>
                     <div style="display: flex; gap: 8px;">
                         <button class="vox-play-seed" data-actor-id="${entry.id}" style="height: 26px; line-height: 1; font-size: 11px; flex: 1; background: #222;"><i class="fas fa-play"></i> Preview</button>
                         <button class="vox-clone-mic" data-actor-id="${entry.id}" data-name="${name}" style="height: 26px; line-height: 1; font-size: 11px; flex: 1; background: #004d00; color: #00ff88; border: 1px solid #00aa44;"><i class="fas fa-microphone"></i> Clone</button>
@@ -1317,6 +1321,57 @@ class VoxVoiceManager extends Application {
             ui.notifications.info("✅ Narrator voice description saved.");
             // Re-render to show updated description
             this.render(true);
+        });
+
+        // Clone voice from mic — click handler for both narrator and character buttons
+        $(html).find('.vox-clone-mic').click(async (ev) => {
+            const actorId = ev.currentTarget.dataset.actorId;
+            const name = ev.currentTarget.dataset.name || actorId;
+
+            let stream;
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            } catch (e) {
+                ui.notifications.error("🎙️ Microphone access denied. Grant permission and try again.");
+                return;
+            }
+
+            const chunks = [];
+            const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+            recorder.ondataavailable = (e) => chunks.push(e.data);
+            recorder.onstop = async () => {
+                const blob = new Blob(chunks, { type: 'audio/webm' });
+                const formData = new FormData();
+                formData.append("audio_blob", blob, "recording.webm");
+                formData.append("actorId", actorId);
+
+                ui.notifications.info(`🎙️ Cloning voice for ${name}...`);
+                try {
+                    const resp = await fetch("/api/clone-voice", {
+                        method: "POST", body: formData
+                    });
+                    if (resp.ok) {
+                        ui.notifications.success(`✅ Voice cloned for ${name}!`);
+                        this.render(true);
+                    } else {
+                        ui.notifications.error("❌ Voice cloning failed.");
+                    }
+                } catch (e) {
+                    ui.notifications.error("❌ Network error during cloning.");
+                }
+                stream.getTracks().forEach(t => t.stop());
+            };
+
+            ui.notifications.info(`🎙️ Recording voice for ${name} — speak now...`);
+            recorder.start();
+            setTimeout(() => recorder.stop(), 3000);
+
+            // Visual feedback
+            const btn = ev.currentTarget;
+            const orig = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-circle" style="color: #ff4444;"></i> Recording...';
+            btn.disabled = true;
+            setTimeout(() => { btn.innerHTML = orig; btn.disabled = false; }, 4000);
         });
 
 /**
