@@ -1732,6 +1732,21 @@ async def delete_registry_entry(actor_id: str):
     logger.info(f"🗑️ Voice seed deleted: {actor_id}")
     return {"status": "deleted", "actor_id": actor_id}
 
+@app.post("/api/v1/registry/name")
+async def update_registry_name(request: Request):
+    """Update the display name for a voice seed entry."""
+    data = await request.json()
+    actor_id = data.get("actorId")
+    name = data.get("name", "").strip()
+    if not actor_id or not name:
+        raise HTTPException(status_code=400, detail="actorId and name required")
+    registry = load_voice_registry()
+    if actor_id in registry:
+        registry[actor_id]["display_name"] = name
+        save_voice_registry(registry)
+    logger.info(f"📝 Name updated for {actor_id}: {name}")
+    return {"status": "success", "actor_id": actor_id, "name": name}
+
 @app.post("/api/v1/approve-voice")
 async def approve_voice(request: Request):
     """Mark a voice as approved after playback."""

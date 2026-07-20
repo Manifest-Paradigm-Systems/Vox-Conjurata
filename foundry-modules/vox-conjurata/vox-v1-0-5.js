@@ -1222,7 +1222,7 @@ class VoxVoiceManager extends Application {
 
         for (let entry of otherEntries) {
             const actor = game.actors.get(entry.id);
-            const name = actor?.name || entry.id;
+            const name = entry.display_name || actor?.name || entry.id;
             html += `
                 <li style="background: rgba(255,255,255,0.03); margin-bottom: 10px; border-radius: 4px; padding: 12px; border-left: 3px solid #ff6400; box-shadow: 0 2px 5px rgba(0,0,0,0.3);">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
@@ -1362,7 +1362,21 @@ class VoxVoiceManager extends Application {
         });
 
         // Test voice — type a sentence and hear it spoken
-                // Delete voice seed
+                
+        // Save character name on blur
+        $(html).find('.vox-char-name-input').on('blur', async function() {
+            const actorId = $(this).data('actor-id');
+            const name = $(this).val().trim();
+            if (!name || !actorId) return;
+            try {
+                await fetch("/api/v1/registry/name", {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ actorId, name })
+                });
+            } catch (e) {}
+        });
+
+        // Delete voice seed
         $(html).find('.vox-delete-seed').click(async (ev) => {
             const actorId = ev.currentTarget.dataset.actorId;
             const name = ev.currentTarget.dataset.name || actorId;
