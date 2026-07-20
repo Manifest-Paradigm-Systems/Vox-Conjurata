@@ -812,16 +812,45 @@ function updateIngestionProgress(current, total, name) {
                 btn.textContent = "🔊 Narrate";
                 btn.title = "Speak text as Narrator";
                 btn.style.cssText = "height:26px;line-height:1;font-size:12px;padding:0 8px;background:#222;color:#ff6400;border:1px solid #ff6400;border-radius:3px;cursor:pointer;margin:0 4px;flex-shrink:0;";
+                // Status indicator — glow ring when idle, spinning when loading
+                var statusDot = document.createElement("span");
+                statusDot.style.cssText = "display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:#4a4;box-shadow:0 0 6px #4a4;transition:all 0.3s;";
+                btn.prepend(statusDot);
+                
                 btn.onclick = async function() {
                     var t = inp.value.trim();
-                    if (!t) { ui.notifications.warn("Enter text."); return; }
-                    btn.disabled = true; btn.textContent = "...";
+                    if (!t) { ui.notifications.warn("Enter text to narrate."); return; }
+                    btn.disabled = true;
+                    statusDot.style.background = "#ff6400";
+                    statusDot.style.boxShadow = "0 0 10px #ff6400";
+                    btn.innerHTML = "⏳ Narrating...";
                     try {
-                        var r = await fetch("/api/v1/tts-chunk", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({actor_id:"narrator", text:t, dsp_presets:{}})});
+                        var r = await fetch("/api/v1/tts-chunk", {
+                            method: "POST",
+                            headers: {"Content-Type": "application/json"},
+                            body: JSON.stringify({actor_id: "narrator", text: t, dsp_presets: {}})
+                        });
                         var d = await r.json();
-                        if (d.status === "success" && d.audio_data) new Audio(d.audio_data).play();
-                    } catch(e) {}
-                    btn.disabled = false; btn.textContent = "🔊 Narrate";
+                        if (d.status === "success" && d.audio_data) {
+                            new Audio(d.audio_data).play();
+                            btn.innerHTML = "🔊 Narrate";
+                            statusDot.style.background = "#4a4";
+                            statusDot.style.boxShadow = "0 0 6px #4a4";
+                        } else {
+                            ui.notifications.error("TTS failed: " + (d.message || "unknown"));
+                            btn.innerHTML = "🔊 Narrate";
+                            statusDot.style.background = "#a44";
+                            statusDot.style.boxShadow = "0 0 8px #a44";
+                            setTimeout(function() { statusDot.style.background = "#4a4"; statusDot.style.boxShadow = "0 0 6px #4a4"; }, 2000);
+                        }
+                    } catch(e) {
+                        console.error("Narrate error:", e);
+                        ui.notifications.error("Narrate failed: " + e.message);
+                        btn.innerHTML = "🔊 Narrate";
+                        statusDot.style.background = "#4a4";
+                        statusDot.style.boxShadow = "0 0 6px #4a4";
+                    }
+                    btn.disabled = false;
                 };
                 inp.parentNode.insertBefore(btn, inp.nextSibling);
             }
