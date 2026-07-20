@@ -2,7 +2,7 @@
     "id": "vox-conjurata",
     "title": "Vox-Conjurata AI",
     "description": "The zero-click, secure AI orchestrator bridging local ROCm models and cloud engines to dynamically synthesize narration, NPC memories, voice, and foley sound effects.",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "library": false,
     "manifest": "",
     "download": "",
