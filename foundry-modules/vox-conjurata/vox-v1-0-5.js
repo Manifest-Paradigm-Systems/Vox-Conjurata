@@ -1521,6 +1521,9 @@ ${CLONE_SCRIPT}
             setTimeout(() => { btn.innerHTML = orig; btn.disabled = false; }, 40000);
         });
 
+    } // activateListeners
+} // VoxVoiceManager
+
 /**
  * Autonomous Update Listener
  * Handles incoming images and SFX triggers from the Orchestrator.
