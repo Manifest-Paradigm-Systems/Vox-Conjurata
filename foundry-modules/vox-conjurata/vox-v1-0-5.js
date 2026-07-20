@@ -1763,74 +1763,59 @@ Hooks.on("getSceneControlButtons", (controls) => {
 // This is more reliable than DOM injection and survives Foundry updates.
 Hooks.on("renderActorSheet", (app, html, data) => {
     const actor = app.actor;
-    const isGM = game.user.isGM;
-    if (!isGM && !actor.isOwner) return;
+    if (!game.user.isGM && !actor.isOwner) return;
     
-    // Simple: add a small button after the sheet name/title area
-    const btnId = "vox-btn-" + actor.id;
-    if (document.getElementById(btnId)) return;
+    // Add a simple VOX button to the window header
+    var hdr = $(html).parents(".window-app,.app").first().find(".window-title");
+    if (!hdr.length) hdr = $(html).find(".sheet-header .window-title");
+    if (!hdr.length) return;
     
-    const btn = $(document.createElement("a"));
-    btn.attr("id", btnId);
-    btn.css({ margin: "0 4px", cursor: "pointer", color: "#ccc", "font-size": "12px" });
-    btn.text("VOX");
+    var bid = "vox-hbtn-" + actor.id;
+    if (document.getElementById(bid)) return;
+    
+    var btn = $("<a id='" + bid + "' style='cursor:pointer;color:#ccc;font-size:12px;margin-left:8px;'>VOX</a>");
     btn.click(function() {
-        let panel = $("#vox-panel-" + actor.id);
-        if (panel.length) {
-            panel.toggle();
-            if (panel.is(":visible")) updateVoxStatus(actor.id);
-            return;
-        }
-        panel = $(`<div id="vox-panel-${actor.id}" style="position:fixed;z-index:1000;width:300px;background:#1a1a1a;border:1px solid #444;border-radius:6px;padding:12px;box-shadow:0 4px 20px rgba(0,0,0,0.8);">
-            <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
-                <strong style="color:#ff6400;font-size:13px;">Vox Voice</strong>
-                <span style="font-size:11px;color:#aaa;">Status: <strong id="vox-fs-${actor.id}">Loading...</strong></span>
-            </div>
-            <div style="display:flex;gap:4px;margin-bottom:6px;flex-wrap:wrap;">
-                <button class="vox-fc" data-aid="${actor.id}" style="height:24px;font-size:10px;flex:1;background:#004d00;color:#00ff88;border:1px solid #00aa44;border-radius:3px;cursor:pointer;">Clone</button>
-                <button class="vox-ff" data-aid="${actor.id}" style="height:24px;font-size:10px;flex:1;background:#664400;color:#ffaa22;border:1px solid #aa7700;border-radius:3px;cursor:pointer;">Forge</button>
-                <button class="vox-ft" data-aid="${actor.id}" style="height:24px;font-size:10px;flex:1;background:#222;color:#00ccff;border:1px solid #0088aa;border-radius:3px;cursor:pointer;">Test</button>
-            </div>
-            <textarea class="vox-fd" data-aid="${actor.id}" placeholder="Voice description..." style="width:100%;height:36px;background:#222;color:#fff;border:1px solid #444;border-radius:3px;padding:3px 6px;font-size:11px;margin-bottom:4px;box-sizing:border-box;"></textarea>
-            <input type="text" class="vox-fts" data-aid="${actor.id}" placeholder="Test sentence..." style="width:100%;background:#222;color:#fff;border:1px solid #444;border-radius:3px;padding:3px 6px;font-size:11px;box-sizing:border-box;">
-        </div>`).appendTo("body");
+        var pid = "vox-hpanel-" + actor.id;
+        var p = $("#" + pid);
+        if (p.length) { p.toggle(); return; }
+        p = $("<div id='" + pid + "' style='position:fixed;z-index:1000;width:300px;background:#1a1a1a;border:1px solid #444;border-radius:6px;padding:12px;box-shadow:0 4px 20px rgba(0,0,0,0.8);font-size:12px;'>" +
+            "<div style='display:flex;justify-content:space-between;margin-bottom:8px;'><strong style='color:#ff6400;font-size:13px;'>Vox Voice</strong><span id='vox-hs-" + actor.id + "' style='color:#aaa;'>Status: Loading...</span></div>" +
+            "<div style='display:flex;gap:4px;margin-bottom:6px;'>" +
+            "<button class='vox-hc' data-a='" + actor.id + "' style='height:24px;font-size:10px;flex:1;background:#004d00;color:#00ff88;border:1px solid #00aa44;border-radius:3px;cursor:pointer;'>Clone</button>" +
+            "<button class='vox-hf' data-a='" + actor.id + "' style='height:24px;font-size:10px;flex:1;background:#664400;color:#ffaa22;border:1px solid #aa7700;border-radius:3px;cursor:pointer;'>Forge</button>" +
+            "<button class='vox-ht' data-a='" + actor.id + "' style='height:24px;font-size:10px;flex:1;background:#222;color:#00ccff;border:1px solid #0088aa;border-radius:3px;cursor:pointer;'>Test</button></div>" +
+            "<textarea class='vox-hd' placeholder='Describe voice...' style='width:100%;height:36px;background:#222;color:#fff;border:1px solid #444;border-radius:3px;padding:3px 6px;font-size:11px;margin-bottom:4px;box-sizing:border-box;'></textarea>" +
+            "<input class='vox-hts' placeholder='Test sentence...' style='width:100%;background:#222;color:#fff;border:1px solid #444;border-radius:3px;padding:3px 6px;font-size:11px;box-sizing:border-box;'>" +
+            "</div>").appendTo("body");
         
-        // Position near the sheet window
-        const win = app.element && app.element.length ? app.element[0] : null;
-        if (win) {
-            const r = win.getBoundingClientRect();
-            panel.css({ top: (r.top + 40) + "px", left: (r.right - 320) + "px" });
-        } else {
-            panel.css({ top: "100px", right: "20px" });
-        }
+        var w = app.element && app.element.length ? app.element[0] : null;
+        if (w) { var r = w.getBoundingClientRect(); p.css({top:(r.top+40)+"px", left:(r.right-320)+"px"}); }
+        else p.css({top:"100px", right:"20px"});
         
-        panel.find(".vox-fc").click(async function() {
-            document.dispatchEvent(new CustomEvent("vox-clone", { detail: { actorId: actor.id, name: actor.name } }));
+        p.find(".vox-hc").click(function() { document.dispatchEvent(new CustomEvent("vox-clone",{detail:{actorId:actor.id,name:actor.name}})); });
+        p.find(".vox-hf").click(async function() {
+            var d = p.find(".vox-hd").val().trim(); if(!d){ui.notifications.warn("Enter description.");return;}
+            var r = await fetch("/api/ingest-actor?force_refresh=true",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({actorId:actor.id,name:actor.name,lore:"",artPath:"",isMonster:false,customDescription:d,userId:game.user.id})});
+            if(r.ok){ui.notifications.success("Voice forged!");$("#vox-hs-"+actor.id).text("Active");}
         });
-        panel.find(".vox-ff").click(async function() {
-            const desc = panel.find(".vox-fd").val().trim();
-            if (!desc) { ui.notifications.warn("Enter a description."); return; }
-            ui.notifications.info("Forging...");
-            const resp = await fetch("/api/ingest-actor?force_refresh=true", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({actorId:actor.id,name:actor.name,lore:"",artPath:"",isMonster:false,customDescription:desc,userId:game.user.id}) });
-            if (resp.ok) { ui.notifications.success("Voice forged!"); $("#vox-fs-"+actor.id).text("Active"); }
+        p.find(".vox-ht").click(async function() {
+            var t = p.find(".vox-hts").val()||"Hello, voice test.";
+            var r = await fetch("/api/v1/tts-chunk",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({actor_id:actor.id,text:t,dsp_presets:{}})});
+            if(r.ok){var d=await r.json();if(d.audio_data)new Audio(d.audio_data).play();}
         });
-        panel.find(".vox-ft").click(async function() {
-            const text = panel.find(".vox-fts").val() || "Hello, this is a voice test.";
-            const resp = await fetch("/api/v1/tts-chunk", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({actor_id:actor.id, text, dsp_presets:{}}) });
-            if (resp.ok) { const d = await resp.json(); if(d.audio_data) new Audio(d.audio_data).play(); }
-        });
-        
         updateVoxStatus(actor.id);
     });
-    
-    // Insert after the window title
-    $(html).closest(".window-app").find(".window-title").after(btn);
-    // Also try alternative: insert into the window header directly
-    $(html).closest(".window-app").find(".window-header .header-button.close").before(btn.clone());
-    btn.remove();
+    hdr.after(btn);
 });
 
-    } catch(e) { el.textContent = "Error"; }
+async function updateVoxStatus(actorId) {
+    try {
+        var r = await (await fetch("/api/v1/registry")).json();
+        var e = r[actorId];
+        $("#vox-hs-" + actorId).text(e ? (e.approved ? "Active" : "Unapproved") : "No seed");
+    } catch(e) {}
+}
+
 }
 
 // Add Manage Vox Voices button to the Actors sidebar tab.
