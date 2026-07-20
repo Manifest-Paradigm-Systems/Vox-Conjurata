@@ -1382,8 +1382,17 @@ async def _execute_voice_conversion_pipeline(task_id: str, audio_bytes: bytes, a
                     first_chunk = reply_chunks[0] if reply_chunks else std_reply
                     subsequent_chunks = reply_chunks[1:] if len(reply_chunks) > 1 else []
                     
-                    # Deterministic vocal delivery prompt selection (skips LLM call, shortened for speed)
-                    npc_control = "Guttural monster." if meta.npc_context.is_monster else "Gruff voice."
+                    # Look up the registered voice archetype so the control instruction
+                    # matches the character's gender (e.g. "human_female_british" → female).
+                    _reg = load_voice_registry()
+                    _entry = _reg.get(meta.targetActorId, {})
+                    _arch = _entry.get("archetype_key", "")
+                    if meta.npc_context.is_monster:
+                        npc_control = "Guttural monster."
+                    elif "_female_" in _arch:
+                        npc_control = "Clear female voice."
+                    else:
+                        npc_control = "Deep male voice."
                     
                     ai_audio = None
                     if meta.targetVoxVoice:
