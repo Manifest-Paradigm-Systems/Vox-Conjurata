@@ -2220,4 +2220,9 @@ Hooks.on("controlToken", (token, selected) => {
 
 globalThis.startRecording = startRecording; globalThis.stopRecording = stopRecording; globalThis.statusMessage = statusMessage; globalThis.playAudio = playAudio; globalThis.resolveActiveToken = resolveActiveToken; globalThis.resolveIsMonster = resolveIsMonster;
 
-Hooks.once('init', registerKeybindings);
+// Register settings immediately — init hook may have already fired in Foundry v14
+if (typeof game !== 'undefined' && game.settings) {
+    try { registerKeybindings(); } catch(e) { console.error("Vox: registerKeybindings failed:", e); }
+} else {
+    Hooks.once('ready', () => { try { registerKeybindings(); } catch(e) { console.error("Vox: registerKeybindings failed:", e); } });
+}
