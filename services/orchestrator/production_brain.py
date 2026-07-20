@@ -317,7 +317,10 @@ PALETTE_DEFINITIONS: dict[str, str] = {
 def resolve_archetype(actor_data: ActorMetadata, vocal_profile: dict) -> str:
     stats = actor_data.stats or {}
     race = stats.get("race", "").lower().strip()
-    gender = vocal_profile.get("gender", "male").lower().strip()
+    gender = vocal_profile.get("gender", "unknown").lower().strip()
+    if gender not in ("male", "female"):
+        logger.warning(f"Unknown gender '{gender}' for {actor_data.name}, defaulting to female (check character sheet)")
+        gender = "female"
     description = vocal_profile.get("description", "").lower()
     name_lore = (actor_data.name + " " + actor_data.lore).lower()
     is_elder = any(w in description or w in name_lore for w in ["elder", "old ", "ancient", "aged", "venerable", "wizened"])
@@ -478,6 +481,16 @@ def _extract_scan_contract(raw_text: str, scene_id: str) -> dict:
 # ---------------------------------------------------------------------------
 
 async def generate_vocal_profile(actor_data: ActorMetadata, visual_description: str = "") -> dict:
+    # First, check the character stats for explicit gender (Foundry usually stores
+    # this as "gender" in the actor's system data).
+    stats_gender = (actor_data.stats or {}).get("gender", "").strip().lower()
+    if stats_gender:
+        norm = _normalize_gender(stats_gender)
+        if norm:
+            logger.info(f"📋 Vocal profile: read gender '{norm}' from character stats for '{actor_data.name}'")
+            return {"gender": norm, "description": f"A {norm} voice."}
+
+    # Fall back to LLM inference from name + lore
     system_instruction = (
         "You are an expert cinematic casting director. Analyze character name and lore. "
         "Output JSON with 'gender' ('male'|'female') and 'description' (vivid 1-sentence acoustic profile)."
@@ -495,8 +508,23 @@ async def generate_vocal_profile(actor_data: ActorMetadata, visual_description: 
             resp = await client.post(f"{OLLAMA_URL}/v1/chat/completions", json=payload)
             res = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "{}")
             res = json.loads(res)
-            return {"gender": res.get("gender", "male").lower(), "description": res.get("description", "A neutral voice.")}
-        except: return {"gender": "male", "description": "A clear voice."}
+            gender = _normalize_gender(res.get("gender", ""))
+            return {
+                "gender": gender or "unknown",
+                "description": res.get("description", "A clear voice.")
+            }
+        except Exception as e:
+            logger.warning(f"LLM vocal profile failed for {actor_data.name}: {e}")
+            return {"gender": "unknown", "description": "A clear voice."}
+
+def _normalize_gender(raw: str) -> str | None:
+    """Map various gender inputs to 'male' or 'female', or None if unrecognized."""
+    raw = raw.strip().lower()
+    if raw in ("male", "m", "masculine", "man", "boy", "he", "him"):
+        return "male"
+    if raw in ("female", "f", "feminine", "woman", "girl", "she", "her"):
+        return "female"
+    return None
 
 def parse_block_response(raw_text: str) -> dict:
     """Extracts Narrative and ImagePrompt blocks from LLM response."""
