@@ -1840,16 +1840,20 @@ Hooks.on("renderActorSheet", (app, html, data) => {
     });
 });
 
-Hooks.on("renderActorDirectory", (app, html, data) => {
+// Add Manage Vox Voices button to the Actors sidebar tab.
+Hooks.on("renderSidebarTab", (app, html, data) => {
+    const tabId = app.options?.id || app.tabName || "";
+    if (tabId !== "actors") return;
     if (!game.user.isGM) return;
     const $html = $(html);
+    if ($html.find(".vox-registry-btn").length) return;
     const button = $(`<button type="button" class="vox-registry-btn" style="margin: 5px 0; width: calc(100% - 10px);"><i class="fas fa-dna"></i> Manage Vox Voices</button>`);
     button.click(() => new VoxVoiceManager().render(true));
     const footer = $html.find(".directory-footer");
     if (footer.length) {
         footer.prepend(button);
     } else {
-        $html.find(".directory").append(button);
+        $html.find(".directory-list, .directory").first().after(button);
     }
 });
 
