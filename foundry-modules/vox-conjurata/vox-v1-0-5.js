@@ -1766,91 +1766,70 @@ Hooks.on("renderActorSheet", (app, html, data) => {
     const isGM = game.user.isGM;
     if (!isGM && !actor.isOwner) return;
     
-    // Add a header button via Foundry's Application headerButtons mechanism
-    // Avoid duplicates
-    const existing = app._headerButtons.find(b => b.class === "vox-sheet-btn");
-    if (existing) return;
+    // Simple: add a small button after the sheet name/title area
+    const btnId = "vox-btn-" + actor.id;
+    if (document.getElementById(btnId)) return;
     
-    app._headerButtons.unshift({
-        label: "VOX",
-        class: "vox-sheet-btn",
-        icon: "fas fa-waveform",
-        onclick: () => {
-            // Toggle a floating panel that follows the sheet window
-            let panel = document.getElementById("vox-float-" + actor.id);
-            if (panel) {
-                panel.style.display = panel.style.display === "none" ? "block" : "none";
-                if (panel.style.display === "block") updateVoxStatus(actor.id);
-                return;
-            }
-            
-            // Create floating panel
-            panel = document.createElement("div");
-            panel.id = "vox-float-" + actor.id;
-            panel.style.cssText = "position:fixed;z-index:1000;width:300px;background:#1a1a1a;border:1px solid #444;border-radius:6px;padding:12px;box-shadow:0 4px 20px rgba(0,0,0,0.8);font-family:'Signika',sans-serif;";
-            
-            // Position relative to the sheet window
-            const win = app.element && app.element.length ? app.element[0] : null;
-            if (win) {
-                const rect = win.getBoundingClientRect();
-                panel.style.top = (rect.top + 40) + "px";
-                panel.style.left = (rect.right - 320) + "px";
-            } else {
-                panel.style.top = "100px";
-                panel.style.right = "20px";
-            }
-            
-            panel.innerHTML = `
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                    <strong style="color:#ff6400;font-size:13px;">Vox Voice</strong>
-                    <span style="font-size:11px;color:#aaa;">Status: <strong id="vox-fstatus-\${actor.id}">Loading...</strong></span>
-                </div>
-                <div style="display:flex;gap:4px;margin-bottom:6px;flex-wrap:wrap;">
-                    <button class="vox-fclone" data-aid="\${actor.id}" data-aname="\${actor.name}" style="height:24px;line-height:1;font-size:10px;padding:0 8px;flex:1;background:#004d00;color:#00ff88;border:1px solid #00aa44;border-radius:3px;cursor:pointer;">Clone Mic</button>
-                    <button class="vox-fforge" data-aid="\${actor.id}" data-aname="\${actor.name}" style="height:24px;line-height:1;font-size:10px;padding:0 8px;flex:1;background:#664400;color:#ffaa22;border:1px solid #aa7700;border-radius:3px;cursor:pointer;">Forge</button>
-                    <button class="vox-ftest" data-aid="\${actor.id}" style="height:24px;line-height:1;font-size:10px;padding:0 8px;flex:1;background:#222;color:#00ccff;border:1px solid #0088aa;border-radius:3px;cursor:pointer;">Test</button>
-                </div>
-                <textarea class="vox-ftext" data-aid="\${actor.id}" placeholder="Voice description (for forging)..." style="width:100%;height:36px;background:#222;color:#fff;border:1px solid #444;border-radius:3px;padding:3px 6px;font-size:11px;margin-bottom:4px;box-sizing:border-box;"></textarea>
-                <input type="text" class="vox-ftesttext" data-aid="\${actor.id}" placeholder="Test sentence..." style="width:100%;background:#222;color:#fff;border:1px solid #444;border-radius:3px;padding:3px 6px;font-size:11px;box-sizing:border-box;">
-            `;
-            document.body.appendChild(panel);
-            
-            // Wire up handlers
-            panel.querySelector(".vox-fclone").onclick = function() {
-                var ev = new CustomEvent("vox-clone", { detail: { actorId: actor.id, name: actor.name } });
-                document.dispatchEvent(ev);
-            };
-            panel.querySelector(".vox-fforge").onclick = async function() {
-                var desc = panel.querySelector(".vox-ftext").value.trim();
-                if (!desc) { ui.notifications.warn("Enter a voice description."); return; }
-                ui.notifications.info("Forging...");
-                var resp = await fetch("/api/ingest-actor?force_refresh=true", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({actorId:actor.id,name:actor.name,lore:"",artPath:"",isMonster:false,customDescription:desc,userId:game.user.id}) });
-                if (resp.ok) { ui.notifications.success("Voice forged!"); updateVoxStatus(actor.id); document.getElementById("vox-fstatus-"+actor.id).textContent="Active"; }
-            };
-            panel.querySelector(".vox-ftest").onclick = async function() {
-                var text = panel.querySelector(".vox-ftesttext").value || "Hello, this is a voice test.";
-                var resp = await fetch("/api/v1/tts-chunk", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({actor_id:actor.id, text, dsp_presets:{}}) });
-                if (resp.ok) { var d = await resp.json(); if(d.audio_data) new Audio(d.audio_data).play(); }
-            };
-            
-            updateVoxStatus(actor.id);
+    const btn = $(document.createElement("a"));
+    btn.attr("id", btnId);
+    btn.css({ margin: "0 4px", cursor: "pointer", color: "#ccc", "font-size": "12px" });
+    btn.text("VOX");
+    btn.click(function() {
+        let panel = $("#vox-panel-" + actor.id);
+        if (panel.length) {
+            panel.toggle();
+            if (panel.is(":visible")) updateVoxStatus(actor.id);
+            return;
         }
+        panel = $(`<div id="vox-panel-${actor.id}" style="position:fixed;z-index:1000;width:300px;background:#1a1a1a;border:1px solid #444;border-radius:6px;padding:12px;box-shadow:0 4px 20px rgba(0,0,0,0.8);">
+            <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+                <strong style="color:#ff6400;font-size:13px;">Vox Voice</strong>
+                <span style="font-size:11px;color:#aaa;">Status: <strong id="vox-fs-${actor.id}">Loading...</strong></span>
+            </div>
+            <div style="display:flex;gap:4px;margin-bottom:6px;flex-wrap:wrap;">
+                <button class="vox-fc" data-aid="${actor.id}" style="height:24px;font-size:10px;flex:1;background:#004d00;color:#00ff88;border:1px solid #00aa44;border-radius:3px;cursor:pointer;">Clone</button>
+                <button class="vox-ff" data-aid="${actor.id}" style="height:24px;font-size:10px;flex:1;background:#664400;color:#ffaa22;border:1px solid #aa7700;border-radius:3px;cursor:pointer;">Forge</button>
+                <button class="vox-ft" data-aid="${actor.id}" style="height:24px;font-size:10px;flex:1;background:#222;color:#00ccff;border:1px solid #0088aa;border-radius:3px;cursor:pointer;">Test</button>
+            </div>
+            <textarea class="vox-fd" data-aid="${actor.id}" placeholder="Voice description..." style="width:100%;height:36px;background:#222;color:#fff;border:1px solid #444;border-radius:3px;padding:3px 6px;font-size:11px;margin-bottom:4px;box-sizing:border-box;"></textarea>
+            <input type="text" class="vox-fts" data-aid="${actor.id}" placeholder="Test sentence..." style="width:100%;background:#222;color:#fff;border:1px solid #444;border-radius:3px;padding:3px 6px;font-size:11px;box-sizing:border-box;">
+        </div>`).appendTo("body");
+        
+        // Position near the sheet window
+        const win = app.element && app.element.length ? app.element[0] : null;
+        if (win) {
+            const r = win.getBoundingClientRect();
+            panel.css({ top: (r.top + 40) + "px", left: (r.right - 320) + "px" });
+        } else {
+            panel.css({ top: "100px", right: "20px" });
+        }
+        
+        panel.find(".vox-fc").click(async function() {
+            document.dispatchEvent(new CustomEvent("vox-clone", { detail: { actorId: actor.id, name: actor.name } }));
+        });
+        panel.find(".vox-ff").click(async function() {
+            const desc = panel.find(".vox-fd").val().trim();
+            if (!desc) { ui.notifications.warn("Enter a description."); return; }
+            ui.notifications.info("Forging...");
+            const resp = await fetch("/api/ingest-actor?force_refresh=true", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({actorId:actor.id,name:actor.name,lore:"",artPath:"",isMonster:false,customDescription:desc,userId:game.user.id}) });
+            if (resp.ok) { ui.notifications.success("Voice forged!"); $("#vox-fs-"+actor.id).text("Active"); }
+        });
+        panel.find(".vox-ft").click(async function() {
+            const text = panel.find(".vox-fts").val() || "Hello, this is a voice test.";
+            const resp = await fetch("/api/v1/tts-chunk", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({actor_id:actor.id, text, dsp_presets:{}}) });
+            if (resp.ok) { const d = await resp.json(); if(d.audio_data) new Audio(d.audio_data).play(); }
+        });
+        
+        updateVoxStatus(actor.id);
     });
     
-    // Force re-render of header buttons
-    if (app._render && typeof app._render === "function") {
-        app._render(false, { action: "notUpdate" });
-    }
+    // Insert after the window title
+    $(html).closest(".window-app").find(".window-title").after(btn);
+    // Also try alternative: insert into the window header directly
+    $(html).closest(".window-app").find(".window-header .header-button.close").before(btn.clone());
+    btn.remove();
 });
 
-async function updateVoxStatus(actorId) {
-    var el = document.getElementById("vox-status-" + actorId);
-    if (!el) return;
-    try {
-        var reg = await (await fetch("/api/v1/registry")).json();
-        var entry = reg[actorId];
-        el.textContent = entry ? (entry.approved ? "Active" : "Pending") : "None";
-        el.style.color = entry ? (entry.approved ? "#8d8" : "#ff8") : "#888";
     } catch(e) { el.textContent = "Error"; }
 }
 
