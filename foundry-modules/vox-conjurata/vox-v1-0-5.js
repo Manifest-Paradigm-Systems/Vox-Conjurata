@@ -1182,7 +1182,7 @@ class VoxVoiceManager extends Application {
                     <button class="vox-refresh-btn" style="width: auto; padding: 2px 8px; background: #333; border: 1px solid #555;"><i class="fas fa-sync"></i></button>
                 </div>
 
-                <div class="vox-narrator-config" style="background: rgba(255,100,0,0.05); border: 1px solid #ff6400; border-radius: 4px; padding: 12px; margin-bottom: 20px;">
+                ${game.user.isGM ? `<div class="vox-narrator-config" style="background: rgba(255,100,0,0.05); border: 1px solid #ff6400; border-radius: 4px; padding: 12px; margin-bottom: 20px;">
                     <h3 style="margin: 0 0 10px 0; color: #ff6400; font-size: 16px;"><i class="fas fa-comment-dots"></i> Narrator Configuration</h3>
                     
                     <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px;">
@@ -1210,6 +1210,7 @@ class VoxVoiceManager extends Application {
                     </div>
                 </div>
 
+                </div>` : ""}
                 <div style="flex: 1; overflow-y: auto;">
                     <h3 style="font-size: 14px; margin: 0 0 10px 0; color: #888; text-transform: uppercase; letter-spacing: 1px;">Character Seeds</h3>
                     <input type="text" id="vox-seed-search" placeholder="Search by name or ID..." style="width:100%;background:#222;color:#eee;border:1px solid #444;border-radius:4px;padding:4px 8px;font-size:12px;margin-bottom:8px;box-sizing:border-box;">
@@ -1251,7 +1252,7 @@ class VoxVoiceManager extends Application {
                         <button class="vox-clone-mic" data-actor-id="${entry.id}" data-name="${name}" style="height: 26px; line-height: 1; font-size: 11px; flex: 1; background: #004d00; color: #00ff88; border: 1px solid #00aa44;"><i class="fas fa-microphone"></i> Clone</button>
                         ${entry.approved ? `<span style="flex:1;text-align:center;font-size:11px;color:#00ff88;line-height:26px;"><i class="fas fa-check-circle"></i> Approved</span>` : `<button class="vox-approve-voice" data-actor-id="${entry.id}" style="height:26px;line-height:1;font-size:11px;flex:1;background:#003300;color:#00ff88;border:1px solid #00aa44;"><i class="fas fa-thumbs-up"></i> Approve</button>`}
                         <button class="vox-regen-actor" data-actor-id="${entry.id}" style="height: 26px; line-height: 1; font-size: 11px; flex: 1; background: #b34a00; color: white;"><i class="fas fa-redo"></i> Re-Forge</button>
-                        <button class="vox-delete-seed" data-actor-id="${entry.id}" data-name="${name}" style="height:26px;line-height:1;font-size:11px;flex:0 0 26px;background:#440000;color:#ff4444;border:1px solid #880000;border-radius:4px;cursor:pointer;" title="Delete this voice seed"><i class="fas fa-trash"></i></button>
+                        ${game.user.isGM ? `<button class="vox-delete-seed" data-actor-id="${entry.id}" data-name="${name}" style="height:26px;line-height:1;font-size:11px;flex:0 0 26px;background:#440000;color:#ff4444;border:1px solid #880000;border-radius:4px;cursor:pointer;" title="Delete this voice seed"><i class="fas fa-trash"></i></button>` : ""}
                     </div>
                     <div style="display:flex;gap:6px;margin-top:4px;align-items:center;">
                         <input type="text" class="vox-actor-id-input" value="${entry.id}" style="flex:1;background:#222;color:#ccc;border:1px solid #555;border-radius:4px;padding:3px 6px;font-size:11px;font-family:monospace;">
