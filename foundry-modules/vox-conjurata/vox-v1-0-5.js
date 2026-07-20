@@ -1496,7 +1496,7 @@ ${CLONE_SCRIPT}
                                     if (resp.ok) {
                                         ui.notifications.success(`✅ Voice cloned for ${name}!`);
                                         setTimeout(() => {
-                                            const audio = new Audio(\`/api/v1/registry/audio/${actorId}?t=\${Date.now()}\`);
+                                            const audio = new Audio(`/api/v1/registry/audio/${actorId}?t=${Date.now()}`);
                                             audio.play().catch(() => {});
                                         }, 500);
                                     } else {
