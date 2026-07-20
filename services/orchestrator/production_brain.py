@@ -1574,6 +1574,67 @@ async def _execute_voice_conversion_pipeline(task_id: str, audio_bytes: bytes, a
     finally:
         ACTIVE_TASKS.pop(task_id, None)
 
+@app.post("/api/clone-voice")
+async def clone_voice(request: Request):
+    """
+    One-shot voice cloning. Accepts a recorded audio sample and saves it
+    directly as the voice seed for the target actor.
+    Useful for GMs who want the narrator (or any character) to use their
+    own voice, or for players who want their character to sound like them.
+    """
+    try:
+        form = await request.form()
+        audio_file = form.get("audio_blob")
+        actor_id = form.get("actorId", "narrator")
+        if not audio_file:
+            raise HTTPException(status_code=400, detail="No audio file provided")
+        audio_bytes = await audio_file.read()
+        logger.info(f"🎙️ Clone voice request for actor: {actor_id} ({len(audio_bytes)} bytes)")
+
+        # Optional: convert WebM to WAV (browser MediaRecorder produces WebM)
+        raw = audio_bytes
+        if audio_file.content_type and "webm" in audio_file.content_type:
+            import tempfile, subprocess
+            _in = tempfile.NamedTemporaryFile(suffix=".webm", delete=False)
+            _in.write(audio_bytes)
+            _in.close()
+            _out = _in.name + ".wav"
+            try:
+                subprocess.run(["ffmpeg", "-i", _in.name, "-ar", "48000", "-ac", "1",
+                               "-sample_fmt", "s16", "-y", _out],
+                              capture_output=True, timeout=30, check=True)
+                with open(_out, "rb") as fh:
+                    raw = fh.read()
+            except Exception as e:
+                logger.warning(f"Audio conversion failed, sending raw: {e}")
+            finally:
+                os.unlink(_in.name)
+                if os.path.exists(_out):
+                    os.unlink(_out)
+
+        # Send to vox-audio-core's seed-from-audio endpoint
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            files = {"audio": ("clone.wav", raw, "audio/wav")}
+            resp = await client.post(
+                f"{TTS_ACTOR_URL}/seed-from-audio?npc_id={actor_id}",
+                files=files
+            )
+            if resp.status_code == 200:
+                register_character_voice(
+                    actor_id, "vox-audio-core",
+                    f"{actor_id}.wav",
+                    "Cloned voice from audio sample",
+                    is_archetype=(actor_id == "narrator"),
+                    archetype_key="human_neutral_british"
+                )
+                return {"status": "success", "actor_id": actor_id}
+            else:
+                logger.error(f"Seed-from-audio failed: {resp.status_code} {resp.text}")
+                raise HTTPException(status_code=500, detail="Voice cloning failed")
+    except Exception as e:
+        logger.error(f"Clone voice failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/api/voice-conversion")
 async def voice_conversion(request: Request):
     try:
