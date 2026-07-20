@@ -1800,10 +1800,16 @@ Hooks.on("renderActorSheet", async (app, html, data) => {
                 <textarea class="vox-description" style="width:100%;min-height:50px;background:#222;color:#fff;border:1px solid #333;font-size:12px;">${dspFlags.voice_description||""}</textarea>
             </div>
         </div>`;
-        $(html).find('.sheet-header').after(panel);
+        // Insert after sheet header or main tab content
+        const sheetHeader = $(html).find('.sheet-header, .sheet-tabs, .tab.active, .window-content > form').first();
+        if (sheetHeader.length) {
+            sheetHeader.after(panel);
+        } else {
+            $(html).prepend(panel);
+        }
 
         // Sheet-specific test button
-        $('.vox-sheet-test').on('click', async function() {
+        $(html).find('.vox-sheet-test').on('click', async function() {
             const aid = $(this).data('actor-id');
             const text = $(this).closest('.vox-audio-panel-wrapper').find('.vox-description').val() || "Hello, this is a voice test.";
             const resp = await fetch("/api/v1/tts-chunk", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({actor_id:aid, text, dsp_presets:{}}) });
