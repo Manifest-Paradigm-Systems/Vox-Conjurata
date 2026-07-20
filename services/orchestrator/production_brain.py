@@ -1692,6 +1692,34 @@ async def get_registry_audio(actor_id: str):
         raise HTTPException(status_code=404, detail="Seed file not found")
     return Response(content=seed_path.read_bytes(), media_type="audio/wav")
 
+@app.post("/api/v1/relink-voice")
+async def relink_voice(request: Request):
+    """Reassign a voice seed from one actor ID to another."""
+    data = await request.json()
+    old_id = data.get("oldActorId")
+    new_id = data.get("newActorId")
+    if not old_id or not new_id:
+        raise HTTPException(status_code=400, detail="oldActorId and newActorId required")
+    if old_id == new_id:
+        return {"status": "noop"}
+    old_seed = VOICE_SEEDS_DIR / f"{old_id}.wav"
+    new_seed = VOICE_SEEDS_DIR / f"{new_id}.wav"
+    if old_seed.exists():
+        import shutil
+        shutil.copy2(old_seed, new_seed)
+    old_palette = PALETTE_DIR / f"{old_id}.wav"
+    new_palette = PALETTE_DIR / f"{new_id}.wav"
+    if old_palette.exists():
+        import shutil
+        shutil.copy2(old_palette, new_palette)
+    registry = load_voice_registry()
+    if old_id in registry:
+        registry[new_id] = registry.pop(old_id)
+        registry[new_id]["seed_path"] = f"{new_id}.wav"
+        save_voice_registry(registry)
+    logger.info(f"🔗 Voice relinked: {old_id} → {new_id}")
+    return {"status": "success", "oldActorId": old_id, "newActorId": new_id}
+
 @app.post("/api/v1/approve-voice")
 async def approve_voice(request: Request):
     """Mark a voice as approved after playback."""
