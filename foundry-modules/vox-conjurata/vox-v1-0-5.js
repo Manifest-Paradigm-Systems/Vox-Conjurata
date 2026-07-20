@@ -1212,7 +1212,8 @@ class VoxVoiceManager extends Application {
 
                 <div style="flex: 1; overflow-y: auto;">
                     <h3 style="font-size: 14px; margin: 0 0 10px 0; color: #888; text-transform: uppercase; letter-spacing: 1px;">Character Seeds</h3>
-                    <ul style="list-style: none; padding: 0; margin: 0;">
+                    <input type="text" id="vox-seed-search" placeholder="Search by name or ID..." style="width:100%;background:#222;color:#eee;border:1px solid #444;border-radius:4px;padding:4px 8px;font-size:12px;margin-bottom:8px;box-sizing:border-box;">
+                    <ul id="vox-seed-list" style="list-style: none; padding: 0; margin: 0;">
         `;
 
         if (otherEntries.length === 0) {
