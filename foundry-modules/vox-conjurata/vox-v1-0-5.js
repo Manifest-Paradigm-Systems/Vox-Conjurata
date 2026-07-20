@@ -83,8 +83,8 @@ class VoxEventQueueHUD extends Application {
                         <i class="fas fa-coins vox-wallet-icon" style="color: ${statusColor}; font-size: 12px; filter: drop-shadow(0 0 2px ${statusColor});" title="Hover to view balance"></i>
                         
                         <div class="vox-wallet-controls" style="display: flex; gap: 4px; margin-left: 4px;">
-                            <i class="fas fa-gift vox-open-transfer" style="color: #7a9cff; font-size: 10px;" title="Gift Credits"></i>
-                            <i class="fas fa-plus-circle vox-buy-credits" style="color: #8d8; font-size: 10px;" title="Top up"></i>
+                            <i class="fas fa-gift vox-open-transfer" style="color: #ff6400; font-size: 10px;" title="Gift Credits"></i>
+                            <i class="fas fa-plus-circle vox-buy-credits" style="color: #00ff88; font-size: 10px;" title="Top up"></i>
                         </div>
                     </div>
                 </div>
@@ -93,7 +93,7 @@ class VoxEventQueueHUD extends Application {
                     .vox-stealth-wallet:hover .vox-balance-label { opacity: 1 !important; width: auto !important; margin-right: 5px; }
                     .vox-stealth-wallet.force-reveal .vox-balance-label { opacity: 1 !important; width: auto !important; margin-right: 5px; }
                     .vox-low-balance-flash { animation: vox-amber-glow 1.5s infinite alternate; }
-                    @keyframes vox-amber-glow { from { text-shadow: 0 0 2px #ffbb00; } to { text-shadow: 0 0 8px #ffbb00, 0 0 15px #7a9cff; } }
+                    @keyframes vox-amber-glow { from { text-shadow: 0 0 2px #ffbb00; } to { text-shadow: 0 0 8px #ffbb00, 0 0 15px #ff6400; } }
                     .vox-hud-container { transition: all 0.2s ease-in-out; }
                     .vox-hud-container:hover { border-color: #555; }
                 </style>
@@ -125,7 +125,7 @@ class VoxEventQueueHUD extends Application {
         for (let task of this.tasks) {
             const isComplete = task.status === "complete";
             const statusLabel = task.type.replace("-", " ").toUpperCase();
-            const barColor = isComplete ? "#00ff88" : (task.status === "cancelled" ? "#ff0000" : "#7a9cff");
+            const barColor = isComplete ? "#00ff88" : (task.status === "cancelled" ? "#ff0000" : "#ff6400");
             const progressWidth = (task.progress * 100).toFixed(0);
 
             html += `
@@ -138,7 +138,7 @@ class VoxEventQueueHUD extends Application {
                         </div>
                     </div>
                     <div style="height: 4px; background: #111; border-radius: 2px; overflow: hidden; width: 100%;">
-                        <div style="height: 100%; width: ${progressWidth}%; background: ${barColor}; transition: width 0.3s ease, background 0.5s ease; ${!isComplete ? 'box-shadow: 0 0 5px #7a9cff;' : ''}"></div>
+                        <div style="height: 100%; width: ${progressWidth}%; background: ${barColor}; transition: width 0.3s ease, background 0.5s ease; ${!isComplete ? 'box-shadow: 0 0 5px #ff6400;' : ''}"></div>
                     </div>
                 </div>
             `;
@@ -195,7 +195,7 @@ class VoxEventQueueHUD extends Application {
                         </div>
                         <div class="form-group">
                             <label>Amount ($):</label>
-                            <input type="number" id="vox-transfer-amount" step="0.10" min="0.10" value="1.00" style="width: 100%; background: #000; color: #8d8; border: 1px solid #444;">
+                            <input type="number" id="vox-transfer-amount" step="0.10" min="0.10" value="1.00" style="width: 100%; background: #000; color: #00ff88; border: 1px solid #444;">
                         </div>
                     </div>
                 `,
@@ -765,14 +765,14 @@ function updateIngestionProgress(current, total, name) {
     if (!bar) {
         const container = document.createElement('div');
         container.id = 'vox-ingestion-progress';
-        container.style = "position: fixed; top: 80px; left: 50%; transform: translateX(-50%); width: 360px; padding: 12px; background: rgba(20, 20, 25, 0.95); border: 1px solid #7a9cff; border-radius: 6px; z-index: 1000; color: white; font-family: 'Signika', sans-serif; box-shadow: 0 4px 20px rgba(0,0,0,0.6); display: flex; flex-direction: column; gap: 8px;";
+        container.style = "position: fixed; top: 80px; left: 50%; transform: translateX(-50%); width: 360px; padding: 12px; background: rgba(20, 20, 25, 0.95); border: 1px solid #ff6400; border-radius: 6px; z-index: 1000; color: white; font-family: 'Signika', sans-serif; box-shadow: 0 4px 20px rgba(0,0,0,0.6); display: flex; flex-direction: column; gap: 8px;";
         container.innerHTML = `
-            <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: bold; color: #7a9cff; text-transform: uppercase; letter-spacing: 0.5px;">
+            <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: bold; color: #ff6400; text-transform: uppercase; letter-spacing: 0.5px;">
                 <span id="vox-progress-label">Voice Registry Ingestion</span>
                 <span id="vox-progress-count">0/0</span>
             </div>
             <div style="width: 100%; height: 8px; background: #1a1a1a; border-radius: 4px; overflow: hidden; border: 1px solid #333;">
-                <div id="vox-progress-fill" style="width: 100%; height: 100%; background: linear-gradient(90deg, #ff9d00, #7a9cff); shadow: 0 0 10px #7a9cff; transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);"></div>
+                <div id="vox-progress-fill" style="width: 100%; height: 100%; background: linear-gradient(90deg, #ff9d00, #ff6400); shadow: 0 0 10px #ff6400; transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);"></div>
             </div>
             <div id="vox-progress-actor" style="font-size: 11px; color: #888; text-align: center; font-style: italic;">Synchronizing neural seeds...</div>
         `;
@@ -890,7 +890,7 @@ class VoxEngineConfigApp extends Application {
     async _renderInner(data) {
         const html = `
         <form class="vox-settings-app" style="padding: 15px; background: #111; color: #eee; font-family: 'Signika', sans-serif;">
-            <h2 style="border-bottom: 2px solid #7a9cff; padding-bottom: 10px; margin-bottom: 15px; color: #7a9cff;">
+            <h2 style="border-bottom: 2px solid #ff6400; padding-bottom: 10px; margin-bottom: 15px; color: #ff6400;">
                 <i class="fas fa-brain"></i> Core AI Engine Settings
             </h2>
             <p style="font-size: 11px; color: #888; margin-bottom: 20px;">Offload text token costs and context KV memory chains directly to your local hardware.</p>
@@ -906,7 +906,7 @@ class VoxEngineConfigApp extends Application {
                 </div>
             </div>
 
-            <div class="form-group-box" style="background: rgba(122,156,255,0.05); padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #333;">
+            <div class="form-group-box" style="background: rgba(255,100,0,0.05); padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #333;">
                 <label style="display: block; font-weight: bold; margin-bottom: 8px;"><i class="fas fa-network-wired"></i> Text Orchestration Pathway</label>
                 <select name="llm_pathway_mode" id="vox-llm-mode-select" style="width: 160px; background: #222; color: #eee; border: 1px solid #444; height: 32px; border-radius: 4px;">
                     <option value="optimal_cloud" ${data.llmPathway === 'optimal_cloud' ? 'selected' : ''}>Vox Hosted Optimal Tier (Cloud API Base + Fee)</option>
@@ -914,16 +914,16 @@ class VoxEngineConfigApp extends Application {
                 </select>
             </div>
 
-            <div id="vox-local-brain-config-pane" style="display: ${data.llmPathway === 'byo_local_brain' ? 'block' : 'none'}; margin-bottom: 20px; padding: 15px; border: 1px dashed #7a9cff; border-radius: 8px; background: rgba(0,0,0,0.3);">
+            <div id="vox-local-brain-config-pane" style="display: ${data.llmPathway === 'byo_local_brain' ? 'block' : 'none'}; margin-bottom: 20px; padding: 15px; border: 1px dashed #ff6400; border-radius: 8px; background: rgba(0,0,0,0.3);">
                 <h3 style="font-size: 14px; margin-top: 0;"><i class="fas fa-microchip"></i> Local Loopback Environment</h3>
                 
                 <div class="form-row" style="margin-bottom: 15px;">
                     <label style="display: block; font-size: 11px; color: #aaa; margin-bottom: 5px;">Model Identifier Tag</label>
-                    <input type="text" id="vox-model-tag-input" name="local_model_tag" value="${data.localModelTag}" style="width: 100%; background: #000; color: #8d8; border: 1px solid #444; font-family: monospace; height: 28px; padding: 0 8px;">
+                    <input type="text" id="vox-model-tag-input" name="local_model_tag" value="${data.localModelTag}" style="width: 100%; background: #000; color: #00ff88; border: 1px solid #444; font-family: monospace; height: 28px; padding: 0 8px;">
                 </div>
                 
                 <div class="recommendation-badge-container" style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 15px;">
-                    <button type="button" class="badge-btn active-rec" data-tag="eva-qwen2.5-7b" style="font-size: 10px; background: #333; color: #eee; border: 1px solid #7a9cff; border-radius: 4px; padding: 2px 8px; cursor: pointer;">
+                    <button type="button" class="badge-btn active-rec" data-tag="eva-qwen2.5-7b" style="font-size: 10px; background: #333; color: #eee; border: 1px solid #ff6400; border-radius: 4px; padding: 2px 8px; cursor: pointer;">
                         <i class="fas fa-star"></i> Eva Qwen 2.5 7B (Recommended)
                     </button>
                     <button type="button" class="badge-btn" data-tag="llama3.2:3b" style="font-size: 10px; background: #333; color: #eee; border: 1px solid #444; border-radius: 4px; padding: 2px 8px; cursor: pointer;">
@@ -931,25 +931,25 @@ class VoxEngineConfigApp extends Application {
                     </button>
                 </div>
                 
-                <div class="billing-notice-box" style="font-size: 10px; background: rgba(0,255,136,0.1); padding: 10px; border-radius: 4px; border-left: 3px solid #00ff88; color: #8d8;">
+                <div class="billing-notice-box" style="font-size: 10px; background: rgba(0,255,136,0.1); padding: 10px; border-radius: 4px; border-left: 3px solid #00ff88; color: #00ff88;">
                     <i class="fas fa-info-circle"></i> 
                     <strong>Financial Matrix Update:</strong> Base text compilation fee reduced to <strong>$0.0000</strong>. Only <strong>$0.0030 Orchestrator Fee</strong> per call.
                 </div>
             </div>
 
-            <h2 style="border-bottom: 2px solid #00ff88; padding-bottom: 10px; margin-bottom: 15px; color: #8d8; margin-top: 30px;">
+            <h2 style="border-bottom: 2px solid #00ff88; padding-bottom: 10px; margin-bottom: 15px; color: #00ff88; margin-top: 30px;">
                 <i class="fas fa-wallet"></i> Co-Op Funding Ledger
             </h2>
             
             <div style="display: flex; gap: 15px; margin-bottom: 20px;">
                 <div style="flex: 1; background: #222; padding: 12px; border-radius: 8px; text-align: center; border: 1px solid #444;">
                     <div style="font-size: 10px; color: #888; text-transform: uppercase;">Campaign Pool</div>
-                    <div style="font-size: 20px; font-weight: bold; color: #8d8;">$${(data.ledger.campaign_pool ?? 0).toFixed(6)}</div>
+                    <div style="font-size: 20px; font-weight: bold; color: #00ff88;">$${(data.ledger.campaign_pool ?? 0).toFixed(6)}</div>
                     ${data.isGM ? `<button type="button" class="topup-btn" style="margin-top: 8px; font-size: 9px; background: #333; color: #eee; border: 1px solid #555; border-radius: 4px; padding: 2px 8px; cursor: pointer;">+ TOP UP</button>` : ''}
                 </div>
                 <div style="flex: 1; background: #222; padding: 12px; border-radius: 8px; text-align: center; border: 1px solid #444;">
                     <div style="font-size: 10px; color: #888; text-transform: uppercase;">Your Allowance</div>
-                    <div style="font-size: 20px; font-weight: bold; color: #7a9cff;">$${(data.ledger.individual_allowance ?? 0).toFixed(6)}</div>
+                    <div style="font-size: 20px; font-weight: bold; color: #ff6400;">$${(data.ledger.individual_allowance ?? 0).toFixed(6)}</div>
                     <div style="font-size: 9px; color: #666; margin-top: 5px;">Cap: $${(data.ledger.individual_cap ?? 0).toFixed(6)}</div>
                 </div>
             </div>
@@ -978,13 +978,13 @@ class VoxEngineConfigApp extends Application {
                 <label style="display: block; font-weight: bold; margin-bottom: 12px;">Manage Your Session Budget</label>
                 <div style="display: flex; gap: 10px; align-items: center;">
                     <input type="number" id="vox-allowance-input" step="0.5" min="0" value="${(data.ledger.individual_cap ?? 0)}" style="flex: 1; background: #000; color: #eee; border: 1px solid #444; height: 32px; padding: 0 10px; border-radius: 4px;">
-                    <button type="button" class="set-allowance-btn" style="background: #7a9cff; color: white; border: none; height: 32px; padding: 0 15px; border-radius: 4px; font-weight: bold; cursor: pointer;">UPDATE BUDGET</button>
+                    <button type="button" class="set-allowance-btn" style="background: #ff6400; color: white; border: none; height: 32px; padding: 0 15px; border-radius: 4px; font-weight: bold; cursor: pointer;">UPDATE BUDGET</button>
                 </div>
                 <p style="font-size: 10px; color: #666; margin-top: 8px; font-style: italic;">Note: Budget is drawn autonomously from the Campaign Pool. No DM veto required.</p>
             </div>
 
             <div class="vox-settings-footer" style="margin-top: 30px; display: flex; justify-content: space-between; align-items: center;">
-                ${data.isGM ? `<button type="button" class="forge-scene-btn" style="background: #7a9cff; color: white; border: none; padding: 10px 20px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 12px;"><i class="fas fa-hammer"></i> FORGE SCENE VOICES</button>` : '<span></span>'}
+                ${data.isGM ? `<button type="button" class="forge-scene-btn" style="background: #ff6400; color: white; border: none; padding: 10px 20px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 12px;"><i class="fas fa-hammer"></i> FORGE SCENE VOICES</button>` : '<span></span>'}
                 <button type="submit" class="save-btn" style="background: #00ff88; color: #111; border: none; padding: 10px 25px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 14px;">
                     <i class="fas fa-save"></i> Commit Engine Settings
                 </button>
@@ -1177,18 +1177,18 @@ class VoxVoiceManager extends Application {
 
         let html = `
             <div style="padding: 10px; background: #1a1a1a; color: #eee; height: 100%; display: flex; flex-direction: column; font-family: 'Signika', sans-serif;">
-                <div style="margin-bottom: 15px; border-bottom: 1px solid #7a9cff; padding-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
-                    <h2 style="margin: 0; color: #7a9cff;"><i class="fas fa-dna"></i> Neural Voice Registry</h2>
+                <div style="margin-bottom: 15px; border-bottom: 1px solid #ff6400; padding-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+                    <h2 style="margin: 0; color: #ff6400;"><i class="fas fa-dna"></i> Neural Voice Registry</h2>
                     <button class="vox-refresh-btn" style="width: auto; padding: 2px 8px; background: #333; border: 1px solid #555;"><i class="fas fa-sync"></i></button>
                 </div>
 
-                ${game.user.isGM ? `<div class="vox-narrator-config" style="background: rgba(122,156,255,0.05); border: 1px solid #7a9cff; border-radius: 4px; padding: 12px; margin-bottom: 20px;">
-                    <h3 style="margin: 0 0 10px 0; color: #7a9cff; font-size: 16px;"><i class="fas fa-comment-dots"></i> Narrator Configuration</h3>
+                ${game.user.isGM ? `<div class="vox-narrator-config" style="background: rgba(255,100,0,0.05); border: 1px solid #ff6400; border-radius: 4px; padding: 12px; margin-bottom: 20px;">
+                    <h3 style="margin: 0 0 10px 0; color: #ff6400; font-size: 16px;"><i class="fas fa-comment-dots"></i> Narrator Configuration</h3>
                     
                     <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px;">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <span style="font-size: 13px;">Delivery Mode:</span>
-                            <button class="vox-toggle-mode-btn" style="width: auto; padding: 2px 10px; font-size: 11px; background: #333; color: #8d8; border: 1px solid #444; border-radius: 4px; cursor: pointer;">
+                            <button class="vox-toggle-mode-btn" style="width: auto; padding: 2px 10px; font-size: 11px; background: #333; color: #00ff88; border: 1px solid #444; border-radius: 4px; cursor: pointer;">
                                 ${deliveryMode === 'speech' ? '🔊 Speech + Chat' : '🤫 Whisper to GM'}
                             </button>
                         </div>
@@ -1203,10 +1203,10 @@ class VoxVoiceManager extends Application {
 
                     <div style="display: flex; gap: 8px;">
                         ${narratorEntry ? `<button class="vox-play-seed" data-actor-id="narrator" style="height: 28px; line-height: 1; font-size: 12px; flex: 1; background: #222;"><i class="fas fa-play"></i> Preview</button>` : ''}
-                        ${narratorEntry?.approved ? `<span style="height: 28px; line-height: 28px; flex: 1; text-align: center; font-size: 12px; color: #8d8;"><i class="fas fa-check-circle"></i> Approved</span>` : (narratorEntry ? `<button class="vox-approve-voice" data-actor-id="narrator" style="height: 28px; line-height: 1; font-size: 12px; flex: 1; background: #2a4a3a; color: #8d8; border: 1px solid #4a6;"><i class="fas fa-thumbs-up"></i> Approve</button>` : '')}
-                        <button class="vox-save-narrator-desc" style="height: 28px; line-height: 1; font-size: 12px; flex: 1; background: #333; color: #7a9cff; border: 1px solid #7a9cff;"><i class="fas fa-save"></i> Save</button>
-                        <button class="vox-clone-mic" data-actor-id="narrator" data-name="Narrator" style="height: 28px; line-height: 1; font-size: 12px; flex: 1; background: #2a4a3a; color: #8d8; border: 1px solid #4a6;"><i class="fas fa-microphone"></i> Clone from Mic</button>
-                        <button class="vox-regen-actor" data-actor-id="narrator" style="height: 28px; line-height: 1; font-size: 12px; flex: 2; background: #4a4a6a; color: #ddd;"><i class="fas fa-redo"></i> Re-Forge Narrator</button>
+                        ${narratorEntry?.approved ? `<span style="height: 28px; line-height: 28px; flex: 1; text-align: center; font-size: 12px; color: #00ff88;"><i class="fas fa-check-circle"></i> Approved</span>` : (narratorEntry ? `<button class="vox-approve-voice" data-actor-id="narrator" style="height: 28px; line-height: 1; font-size: 12px; flex: 1; background: #004d00; color: #00ff88; border: 1px solid #00aa44;"><i class="fas fa-thumbs-up"></i> Approve</button>` : '')}
+                        <button class="vox-save-narrator-desc" style="height: 28px; line-height: 1; font-size: 12px; flex: 1; background: #333; color: #ff6400; border: 1px solid #ff6400;"><i class="fas fa-save"></i> Save</button>
+                        <button class="vox-clone-mic" data-actor-id="narrator" data-name="Narrator" style="height: 28px; line-height: 1; font-size: 12px; flex: 1; background: #004d00; color: #00ff88; border: 1px solid #00aa44;"><i class="fas fa-microphone"></i> Clone from Mic</button>
+                        <button class="vox-regen-actor" data-actor-id="narrator" style="height: 28px; line-height: 1; font-size: 12px; flex: 2; background: #b34a00; color: white;"><i class="fas fa-redo"></i> Re-Forge Narrator</button>
                     </div>
                 </div>
 
@@ -1233,15 +1233,15 @@ class VoxVoiceManager extends Application {
             const actor = game.actors.get(entry.id);
             const name = entry.display_name || actor?.name || entry.id;
             html += `
-                <li style="background: rgba(255,255,255,0.03); margin-bottom: 10px; border-radius: 4px; padding: 12px; border-left: 3px solid #7a9cff; box-shadow: 0 2px 5px rgba(0,0,0,0.3);">
+                <li style="background: rgba(255,255,255,0.03); margin-bottom: 10px; border-radius: 4px; padding: 12px; border-left: 3px solid #ff6400; box-shadow: 0 2px 5px rgba(0,0,0,0.3);">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
                         <input type="text" class="vox-char-name-input" data-actor-id="${entry.id}" value="${name}" style="flex:1;background:#222;color:#fff;border:1px solid #444;border-radius:4px;padding:2px 6px;font-size:14px;font-family:inherit;font-weight:bold;">
-                        <span style="font-size: 10px; color: #7a9cff; background: rgba(255,100,0,0.1); padding: 2px 6px; border-radius: 10px;">${entry.engine}</span>
+                        <span style="font-size: 10px; color: #ff6400; background: rgba(255,100,0,0.1); padding: 2px 6px; border-radius: 10px;">${entry.engine}</span>
                     </div>
                     <div style="font-size: 11px; color: #aaa; font-style: italic; margin-bottom: 10px; line-height: 1.4; border-left: 2px solid #333; padding-left: 8px;">"${entry.voice_prompt}"</div>
                     <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px;">
                         <input type="text" class="vox-voice-desc-input" data-actor-id="${entry.id}" placeholder="Describe voice (e.g. 'deep gravelly, like a veteran soldier')" style="width: 100%; background: #222; color: #eee; border: 1px solid #444; border-radius: 4px; padding: 4px 8px; font-size: 12px; box-sizing: border-box;">
-                        <button class="vox-forge-with-desc" data-actor-id="${entry.id}" data-name="${name}" style="height: 24px; line-height: 1; font-size: 11px; background: #3a3a4a; color: #7a9cff; border: 1px solid #555;"><i class="fas fa-pen"></i> Forge with Description</button>
+                        <button class="vox-forge-with-desc" data-actor-id="${entry.id}" data-name="${name}" style="height: 24px; line-height: 1; font-size: 11px; background: #3a3a4a; color: #ff6400; border: 1px solid #555;"><i class="fas fa-pen"></i> Forge with Description</button>
                     </div>
                     <div style="display: flex; gap: 6px; margin-bottom: 6px; align-items: flex-start;">
                         <textarea class="vox-tts-test-input" data-actor-id="${entry.id}" rows="2" placeholder="Type test sentence, then click play..." style="flex:1;background:#222;color:#eee;border:1px solid #444;border-radius:4px;padding:4px 8px;font-size:12px;resize:vertical;min-height:32px;font-family:inherit;"></textarea>
@@ -1249,9 +1249,9 @@ class VoxVoiceManager extends Application {
                     </div>
                     <div style="display: flex; gap: 8px;">
                         <button class="vox-play-seed" data-actor-id="${entry.id}" style="height: 26px; line-height: 1; font-size: 11px; flex: 1; background: #222;"><i class="fas fa-play"></i> Preview</button>
-                        <button class="vox-clone-mic" data-actor-id="${entry.id}" data-name="${name}" style="height: 26px; line-height: 1; font-size: 11px; flex: 1; background: #2a4a3a; color: #8d8; border: 1px solid #4a6;"><i class="fas fa-microphone"></i> Clone</button>
+                        <button class="vox-clone-mic" data-actor-id="${entry.id}" data-name="${name}" style="height: 26px; line-height: 1; font-size: 11px; flex: 1; background: #004d00; color: #00ff88; border: 1px solid #00aa44;"><i class="fas fa-microphone"></i> Clone</button>
                         ${entry.approved ? `<span style="flex:1;text-align:center;font-size:11px;color:#00ff88;line-height:26px;"><i class="fas fa-check-circle"></i> Approved</span>` : `<button class="vox-approve-voice" data-actor-id="${entry.id}" style="height:26px;line-height:1;font-size:11px;flex:1;background:#003300;color:#00ff88;border:1px solid #00aa44;"><i class="fas fa-thumbs-up"></i> Approve</button>`}
-                        <button class="vox-regen-actor" data-actor-id="${entry.id}" style="height: 26px; line-height: 1; font-size: 11px; flex: 1; background: #4a4a6a; color: #ddd;"><i class="fas fa-redo"></i> Re-Forge</button>
+                        <button class="vox-regen-actor" data-actor-id="${entry.id}" style="height: 26px; line-height: 1; font-size: 11px; flex: 1; background: #b34a00; color: white;"><i class="fas fa-redo"></i> Re-Forge</button>
                         ${game.user.isGM ? `<button class="vox-delete-seed" data-actor-id="${entry.id}" data-name="${name}" style="height:26px;line-height:1;font-size:11px;flex:0 0 26px;background:#440000;color:#ff4444;border:1px solid #880000;border-radius:4px;cursor:pointer;" title="Delete this voice seed"><i class="fas fa-trash"></i></button>` : ""}
                     </div>
                     <div style="display:flex;gap:6px;margin-top:4px;align-items:center;">
@@ -1516,14 +1516,14 @@ Together, we can face whatever comes our way.    (warm, determined)`;
             overlay.id = "vox-clone-overlay";
             overlay.innerHTML = `
                 <div style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:center;justify-content:center;">
-                    <div style="background:#1a1a1a;border:1px solid #7a9cff;border-radius:8px;padding:20px;max-width:600px;width:90%;max-height:80vh;overflow-y:auto;color:#eee;font-family:'Signika',sans-serif;">
-                        <h2 style="color:#7a9cff;margin:0 0 10px 0;"><i class="fas fa-microphone"></i> Clone Voice: ${name}</h2>
+                    <div style="background:#1a1a1a;border:1px solid #ff6400;border-radius:8px;padding:20px;max-width:600px;width:90%;max-height:80vh;overflow-y:auto;color:#eee;font-family:'Signika',sans-serif;">
+                        <h2 style="color:#ff6400;margin:0 0 10px 0;"><i class="fas fa-microphone"></i> Clone Voice: ${name}</h2>
                         <p style="color:#aaa;font-size:12px;margin-bottom:10px;">Read this script aloud to capture emotional range (~30 seconds).</p>
                         <div style="background:#111;border:1px solid #444;border-radius:6px;padding:12px;margin-bottom:12px;font-family:'Courier New',monospace;font-size:13px;line-height:1.8;white-space:pre-wrap;color:#ddd;">${CLONE_SCRIPT}</div>
-                        <p id="vox-clone-status" style="color:#7a9cff;font-weight:bold;text-align:center;font-size:14px;">Click Start Recording when ready.</p>
+                        <p id="vox-clone-status" style="color:#ff6400;font-weight:bold;text-align:center;font-size:14px;">Click Start Recording when ready.</p>
                         <div style="display:flex;gap:8px;justify-content:center;margin-top:12px;">
                             <button id="vox-clone-cancel" style="padding:8px 20px;background:#444;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancel</button>
-                            <button id="vox-clone-start" style="padding:8px 20px;background:#4a4a6a;color:#ddd;border:none;border-radius:4px;cursor:pointer;">🎙️ Start Recording</button>
+                            <button id="vox-clone-start" style="padding:8px 20px;background:#b34a00;color:#fff;border:none;border-radius:4px;cursor:pointer;">🎙️ Start Recording</button>
                         </div>
                     </div>
                 </div>`;
@@ -1694,8 +1694,8 @@ async function captureAndScanMap() {
             // 3. Display Tactical Advice Chat Card
             ChatMessage.create({
                 content: `
-                    <div class="vox-tactical-card" style="border: 2px solid #7a9cff; background: rgba(20,20,20,0.9); padding: 10px; border-radius: 5px;">
-                        <h3 style="color: #7a9cff; border-bottom: 1px solid #7a9cff; margin-bottom: 10px;"><i class="fas fa-eye"></i> Tactical Analysis</h3>
+                    <div class="vox-tactical-card" style="border: 2px solid #ff6400; background: rgba(20,20,20,0.9); padding: 10px; border-radius: 5px;">
+                        <h3 style="color: #ff6400; border-bottom: 1px solid #ff6400; margin-bottom: 10px;"><i class="fas fa-eye"></i> Tactical Analysis</h3>
                         <p style="color: #eee; font-size: 13px;">${data.tactical_analysis || "No threats detected."}</p>
                     </div>
                 `,
@@ -1776,8 +1776,8 @@ Hooks.on("renderActorSheet", (app, html, data) => {
 
     const panelHtml = `
         <div class="vox-audio-panel-wrapper" style="margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.2); border: 1px solid #444; border-radius: 5px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #7a9cff; margin-bottom: 10px; padding-bottom: 5px;">
-                <h3 style="margin: 0; color: #7a9cff; border: none;"><i class="fas fa-waveform-path"></i> Vox Conjurata</h3>
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ff6400; margin-bottom: 10px; padding-bottom: 5px;">
+                <h3 style="margin: 0; color: #ff6400; border: none;"><i class="fas fa-waveform-path"></i> Vox Conjurata</h3>
                 <div style="display: flex; gap: 15px; font-size: 11px; font-weight: bold; color: #eee;">
                     <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
                         <input type="checkbox" class="vox-ai-toggle" data-prop="vox-actor" ${voxActor ? 'checked' : ''}> VOX-ACTOR
@@ -1941,7 +1941,7 @@ async function onReady() {
                 const btn = document.createElement("button");
                 btn.className = "vox-registry-btn";
                 btn.innerHTML = '<i class="fas fa-dna"></i> Manage Vox Voices';
-                btn.style.cssText = "margin:5px 0;width:calc(100% - 10px);cursor:pointer;background:#333;color:#7a9cff;border:1px solid #7a9cff;border-radius:4px;padding:6px;font-size:13px;";
+                btn.style.cssText = "margin:5px 0;width:calc(100% - 10px);cursor:pointer;background:#333;color:#ff6400;border:1px solid #ff6400;border-radius:4px;padding:6px;font-size:13px;";
                 btn.onclick = () => new VoxVoiceManager().render(true);
                 const footer = actorsTab.querySelector(".directory-footer");
                 if (footer) footer.prepend(btn);
