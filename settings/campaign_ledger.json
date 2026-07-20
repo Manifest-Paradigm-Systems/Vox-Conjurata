@@ -9,14 +9,14 @@
   },
   "session_allowances": {
     "G3SJW9rRHe7J3AOH": 0.0,
-    "gm": 99.16724999999964
+    "gm": 99.16124999999964
   },
   "session_caps": {
     "G3SJW9rRHe7J3AOH": 0.0,
     "gm": 100.0
   },
   "session_spent": {
-    "gm": 0.8327499999999991,
+    "gm": 0.8387499999999991,
     "G3SJW9rRHe7J3AOH": 0.028999999999999998,
     "nXnKU6oZYzdg0xSY": 0.11075000000000006,
     "m6nkAzEdfbjIGhdz": 0.10725000000000005
@@ -2967,6 +2967,18 @@
       "amount": 0.003,
       "description": "Neural Profiling for Kyra",
       "timestamp": 1784529064.9885666
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Kyra",
+      "timestamp": 1784529302.9123194
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.003,
+      "description": "Neural Profiling for Kyra",
+      "timestamp": 1784529302.9708471
     }
   ]
 }
