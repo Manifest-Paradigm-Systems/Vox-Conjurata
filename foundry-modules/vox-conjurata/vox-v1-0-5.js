@@ -1203,6 +1203,7 @@ class VoxVoiceManager extends Application {
 
                     <div style="display: flex; gap: 8px;">
                         ${narratorEntry ? `<button class="vox-play-seed" data-actor-id="narrator" style="height: 28px; line-height: 1; font-size: 12px; flex: 1; background: #222;"><i class="fas fa-play"></i> Preview</button>` : ''}
+                        ${narratorEntry?.approved ? `<span style="height: 28px; line-height: 28px; flex: 1; text-align: center; font-size: 12px; color: #00ff88;"><i class="fas fa-check-circle"></i> Approved</span>` : (narratorEntry ? `<button class="vox-approve-voice" data-actor-id="narrator" style="height: 28px; line-height: 1; font-size: 12px; flex: 1; background: #003300; color: #00ff88; border: 1px solid #00aa44;"><i class="fas fa-thumbs-up"></i> Approve</button>` : '')}
                         <button class="vox-save-narrator-desc" style="height: 28px; line-height: 1; font-size: 12px; flex: 1; background: #333; color: #ff6400; border: 1px solid #ff6400;"><i class="fas fa-save"></i> Save</button>
                         <button class="vox-clone-mic" data-actor-id="narrator" data-name="Narrator" style="height: 28px; line-height: 1; font-size: 12px; flex: 1; background: #004d00; color: #00ff88; border: 1px solid #00aa44;"><i class="fas fa-microphone"></i> Clone from Mic</button>
                         <button class="vox-regen-actor" data-actor-id="narrator" style="height: 28px; line-height: 1; font-size: 12px; flex: 2; background: #b34a00; color: white;"><i class="fas fa-redo"></i> Re-Forge Narrator</button>
@@ -1320,8 +1321,63 @@ class VoxVoiceManager extends Application {
             const desc = $(html).find('.vox-narrator-desc').val();
             await game.settings.set("vox-conjurata", "narratorVoiceDesc", desc);
             ui.notifications.info("✅ Narrator voice description saved.");
-            // Re-render to show updated description
             this.render(true);
+        });
+
+        // Approve voice — marks the seed as approved after user playback check
+        $(html).find('.vox-approve-voice').click(async (ev) => {
+            const actorId = ev.currentTarget.dataset.actorId;
+            try {
+                const resp = await fetch("/api/v1/approve-voice", {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ actorId })
+                });
+                if (resp.ok) {
+                    ui.notifications.success(`✅ Voice approved!`);
+                    this.render(true);
+                } else {
+                    ui.notifications.error("❌ Failed to approve voice.");
+                }
+            } catch (e) {
+                ui.notifications.error("❌ Network error during approval.");
+            }
+        });
+
+        // Forge with custom voice description text
+        $(html).find('.vox-forge-with-desc').click(async (ev) => {
+            const id = ev.currentTarget.dataset.actorId;
+            const name = ev.currentTarget.dataset.name || id;
+            const desc = $(html).find(`.vox-voice-desc-input[data-actor-id="${id}"]`).val();
+            if (!desc || !desc.trim()) {
+                ui.notifications.warn("⚠️ Enter a voice description first.");
+                return;
+            }
+            ui.notifications.info(`🎙️ Forging voice for ${name}...`);
+            try {
+                const resp = await fetch("/api/ingest-actor?force_refresh=true", {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        actorId: id, name: name,
+                        lore: "", artPath: "", isMonster: false,
+                        customDescription: desc.trim(),
+                        userId: game.user.id
+                    })
+                });
+                if (resp.ok) {
+                    const data = await resp.json();
+                    ui.notifications.success(`✅ Voice forged for ${name}!`);
+                    // Auto-play for approval check
+                    setTimeout(() => {
+                        const audio = new Audio(`/api/v1/registry/audio/${id}?t=${Date.now()}`);
+                        audio.play().catch(() => {});
+                    }, 500);
+                    this.render(true);
+                } else {
+                    ui.notifications.error("❌ Failed to forge voice.");
+                }
+            } catch (e) {
+                ui.notifications.error("❌ Network error during forge.");
+            }
         });
 
         // Clone voice from mic — click handler for both narrator and character buttons
