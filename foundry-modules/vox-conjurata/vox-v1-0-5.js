@@ -1772,7 +1772,7 @@ Hooks.on("renderActorSheet", (app, html, data) => {
     var tab = document.createElement("div");
     tab.id = tabId;
     tab.style.cssText = "position:absolute;top:0;right:40px;z-index:100;";
-    tab.innerHTML = \`
+    tab.innerHTML = `
         <div class="vox-sheet-tab" style="cursor:pointer;background:#ff6400;color:#fff;padding:2px 10px;border-radius:0 0 4px 4px;font-size:11px;font-family:'Signika',sans-serif;display:inline-block;">
             VOX
         </div>
@@ -1786,7 +1786,7 @@ Hooks.on("renderActorSheet", (app, html, data) => {
             <textarea class="vox-stext" data-aid="${actor.id}" placeholder="Describe the voice..." style="width:100%;height:40px;background:#222;color:#fff;border:1px solid #444;border-radius:3px;padding:3px 6px;font-size:11px;margin-bottom:4px;"></textarea>
             <input type="text" class="vox-stesttext" data-aid="${actor.id}" placeholder="Test sentence..." style="width:100%;background:#222;color:#fff;border:1px solid #444;border-radius:3px;padding:3px 6px;font-size:11px;box-sizing:border-box;">
         </div>
-    \`;
+    `;
     
     // Find the window title bar and append the tab
     var header = html.parents(".window-app").find(".window-header").first();
