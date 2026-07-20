@@ -1347,6 +1347,36 @@ class VoxVoiceManager extends Application {
             }
         });
 
+        // Test voice — type a sentence and hear it spoken
+        $(html).find('.vox-tts-test-play').click(async (ev) => {
+            const actorId = ev.currentTarget.dataset.actorId;
+            const input = $(html).find(`.vox-tts-test-input[data-actor-id="${actorId}"]`);
+            const text = input.val().trim();
+            if (!text) {
+                ui.notifications.warn("⚠️ Type a test sentence first.");
+                return;
+            }
+            ui.notifications.info(`🔊 Testing voice...`);
+            try {
+                const resp = await fetch("/api/v1/tts-chunk", {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ actor_id: actorId, text, dsp_presets: {} })
+                });
+                if (resp.ok) {
+                    const data = await resp.json();
+                    if (data.status === "success" && data.audio_data) {
+                        new Audio(data.audio_data).play();
+                    } else {
+                        ui.notifications.error("❌ TTS generation failed.");
+                    }
+                } else {
+                    ui.notifications.error("❌ TTS request failed.");
+                }
+            } catch (e) {
+                ui.notifications.error("❌ Network error.");
+            }
+        });
+
         // Forge with custom voice description text
         $(html).find('.vox-forge-with-desc').click(async (ev) => {
             const id = ev.currentTarget.dataset.actorId;
