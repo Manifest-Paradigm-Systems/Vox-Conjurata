@@ -1176,6 +1176,7 @@ class VoxVoiceManager extends Application {
         const deliveryMode = game.settings.get("vox-conjurata", "narratorDeliveryMode");
 
         let html = `
+            <style>.window-content { background: #1a1a1a !important; }</style>
             <div style="padding: 10px; background: #1a1a1a; color: #eee; height: 100%; display: flex; flex-direction: column; font-family: 'Signika', sans-serif;">
                 <div style="margin-bottom: 15px; border-bottom: 1px solid #ff6400; padding-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
                     <h2 style="margin: 0; color: #ff6400;"><i class="fas fa-dna"></i> Neural Voice Registry</h2>
