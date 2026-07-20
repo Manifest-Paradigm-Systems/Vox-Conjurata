@@ -186,11 +186,11 @@
   "yoAU5rWYH4KJGPr5": {
     "engine": "vox-audio-core",
     "seed_path": "yoAU5rWYH4KJGPr5.wav",
-    "voice_prompt": "Cloned voice from audio sample",
+    "voice_prompt": "",
     "is_archetype": false,
-    "archetype_key": "human_neutral_british",
-    "approved": false,
-    "created_at": "2026-07-20T04:08:41"
+    "archetype_key": "",
+    "approved": true,
+    "created_at": "2026-07-20T04:09:28"
   },
   "4phc6LZwKn14TrMY": {
     "engine": "vox-audio-core",
