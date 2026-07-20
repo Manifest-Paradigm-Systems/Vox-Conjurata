@@ -2115,10 +2115,12 @@ async function processAndSendAudio() {
             console.log(`🎙️ Vox | Received transcription: ${transcription}`);
             console.log(`🎙️ Vox | Audio Data present: ${!!audio_data}`);
 
-            // Store audio in global cache for chat play buttons
+            // Store audio in global cache for chat play buttons (capped at 10)
             if (audio_data) {
                 window.__voxAudio = window.__voxAudio || {};
                 window.__voxAudio[audio_data.slice(0,20)] = audio_data;
+                var _k = Object.keys(window.__voxAudio);
+                if (_k.length > 10) delete window.__voxAudio[_k[0]];
             }
             
             const deliveryMode = game.settings.get("vox-conjurata", "narratorDeliveryMode");
