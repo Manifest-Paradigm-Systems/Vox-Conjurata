@@ -10,14 +10,14 @@ const getSafeSetting = (scope, key, fallback = false) => {
 console.log("🚀 Vox-Conjurata: Script evaluation started.");
 
 // ── API Proxy ──
-// Route all /api/* fetch calls through Caddy on port 30001
-// so they reach the orchestrator. Foundry itself stays on port 30000.
+// Route all /api/* fetch calls directly to the orchestrator on port 8080.
+// No Caddy proxy needed for local development.
 (function() {
-    const CADDY_API = "http://localhost:30001";
+    const ORCHESTRATOR_API = "http://localhost:8080";
     const origFetch = globalThis.fetch;
     globalThis.fetch = function(url, opts) {
         if (typeof url === "string" && url.startsWith("/api/")) {
-            url = CADDY_API + url;
+            url = ORCHESTRATOR_API + url;
         }
         return origFetch.call(this, url, opts);
     };
