@@ -803,6 +803,29 @@ function updateIngestionProgress(current, total, name) {
             bar.style.transition = 'opacity 1s ease';
             setTimeout(() => bar.remove(), 1000);
         }, 3000);
+        // Inject Narrate button into chat bar directly (bypasses hooks)
+        setTimeout(function() {
+            var inp = document.getElementById("chat-message");
+            if (inp && !document.getElementById("vox-narrate-btn")) {
+                var btn = document.createElement("button");
+                btn.id = "vox-narrate-btn";
+                btn.textContent = "🔊 Narrate";
+                btn.title = "Speak text as Narrator";
+                btn.style.cssText = "height:26px;line-height:1;font-size:12px;padding:0 8px;background:#222;color:#ff6400;border:1px solid #ff6400;border-radius:3px;cursor:pointer;margin:0 4px;flex-shrink:0;";
+                btn.onclick = async function() {
+                    var t = inp.value.trim();
+                    if (!t) { ui.notifications.warn("Enter text."); return; }
+                    btn.disabled = true; btn.textContent = "...";
+                    try {
+                        var r = await fetch("/api/v1/tts-chunk", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({actor_id:"narrator", text:t, dsp_presets:{}})});
+                        var d = await r.json();
+                        if (d.status === "success" && d.audio_data) new Audio(d.audio_data).play();
+                    } catch(e) {}
+                    btn.disabled = false; btn.textContent = "🔊 Narrate";
+                };
+                inp.parentNode.insertBefore(btn, inp.nextSibling);
+            }
+        }, 5000);
     }
 }
 
