@@ -1385,8 +1385,7 @@ class VoxVoiceManager extends Application {
             }
         });
 
-        // Relink voice
- — change the actor ID this seed is registered under
+        // Relink voice — change the actor ID this seed is registered under
         $(html).find('.vox-relink-actor').click(async (ev) => {
             const oldId = ev.currentTarget.dataset.oldId;
             const input = $(html).find(`.vox-actor-id-input[value="${oldId}"]`);
