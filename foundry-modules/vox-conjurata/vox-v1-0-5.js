@@ -1765,54 +1765,74 @@ Hooks.on("renderActorSheet", (app, html, data) => {
     const actor = app.actor;
     if (!game.user.isGM && !actor.isOwner) return;
     
-    // Add a simple VOX button to the window header
-    var hdr = $(html).parents(".window-app,.app").first().find(".window-title");
-    if (!hdr.length) hdr = $(html).find(".sheet-header .window-title");
-    if (!hdr.length) return;
-    
-    var bid = "vox-hbtn-" + actor.id;
+    // Add a small VOX badge inside the sheet itself, near the top
+    const bid = "vox-sbtn-" + actor.id;
     if (document.getElementById(bid)) return;
     
-    var btn = $("<a id='" + bid + "' style='cursor:pointer;color:#ccc;font-size:12px;margin-left:8px;'>VOX</a>");
-    btn.click(function() {
-        var pid = "vox-hpanel-" + actor.id;
-        var p = $("#" + pid);
-        if (p.length) { p.toggle(); return; }
-        p = $("<div id='" + pid + "' style='position:fixed;z-index:1000;width:300px;background:#1a1a1a;border:1px solid #444;border-radius:6px;padding:12px;box-shadow:0 4px 20px rgba(0,0,0,0.8);font-size:12px;'>" +
-            "<div style='display:flex;justify-content:space-between;margin-bottom:8px;'><strong style='color:#ff6400;font-size:13px;'>Vox Voice</strong><span id='vox-hs-" + actor.id + "' style='color:#aaa;'>Status: Loading...</span></div>" +
+    const badge = document.createElement("span");
+    badge.id = bid;
+    badge.textContent = " VOX";
+    badge.style.cssText = "cursor:pointer;color:#ff6400;font-size:11px;font-weight:bold;margin-left:8px;";
+    badge.title = "Click for voice options";
+    
+    // Try multiple places to insert
+    const target = html[0]?.querySelector(".sheet-header, .window-title, .sheet-name, h1");
+    if (target) {
+        target.appendChild(badge);
+    } else {
+        html.find(".sheet-header, .window-title, h1, h2").first().append(badge);
+    }
+    
+    badge.onclick = function() {
+        const pid = "vox-spanel-" + actor.id;
+        let p = document.getElementById(pid);
+        if (p) { p.style.display = p.style.display === "none" ? "block" : "none"; return; }
+        
+        p = document.createElement("div");
+        p.id = pid;
+        p.style.cssText = "position:fixed;z-index:1000;width:300px;background:#1a1a1a;border:1px solid #444;border-radius:6px;padding:12px;box-shadow:0 4px 20px rgba(0,0,0,0.8);";
+        
+        const rect = badge.getBoundingClientRect();
+        p.style.top = (rect.bottom + 4) + "px";
+        p.style.left = Math.max(10, rect.left) + "px";
+        
+        p.innerHTML = "<div style='display:flex;justify-content:space-between;margin-bottom:8px;'><strong style='color:#ff6400;font-size:13px;'>Vox Voice</strong><span id='vox-ss-"+actor.id+"' style='color:#aaa;font-size:11px;'>Loading...</span></div>" +
             "<div style='display:flex;gap:4px;margin-bottom:6px;'>" +
-            "<button class='vox-hc' data-a='" + actor.id + "' style='height:24px;font-size:10px;flex:1;background:#004d00;color:#00ff88;border:1px solid #00aa44;border-radius:3px;cursor:pointer;'>Clone</button>" +
-            "<button class='vox-hf' data-a='" + actor.id + "' style='height:24px;font-size:10px;flex:1;background:#664400;color:#ffaa22;border:1px solid #aa7700;border-radius:3px;cursor:pointer;'>Forge</button>" +
-            "<button class='vox-ht' data-a='" + actor.id + "' style='height:24px;font-size:10px;flex:1;background:#222;color:#00ccff;border:1px solid #0088aa;border-radius:3px;cursor:pointer;'>Test</button></div>" +
-            "<textarea class='vox-hd' placeholder='Describe voice...' style='width:100%;height:36px;background:#222;color:#fff;border:1px solid #444;border-radius:3px;padding:3px 6px;font-size:11px;margin-bottom:4px;box-sizing:border-box;'></textarea>" +
-            "<input class='vox-hts' placeholder='Test sentence...' style='width:100%;background:#222;color:#fff;border:1px solid #444;border-radius:3px;padding:3px 6px;font-size:11px;box-sizing:border-box;'>" +
-            "</div>").appendTo("body");
+            "<button class='vox-sc' data-a='"+actor.id+"' data-n='"+actor.name+"' style='height:24px;font-size:10px;flex:1;background:#004d00;color:#00ff88;border:1px solid #00aa44;border-radius:3px;cursor:pointer;'>Clone</button>" +
+            "<button class='vox-sf' data-a='"+actor.id+"' style='height:24px;font-size:10px;flex:1;background:#664400;color:#ffaa22;border:1px solid #aa7700;border-radius:3px;cursor:pointer;'>Forge</button>" +
+            "<button class='vox-st2' data-a='"+actor.id+"' style='height:24px;font-size:10px;flex:1;background:#222;color:#00ccff;border:1px solid #0088aa;border-radius:3px;cursor:pointer;'>Test</button></div>" +
+            "<textarea class='vox-sd' placeholder='Describe voice...' style='width:100%;height:36px;background:#222;color:#fff;border:1px solid #444;border-radius:3px;padding:3px 6px;font-size:11px;margin-bottom:4px;box-sizing:border-box;'></textarea>" +
+            "<input class='vox-sts' placeholder='Test sentence...' style='width:100%;background:#222;color:#fff;border:1px solid #444;border-radius:3px;padding:3px 6px;font-size:11px;box-sizing:border-box;'>" +
+            "<div style='margin-top:4px;font-size:10px;color:#666;font-family:monospace;'>ID: "+actor.id+"</div>" +
+            "</div>";
+        document.body.appendChild(p);
         
-        var w = app.element && app.element.length ? app.element[0] : null;
-        if (w) { var r = w.getBoundingClientRect(); p.css({top:(r.top+40)+"px", left:(r.right-320)+"px"}); }
-        else p.css({top:"100px", right:"20px"});
+        p.querySelector(".vox-sc").onclick = function() {
+            document.dispatchEvent(new CustomEvent("vox-clone",{detail:{actorId:actor.id,name:actor.name}}));
+        };
+        p.querySelector(".vox-sf").onclick = async function() {
+            const d = p.querySelector(".vox-sd").value.trim();
+            if (!d) { ui.notifications.warn("Enter a description."); return; }
+            ui.notifications.info("Forging...");
+            const r = await fetch("/api/ingest-actor?force_refresh=true",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({actorId:actor.id,name:actor.name,lore:"",artPath:"",isMonster:false,customDescription:d,userId:game.user.id})});
+            if (r.ok) { ui.notifications.success("Voice forged!"); document.getElementById("vox-ss-"+actor.id).textContent = "Active"; }
+        };
+        p.querySelector(".vox-st2").onclick = async function() {
+            const t = p.querySelector(".vox-sts").value || "Hello, this is a voice test.";
+            const r = await fetch("/api/v1/tts-chunk",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({actor_id:actor.id,text:t,dsp_presets:{}})});
+            if (r.ok) { const d = await r.json(); if(d.audio_data) new Audio(d.audio_data).play(); }
+        };
         
-        p.find(".vox-hc").click(function() { document.dispatchEvent(new CustomEvent("vox-clone",{detail:{actorId:actor.id,name:actor.name}})); });
-        p.find(".vox-hf").click(async function() {
-            var d = p.find(".vox-hd").val().trim(); if(!d){ui.notifications.warn("Enter description.");return;}
-            var r = await fetch("/api/ingest-actor?force_refresh=true",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({actorId:actor.id,name:actor.name,lore:"",artPath:"",isMonster:false,customDescription:d,userId:game.user.id})});
-            if(r.ok){ui.notifications.success("Voice forged!");$("#vox-hs-"+actor.id).text("Active");}
-        });
-        p.find(".vox-ht").click(async function() {
-            var t = p.find(".vox-hts").val()||"Hello, voice test.";
-            var r = await fetch("/api/v1/tts-chunk",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({actor_id:actor.id,text:t,dsp_presets:{}})});
-            if(r.ok){var d=await r.json();if(d.audio_data)new Audio(d.audio_data).play();}
-        });
         updateVoxStatus(actor.id);
-    });
-    hdr.after(btn);
+    };
 });
 
 async function updateVoxStatus(actorId) {
     try {
         var r = await (await fetch("/api/v1/registry")).json();
         var e = r[actorId];
-        $("#vox-hs-" + actorId).text(e ? (e.approved ? "Active" : "Unapproved") : "No seed");
+        var el = document.getElementById("vox-ss-" + actorId);
+        if (el) el.textContent = e ? (e.approved ? "Active" : "Unapproved") : "No seed";
     } catch(e) {}
 }
 
