@@ -24,6 +24,6 @@
   },
   "default": {
     "strategy": "latency",
-    "model": "sao10k/l3.1-euryale-70b"
+    "model": "openai/gpt-4o-mini"
   }
 }
