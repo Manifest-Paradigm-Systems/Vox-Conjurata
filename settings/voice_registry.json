@@ -225,9 +225,9 @@
     "approved": false,
     "created_at": "2026-07-20T04:04:42"
   },
-  "yActor.yoAU5rWYH4KJGPr5oAU5rWYH4KJGPr5": {
+  "Actor.yoAU5rWYH4KJGPr5": {
     "engine": "vox-audio-core",
-    "seed_path": "yActor.yoAU5rWYH4KJGPr5oAU5rWYH4KJGPr5.wav",
+    "seed_path": "Actor.yoAU5rWYH4KJGPr5.wav",
     "voice_prompt": "",
     "is_archetype": false,
     "archetype_key": "",
