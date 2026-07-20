@@ -2114,6 +2114,12 @@ async function processAndSendAudio() {
                         const { transcription, audio_data, engine, voxType, ai_reply } = d;
             console.log(`🎙️ Vox | Received transcription: ${transcription}`);
             console.log(`🎙️ Vox | Audio Data present: ${!!audio_data}`);
+
+            // Store audio in global cache for chat play buttons
+            if (audio_data) {
+                window.__voxAudio = window.__voxAudio || {};
+                window.__voxAudio[audio_data.slice(0,20)] = audio_data;
+            }
             
             const deliveryMode = game.settings.get("vox-conjurata", "narratorDeliveryMode");
             const isNarrator = activeActorId === 'narrator';
