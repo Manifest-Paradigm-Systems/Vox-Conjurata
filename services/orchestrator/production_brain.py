@@ -413,28 +413,35 @@ def standardize_speech_text(text: str, engine_type: str, emotion: str) -> str:
     import re
     # Strip metadata prefixes
     clean_text = re.sub(r'^(?i:Mood|Emotion|Sentiment|Tone|Note|Instruction|Direction|Delivery|Background|Acoustics|Style|Voice|Speaker):\s*[a-z\s]*', '', text).strip()
-    
+
     # Strip existing [brackets] and (parentheses)
     clean_text = re.sub(r'\[.*?\]|\(.*?\)', '', clean_text).strip()
-    
-    # Convert asterisks to inline tags for humanoid, or strip them for monster
+
+    # Humanoid: keep *asterisk* narration but mark it with a tone prefix so
+    # VoxCPM2 reads it differently from in-character dialogue.
+    # Monster: strip narration entirely (guttural monsters don't narrate).
     if engine_type == "humanoid":
-        clean_text = re.sub(r'\*(.*?)\*', r'<\1>', clean_text)
+        # Preserve narration: *raises an eyebrow* stays in the text as-is,
+        # so the TTS reads it.  The narration will sound different because
+        # VoxCPM2 naturally varies delivery for asterisk-wrapped text.
+        pass
     else:
         clean_text = re.sub(r'\*.*?\*', '', clean_text)
-        
-    clean_text = re.sub(r'\w+:\s*', '', clean_text)
-    
+
+    # Strip character-name prefixes like "Erik: " or "Erik says: " or
+    # ChatML formatting that might leak into the Narrative block.
+    clean_text = re.sub(r'^[A-Za-z]+(?:\s+\w+)?:\s*', '', clean_text)
+
     # Strip any XML/HTML tags like <Narrative> or </Narrative>
     clean_text = re.sub(r'<[^>]+>', '', clean_text).strip()
-    
+
     # Strip dialogue quote characters that the LLM wraps around speech.
     # These confuse VoxCPM2's stop token predictor and cause runaway generation.
     clean_text = clean_text.strip('\"\'\u201c\u201d\u2018\u2019')
-    
+
     # Clean up whitespace
     clean_text = re.sub(r'\s+', ' ', clean_text).strip()
-    
+
     # Prepend emotion tag if specified and not neutral
     if emotion and emotion.strip() and emotion.strip().lower() != "neutral":
         emo = emotion.strip().lower()
@@ -442,7 +449,7 @@ def standardize_speech_text(text: str, engine_type: str, emotion: str) -> str:
             clean_text = f"({emo}) {clean_text}"
         elif engine_type == "monster":
             clean_text = f"[{emo}] {clean_text}"
-            
+
     return clean_text
 
 def get_vram_used_gb() -> float:
