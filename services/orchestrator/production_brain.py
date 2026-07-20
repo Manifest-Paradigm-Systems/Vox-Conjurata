@@ -312,6 +312,7 @@ PALETTE_DEFINITIONS: dict[str, str] = {
     "monster_demon":   "[Arabic accent, extreme demonic multi-layered distortion, infernal guttural growl] The shadows of the abyss are infinite.",
     "monster_goblin":  "[extreme high-pitched nasally screech, manic chittering rapid-fire] Look what we found! A shiny toy for the pot!",
     "narrator":        "[Deep cinematic male narrator, neutral accent, clear, authoritative, slightly resonant] The world was young once, and the stars were bright.",
+    "human_neutral_british": "[British accent, neutral, clear, warm, medium pitch, well-modulated] The path ahead is unclear, but we must press forward together.",
 }
 
 def resolve_archetype(actor_data: ActorMetadata, vocal_profile: dict) -> str:
@@ -319,8 +320,8 @@ def resolve_archetype(actor_data: ActorMetadata, vocal_profile: dict) -> str:
     race = stats.get("race", "").lower().strip()
     gender = vocal_profile.get("gender", "unknown").lower().strip()
     if gender not in ("male", "female"):
-        logger.warning(f"Unknown gender '{gender}' for {actor_data.name}, defaulting to female (check character sheet)")
-        gender = "female"
+        logger.info(f"No gender info for {actor_data.name}, using neutral voice")
+        gender = "neutral"
     description = vocal_profile.get("description", "").lower()
     name_lore = (actor_data.name + " " + actor_data.lore).lower()
     is_elder = any(w in description or w in name_lore for w in ["elder", "old ", "ancient", "aged", "venerable", "wizened"])
