@@ -1800,6 +1800,7 @@ Hooks.on("renderActorSheet", async (app, html, data) => {
                 <textarea class="vox-description" style="width:100%;min-height:50px;background:#222;color:#fff;border:1px solid #333;font-size:12px;">${dspFlags.voice_description||""}</textarea>
             </div>
         </div>`;
+        var panel = $(panelHtml);
         // Insert after sheet header or main tab content
         const sheetHeader = $(html).find('.sheet-header, .sheet-tabs, .tab.active, .window-content > form').first();
         if (sheetHeader.length) {
