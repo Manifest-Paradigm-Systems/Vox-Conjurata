@@ -1862,8 +1862,21 @@ async function onReady() {
     if (globalThis.voxReadyExecuted) return; globalThis.voxReadyExecuted = true;
     if (game.user.isGM) {
         await scanActiveSceneTokens();
-        // Ensure Live Panel button is added
         if (ui.controls) ui.controls.render();
+        // Fallback: directly inject Manage Vox Voices button into Actors tab
+        setTimeout(() => {
+            const actorsTab = document.querySelector("#actors");
+            if (actorsTab && !actorsTab.querySelector(".vox-registry-btn")) {
+                const btn = document.createElement("button");
+                btn.className = "vox-registry-btn";
+                btn.innerHTML = '<i class="fas fa-dna"></i> Manage Vox Voices';
+                btn.style.cssText = "margin:5px 0;width:calc(100% - 10px);cursor:pointer;background:#333;color:#ff6400;border:1px solid #ff6400;border-radius:4px;padding:6px;font-size:13px;";
+                btn.onclick = () => new VoxVoiceManager().render(true);
+                const footer = actorsTab.querySelector(".directory-footer");
+                if (footer) footer.prepend(btn);
+                else actorsTab.querySelector(".directory-list")?.after(btn);
+            }
+        }, 3000);
     }
 }
 
