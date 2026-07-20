@@ -1607,9 +1607,10 @@ async def clone_voice(request: Request):
         # Send to vox-audio-core's seed-from-audio endpoint
         async with httpx.AsyncClient(timeout=30.0) as client:
             files = {"audio": ("clone.wav", raw, "audio/wav")}
+            data = {"npc_id": actor_id}
             resp = await client.post(
-                f"{TTS_ACTOR_URL}/seed-from-audio?npc_id={actor_id}",
-                files=files
+                f"{TTS_ACTOR_URL}/seed-from-audio",
+                files=files, data=data
             )
             if resp.status_code == 200:
                 register_character_voice(
