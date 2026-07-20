@@ -1195,10 +1195,15 @@ class VoxVoiceManager extends Application {
                         <div style="font-size: 11px; color: #aaa; font-style: italic;">
                             ${narratorEntry ? `"${narratorEntry.voice_prompt}"` : 'No narrator voice profile forged yet.'}
                         </div>
+                        <div style="margin-top: 8px;">
+                            <label style="font-size: 11px; color: #ccc; display: block; margin-bottom: 4px;">Voice Description (used on re-forge):</label>
+                            <textarea class="vox-narrator-desc" style="width: 100%; background: #222; color: #eee; border: 1px solid #444; border-radius: 4px; padding: 6px; font-size: 12px; resize: vertical; min-height: 50px;" placeholder="Describe the narrator voice you want...">${game.settings.get("vox-conjurata", "narratorVoiceDesc") || ''}</textarea>
+                        </div>
                     </div>
 
                     <div style="display: flex; gap: 8px;">
                         ${narratorEntry ? `<button class="vox-play-seed" data-actor-id="narrator" style="height: 28px; line-height: 1; font-size: 12px; flex: 1; background: #222;"><i class="fas fa-play"></i> Preview</button>` : ''}
+                        <button class="vox-save-narrator-desc" style="height: 28px; line-height: 1; font-size: 12px; flex: 1; background: #333; color: #ff6400; border: 1px solid #ff6400;"><i class="fas fa-save"></i> Save</button>
                         <button class="vox-regen-actor" data-actor-id="narrator" style="height: 28px; line-height: 1; font-size: 12px; flex: 2; background: #b34a00; color: white;"><i class="fas fa-redo"></i> Re-Forge Narrator</button>
                     </div>
                 </div>
@@ -1246,6 +1251,35 @@ class VoxVoiceManager extends Application {
 
         $(html).find('.vox-regen-actor').click(async (ev) => {
             const id = ev.currentTarget.dataset.actorId;
+
+            // Narrator doesn't have a token — forge directly with custom description
+            if (id === "narrator") {
+                const desc = game.settings.get("vox-conjurata", "narratorVoiceDesc") || "Deep cinematic male narrator, neutral accent, clear, authoritative, slightly resonant";
+                ui.notifications.info("🎙️ Forging narrator voice...");
+                try {
+                    const resp = await fetch("/api/ingest-actor?force_refresh=true", {
+                        method: "POST", headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            actorId: "narrator", name: "Narrator",
+                            lore: "The narrator of the story.",
+                            artPath: "", isMonster: false,
+                            customDescription: desc,
+                            userId: game.user.id
+                        })
+                    });
+                    if (resp.ok) {
+                        ui.notifications.info("✅ Narrator voice forged!");
+                        this.render(true);
+                    } else {
+                        ui.notifications.error("Failed to forge narrator voice.");
+                    }
+                } catch (e) {
+                    console.error(e);
+                    ui.notifications.error("Network error during narrator forge.");
+                }
+                return;
+            }
+
             const token = canvas.tokens.placeables.find(t => t.actor?.id === id);
             if (!token) {
                 ui.notifications.warn("⚠️ Character token must be on the current scene to re-forge.");
@@ -1273,8 +1307,15 @@ class VoxVoiceManager extends Application {
                 ui.notifications.error("Network error during re-forge.");
             }
         });
-    }
-}
+
+        // Save narrator voice description
+        $(html).find('.vox-save-narrator-desc').click(async (ev) => {
+            const desc = $(html).find('.vox-narrator-desc').val();
+            await game.settings.set("vox-conjurata", "narratorVoiceDesc", desc);
+            ui.notifications.info("✅ Narrator voice description saved.");
+            // Re-render to show updated description
+            this.render(true);
+        });
 
 /**
  * Autonomous Update Listener
