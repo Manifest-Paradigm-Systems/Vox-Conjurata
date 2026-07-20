@@ -1439,86 +1439,86 @@ Hmm, I wonder what secrets lie beyond that door.
 Together, we can face whatever comes our way.
 (warm, determined)`;
 
-            // First, prompt the user with a dialog showing the script
-            const ready = await new Promise((resolve) => {
-                new Dialog({
-                    title: `Clone Voice: ${name}`,
-                    content: `
-                        <div style="padding: 10px;">
-                            <p style="margin-bottom: 10px; color: #ccc;">Read the following script aloud to capture emotional range. The recording will take about 30 seconds.</p>
-                            <div style="background: #111; border: 1px solid #444; border-radius: 6px; padding: 12px; margin-bottom: 12px; font-family: 'Courier New', monospace; font-size: 13px; line-height: 1.6; white-space: pre-wrap; color: #ddd;">
+            // Show a persistent dialog with the script — stays open during recording
+            // so the user can read from it. Closes only when recording finishes.
+            let recording = false;
+            const dlg = new Dialog({
+                title: `Clone Voice: ${name}`,
+                content: `
+                    <div style="padding: 10px;">
+                        <p style="margin-bottom: 10px; color: #ccc;">Read the following script aloud to capture emotional range. The recording will take about 30 seconds.</p>
+                        <div id="vox-clone-script" style="background: #111; border: 1px solid #444; border-radius: 6px; padding: 12px; margin-bottom: 12px; font-family: 'Courier New', monospace; font-size: 13px; line-height: 1.6; white-space: pre-wrap; color: #ddd;">
 ${CLONE_SCRIPT}
-                            </div>
-                            <p style="color: #888; font-size: 11px;">Click <strong>Start Recording</strong> when ready, then read the script naturally. A 5-second countdown will appear.</p>
                         </div>
-                    `,
-                    buttons: {
-                        cancel: { label: "Cancel", callback: () => resolve(false) },
-                        record: { label: "🎙️ Start Recording", callback: () => resolve(true) }
-                    },
-                    default: "record"
-                }).render(true);
-            });
-            if (!ready) return;
+                        <p id="vox-clone-status" style="color: #ff6400; font-weight: bold; text-align: center;">Click Start Recording when ready.</p>
+                    </div>
+                `,
+                buttons: {
+                    cancel: { label: "Cancel", callback: () => {} },
+                    record: {
+                        label: "🎙️ Start Recording",
+                        callback: async () => {
+                            if (recording) return;
+                            recording = true;
 
-            // Request mic access
-            let stream;
-            try {
-                stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            } catch (e) {
-                ui.notifications.error("🎙️ Microphone access denied.");
-                return;
-            }
+                            // Request mic access
+                            let stream;
+                            try {
+                                stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                            } catch (e) {
+                                ui.notifications.error("🎙️ Microphone access denied.");
+                                recording = false;
+                                dlg.close();
+                                return;
+                            }
 
-            // 5-second countdown
-            for (let i = 5; i > 0; i--) {
-                ui.notifications.info(`⏱️ Recording starts in ${i}...`);
-                await new Promise(r => setTimeout(r, 1000));
-            }
+                            // Update dialog: 5-second countdown (script stays visible)
+                            const statusEl = document.getElementById("vox-clone-status");
+                            for (let i = 5; i > 0; i--) {
+                                if (statusEl) statusEl.textContent = `⏱️ Recording starts in ${i}...`;
+                                await new Promise(r => setTimeout(r, 1000));
+                            }
 
-            const chunks = [];
-            const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-            recorder.ondataavailable = (e) => chunks.push(e.data);
-            recorder.onstop = async () => {
-                const blob = new Blob(chunks, { type: 'audio/webm' });
-                const formData = new FormData();
-                formData.append("audio_blob", blob, "recording.webm");
-                formData.append("actorId", actorId);
+                            const chunks = [];
+                            const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+                            recorder.ondataavailable = (e) => chunks.push(e.data);
+                            recorder.onstop = async () => {
+                                if (statusEl) statusEl.textContent = '⏳ Processing recording...';
+                                const blob = new Blob(chunks, { type: 'audio/webm' });
+                                const formData = new FormData();
+                                formData.append("audio_blob", blob, "recording.webm");
+                                formData.append("actorId", actorId);
 
-                ui.notifications.info(`🎙️ Processing voice clone for ${name}...`);
-                try {
-                    const resp = await fetch("/api/clone-voice", {
-                        method: "POST", body: formData
-                    });
-                    if (resp.ok) {
-                        ui.notifications.success(`✅ Voice cloned for ${name}!`);
-                        // Auto-play the seed for approval
-                        setTimeout(() => {
-                            const audio = new Audio(`/api/v1/registry/audio/${actorId}?t=${Date.now()}`);
-                            audio.play().catch(() => {});
-                        }, 500);
-                        // Show approval notification
-                        ui.notifications.info(`👂 Listen to the preview above, then click "Approve" if it sounds good.`);
-                        this.render(true);
-                    } else {
-                        ui.notifications.error("❌ Voice cloning failed.");
+                                try {
+                                    const resp = await fetch("/api/clone-voice", {
+                                        method: "POST", body: formData
+                                    });
+                                    if (resp.ok) {
+                                        ui.notifications.success(`✅ Voice cloned for ${name}!`);
+                                        setTimeout(() => {
+                                            const audio = new Audio(\`/api/v1/registry/audio/${actorId}?t=\${Date.now()}\`);
+                                            audio.play().catch(() => {});
+                                        }, 500);
+                                    } else {
+                                        ui.notifications.error("❌ Voice cloning failed.");
+                                    }
+                                } catch (e) {
+                                    ui.notifications.error("❌ Network error during cloning.");
+                                }
+                                stream.getTracks().forEach(t => t.stop());
+                                recording = false;
+                                dlg.close();
+                            };
+
+                            if (statusEl) statusEl.textContent = '🔴 Recording... read the script above naturally.';
+                            recorder.start();
+                            setTimeout(() => { recorder.stop(); recording = false; }, 35000);
+                        }
                     }
-                } catch (e) {
-                    ui.notifications.error("❌ Network error during cloning.");
-                }
-                stream.getTracks().forEach(t => t.stop());
-            };
-
-            ui.notifications.info(`🎙️ Recording for ${name} — read the script naturally...`);
-            recorder.start();
-            setTimeout(() => recorder.stop(), 35000); // 35 seconds to read the script
-
-            // Visual feedback — show recording time remaining
-            const btn = ev.currentTarget;
-            const orig = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-circle" style="color: #ff4444;"></i> Recording (35s)...';
-            btn.disabled = true;
-            setTimeout(() => { btn.innerHTML = orig; btn.disabled = false; }, 40000);
+                },
+                default: "record"
+            });
+            dlg.render(true);
         });
 
     } // activateListeners
