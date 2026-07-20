@@ -1635,7 +1635,8 @@ async function captureAndScanMap() {
         }
     } catch (err) { console.error("❌ Vox Scan fail:", err); }
 }
-globalThis.VoxVoiceManager = VoxVoiceManager;
+// Expose class so the console command works: new VoxVoiceManager().render(true)
+Hooks.once("ready", () => { globalThis.VoxVoiceManager = VoxVoiceManager; });
 
 Hooks.on("getSceneControlButtons", (controls) => {
     
