@@ -1266,6 +1266,14 @@ class VoxVoiceManager extends Application {
             audio.play().catch(e => ui.notifications.error("Failed to play preview audio."));
         });
 
+        // Search/filter the character seeds list
+        $(html).find('#vox-seed-search').on('keyup', function() {
+            const query = $(this).val().toLowerCase();
+            $('#vox-seed-list li').each(function() {
+                $(this).toggle($(this).text().toLowerCase().includes(query));
+            });
+        });
+
         $(html).find('.vox-regen-actor').click(async (ev) => {
             const id = ev.currentTarget.dataset.actorId;
 
