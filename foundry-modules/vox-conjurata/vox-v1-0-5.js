@@ -1839,9 +1839,6 @@ async function updateVoxStatus(actorId) {
     } catch(e) { el.textContent = "Error"; }
 }
 
-    });
-});
-
 // Add Manage Vox Voices button to the Actors sidebar tab.
 Hooks.on("renderSidebarTab", (app, html, data) => {
     const tabId = app.options?.id || app.tabName || "";
