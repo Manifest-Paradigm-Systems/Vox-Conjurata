@@ -2132,7 +2132,7 @@ async function processAndSendAudio() {
             if (audio_data && !shouldWhisper) await playAudio(audio_data, 1.0);
             
             const chatData = {
-                content: audio_data ? `<div style="display:flex;align-items:center;gap:8px;"><button class="vox-chat-play" data-id="${audio_data.slice(0,20)}" style="height:20px;line-height:1;font-size:10px;padding:0 8px;background:#222;color:#00ccff;border:1px solid #0088aa;border-radius:3px;cursor:pointer;flex-shrink:0;">🔊</button><span style="flex:1;">${transcription}</span></div>` : transcription,
+                content: `<div style="display:flex;align-items:center;gap:8px;"><button class="vox-chat-play" data-text="${transcription.replace(/"/g,'&quot;')}" data-actor="${activeActorId}" style="height:20px;line-height:1;font-size:10px;padding:0 8px;background:#222;color:#00ccff;border:1px solid #0088aa;border-radius:3px;cursor:pointer;flex-shrink:0;">🔊</button><span style="flex:1;">${transcription}</span></div>`,
                 speaker: { actor: isNarrator ? null : activeActorId, alias: activeSpeakerName },
                 flags: { "vox-conjurata": { type: voxType, audioUrl: audio_data, engine: engine } }
             };
