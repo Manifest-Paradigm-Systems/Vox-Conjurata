@@ -1244,9 +1244,9 @@ class VoxVoiceManager extends Application {
                         ${entry.approved ? `<span style="flex:1;text-align:center;font-size:11px;color:#00ff88;line-height:26px;"><i class="fas fa-check-circle"></i> Approved</span>` : `<button class="vox-approve-voice" data-actor-id="${entry.id}" style="height:26px;line-height:1;font-size:11px;flex:1;background:#003300;color:#00ff88;border:1px solid #00aa44;"><i class="fas fa-thumbs-up"></i> Approve</button>`}
                         <button class="vox-regen-actor" data-actor-id="${entry.id}" style="height: 26px; line-height: 1; font-size: 11px; flex: 1; background: #b34a00; color: white;"><i class="fas fa-redo"></i> Re-Forge</button>
                     </div>
-                    <div style="display:flex;gap:4px;margin-top:4px;align-items:center;">
-                        <input type="text" class="vox-actor-id-input" value="${entry.id}" style="flex:1;background:#222;color:#aaa;border:1px solid #444;border-radius:4px;padding:1px 4px;font-size:9px;font-family:monospace;height:18px;">
-                        <button class="vox-relink-actor" data-old-id="${entry.id}" style="height:16px;line-height:1;font-size:8px;padding:0 3px;background:#333;color:#ffaa22;border:1px solid #887700;border-radius:3px;cursor:pointer;"><i class="fas fa-link"></i></button>
+                    <div style="display:flex;gap:6px;margin-top:4px;align-items:center;">
+                        <input type="text" class="vox-actor-id-input" value="${entry.id}" style="flex:1;background:#222;color:#ccc;border:1px solid #555;border-radius:4px;padding:3px 6px;font-size:11px;font-family:monospace;">
+                        <button class="vox-relink-actor" data-old-id="${entry.id}" style="height:14px;line-height:1;font-size:7px;padding:0 2px;min-width:0;width:18px;background:#333;color:#ffaa22;border:1px solid #887700;border-radius:3px;cursor:pointer;"><i class="fas fa-link"></i></button>
                     </div>
                 </li>
             `;
