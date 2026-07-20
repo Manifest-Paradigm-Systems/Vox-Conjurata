@@ -1350,7 +1350,14 @@ async def ingest_actor(data: ActorMetadata, force_refresh: bool = False):
         raise HTTPException(status_code=402, detail=str(e))
 
     is_named = is_named_character(data)
-    profile = await generate_vocal_profile(data)
+    # If a custom voice description is provided (e.g. from the narrator settings
+    # panel or /vox voice command), use it directly instead of calling the LLM.
+    # This gives GMs full control over the narrator's voice character.
+    if data.customDescription and data.customDescription.strip():
+        profile = {"gender": "neutral", "description": data.customDescription.strip()}
+        logger.info(f"🎙️ Using custom voice description for {data.name}: '{profile['description'][:60]}'")
+    else:
+        profile = await generate_vocal_profile(data)
     archetype = resolve_archetype(data, profile)
     
     # Charge for TTS Initialization
