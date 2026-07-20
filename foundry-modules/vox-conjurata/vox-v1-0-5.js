@@ -1233,6 +1233,10 @@ class VoxVoiceManager extends Application {
                         <input type="text" class="vox-voice-desc-input" data-actor-id="${entry.id}" placeholder="Describe voice (e.g. 'deep gravelly, like a veteran soldier')" style="width: 100%; background: #222; color: #eee; border: 1px solid #444; border-radius: 4px; padding: 4px 8px; font-size: 12px; box-sizing: border-box;">
                         <button class="vox-forge-with-desc" data-actor-id="${entry.id}" data-name="${name}" style="height: 24px; line-height: 1; font-size: 11px; background: #664400; color: #ffaa22; border: 1px solid #aa7700;"><i class="fas fa-pen"></i> Forge with Description</button>
                     </div>
+                    <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+                        <input type="text" class="vox-tts-test-input" data-actor-id="${entry.id}" placeholder="Type test sentence, then click play..." style="flex: 1; background: #222; color: #eee; border: 1px solid #444; border-radius: 4px; padding: 4px 8px; font-size: 12px;">
+                        <button class="vox-tts-test-play" data-actor-id="${entry.id}" style="height: 26px; line-height: 1; font-size: 11px; flex: 0 0 auto; background: #222; color: #00ccff; border: 1px solid #0088aa;"><i class="fas fa-play"></i> Test</button>
+                    </div>
                     <div style="display: flex; gap: 8px;">
                         <button class="vox-play-seed" data-actor-id="${entry.id}" style="height: 26px; line-height: 1; font-size: 11px; flex: 1; background: #222;"><i class="fas fa-play"></i> Preview</button>
                         <button class="vox-clone-mic" data-actor-id="${entry.id}" data-name="${name}" style="height: 26px; line-height: 1; font-size: 11px; flex: 1; background: #004d00; color: #00ff88; border: 1px solid #00aa44;"><i class="fas fa-microphone"></i> Clone</button>
