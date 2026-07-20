@@ -5,21 +5,21 @@
     "gm": 979.7102499999966,
     "G3SJW9rRHe7J3AOH": 204.97100000000003,
     "nXnKU6oZYzdg0xSY": 19.891499999999994,
-    "m6nkAzEdfbjIGhdz": 0.9197500000000006
+    "m6nkAzEdfbjIGhdz": 0.9175000000000006
   },
   "session_allowances": {
     "G3SJW9rRHe7J3AOH": 0.0,
-    "gm": 99.23974999999966
+    "gm": 99.23624999999966
   },
   "session_caps": {
     "G3SJW9rRHe7J3AOH": 0.0,
     "gm": 100.0
   },
   "session_spent": {
-    "gm": 0.7602499999999994,
+    "gm": 0.7637499999999994,
     "G3SJW9rRHe7J3AOH": 0.028999999999999998,
     "nXnKU6oZYzdg0xSY": 0.11075000000000006,
-    "m6nkAzEdfbjIGhdz": 0.08025000000000003
+    "m6nkAzEdfbjIGhdz": 0.08250000000000003
   },
   "transactions": [
     {
@@ -2763,6 +2763,18 @@
       "amount": 0.003,
       "description": "AI Orchestration Fee: Ezren",
       "timestamp": 1784510299.8787413
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.0035,
+      "description": "Autonomous NPC Reply: Captain Lamperia Bane",
+      "timestamp": 1784510309.3416514
+    },
+    {
+      "user_id": "m6nkAzEdfbjIGhdz",
+      "amount": 0.00225,
+      "description": "AI Orchestration Fee: Ezren",
+      "timestamp": 1784510327.015697
     }
   ]
 }
