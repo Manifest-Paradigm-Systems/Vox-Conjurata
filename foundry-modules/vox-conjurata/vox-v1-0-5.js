@@ -1419,106 +1419,90 @@ class VoxVoiceManager extends Application {
             const actorId = ev.currentTarget.dataset.actorId;
             const name = ev.currentTarget.dataset.name || actorId;
 
-            // Voice cloning script that captures a range of emotions
             const CLONE_SCRIPT =
-`Welcome, friend. It's good to see you.
-(neutral, warm)
+`Welcome, friend. It's good to see you.    (neutral, warm)
+I can't believe this is happening! This is incredible news!    (happy, excited)
+Why would you do this? After everything we've been through...    (sad, hurt)
+Enough! This ends now. You will not take another step forward.    (angry, commanding)
+Hmm, I wonder what secrets lie beyond that door.    (curious, thoughtful)
+Together, we can face whatever comes our way.    (warm, determined)`;
 
-I can't believe this is happening! This is incredible news!
-(happy, excited)
-
-Why would you do this? After everything we've been through...
-(sad, hurt)
-
-Enough! This ends now. You will not take another step forward.
-(angry, commanding)
-
-Hmm, I wonder what secrets lie beyond that door.
-(curious, thoughtful)
-
-Together, we can face whatever comes our way.
-(warm, determined)`;
-
-            // Show a persistent dialog with the script — stays open during recording
-            // so the user can read from it. Closes only when recording finishes.
-            let recording = false;
-            const dlg = new Dialog({
-                title: `Clone Voice: ${name}`,
-                content: `
-                    <div style="padding: 10px;">
-                        <p style="margin-bottom: 10px; color: #ccc;">Read the following script aloud to capture emotional range. The recording will take about 30 seconds.</p>
-                        <div id="vox-clone-script" style="background: #111; border: 1px solid #444; border-radius: 6px; padding: 12px; margin-bottom: 12px; font-family: 'Courier New', monospace; font-size: 13px; line-height: 1.6; white-space: pre-wrap; color: #ddd;">
-${CLONE_SCRIPT}
+            // Floating overlay — stays open until recording finishes (Foundry Dialog
+            // auto-closes on button click, which would hide the script text).
+            const overlay = document.createElement("div");
+            overlay.id = "vox-clone-overlay";
+            overlay.innerHTML = `
+                <div style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:center;justify-content:center;">
+                    <div style="background:#1a1a1a;border:1px solid #ff6400;border-radius:8px;padding:20px;max-width:600px;width:90%;max-height:80vh;overflow-y:auto;color:#eee;font-family:'Signika',sans-serif;">
+                        <h2 style="color:#ff6400;margin:0 0 10px 0;"><i class="fas fa-microphone"></i> Clone Voice: ${name}</h2>
+                        <p style="color:#aaa;font-size:12px;margin-bottom:10px;">Read this script aloud to capture emotional range (~30 seconds).</p>
+                        <div style="background:#111;border:1px solid #444;border-radius:6px;padding:12px;margin-bottom:12px;font-family:'Courier New',monospace;font-size:13px;line-height:1.8;white-space:pre-wrap;color:#ddd;">${CLONE_SCRIPT}</div>
+                        <p id="vox-clone-status" style="color:#ff6400;font-weight:bold;text-align:center;font-size:14px;">Click Start Recording when ready.</p>
+                        <div style="display:flex;gap:8px;justify-content:center;margin-top:12px;">
+                            <button id="vox-clone-cancel" style="padding:8px 20px;background:#444;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancel</button>
+                            <button id="vox-clone-start" style="padding:8px 20px;background:#b34a00;color:#fff;border:none;border-radius:4px;cursor:pointer;">🎙️ Start Recording</button>
                         </div>
-                        <p id="vox-clone-status" style="color: #ff6400; font-weight: bold; text-align: center;">Click Start Recording when ready.</p>
                     </div>
-                `,
-                buttons: {
-                    cancel: { label: "Cancel", callback: () => {} },
-                    record: {
-                        label: "🎙️ Start Recording",
-                        callback: async () => {
-                            if (recording) return;
-                            recording = true;
+                </div>`;
+            document.body.appendChild(overlay);
 
-                            // Request mic access
-                            let stream;
-                            try {
-                                stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                            } catch (e) {
-                                ui.notifications.error("🎙️ Microphone access denied.");
-                                recording = false;
-                                dlg.close();
-                                return;
-                            }
+            document.getElementById("vox-clone-cancel").onclick = () => overlay.remove();
+            document.getElementById("vox-clone-start").onclick = async () => {
+                const btn = document.getElementById("vox-clone-start");
+                if (btn.disabled) return;
+                btn.disabled = true;
+                document.getElementById("vox-clone-cancel").disabled = true;
 
-                            // Update dialog: 5-second countdown (script stays visible)
-                            const statusEl = document.getElementById("vox-clone-status");
-                            for (let i = 5; i > 0; i--) {
-                                if (statusEl) statusEl.textContent = `⏱️ Recording starts in ${i}...`;
-                                await new Promise(r => setTimeout(r, 1000));
-                            }
+                const statusEl = document.getElementById("vox-clone-status");
+                statusEl.textContent = "Requesting microphone...";
 
-                            const chunks = [];
-                            const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-                            recorder.ondataavailable = (e) => chunks.push(e.data);
-                            recorder.onstop = async () => {
-                                if (statusEl) statusEl.textContent = '⏳ Processing recording...';
-                                const blob = new Blob(chunks, { type: 'audio/webm' });
-                                const formData = new FormData();
-                                formData.append("audio_blob", blob, "recording.webm");
-                                formData.append("actorId", actorId);
+                let stream;
+                try {
+                    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                } catch (e) {
+                    ui.notifications.error("🎙️ Microphone access denied.");
+                    overlay.remove();
+                    return;
+                }
 
-                                try {
-                                    const resp = await fetch("/api/clone-voice", {
-                                        method: "POST", body: formData
-                                    });
-                                    if (resp.ok) {
-                                        ui.notifications.success(`✅ Voice cloned for ${name}!`);
-                                        setTimeout(() => {
-                                            const audio = new Audio(`/api/v1/registry/audio/${actorId}?t=${Date.now()}`);
-                                            audio.play().catch(() => {});
-                                        }, 500);
-                                    } else {
-                                        ui.notifications.error("❌ Voice cloning failed.");
-                                    }
-                                } catch (e) {
-                                    ui.notifications.error("❌ Network error during cloning.");
-                                }
-                                stream.getTracks().forEach(t => t.stop());
-                                recording = false;
-                                dlg.close();
-                            };
+                for (let i = 5; i > 0; i--) {
+                    statusEl.textContent = `⏱️ Recording starts in ${i}...`;
+                    await new Promise(r => setTimeout(r, 1000));
+                }
 
-                            if (statusEl) statusEl.textContent = '🔴 Recording... read the script above naturally.';
-                            recorder.start();
-                            setTimeout(() => { recorder.stop(); recording = false; }, 35000);
+                const chunks = [];
+                const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+                recorder.ondataavailable = (e) => chunks.push(e.data);
+                recorder.onstop = async () => {
+                    statusEl.textContent = '⏳ Processing...';
+                    const blob = new Blob(chunks, { type: 'audio/webm' });
+                    const formData = new FormData();
+                    formData.append("audio_blob", blob, "recording.webm");
+                    formData.append("actorId", actorId);
+
+                    try {
+                        const resp = await fetch("/api/clone-voice", {
+                            method: "POST", body: formData
+                        });
+                        if (resp.ok) {
+                            ui.notifications.success(`✅ Voice cloned for ${name}!`);
+                            setTimeout(() => {
+                                new Audio(`/api/v1/registry/audio/${actorId}?t=${Date.now()}`).play();
+                            }, 500);
+                        } else {
+                            ui.notifications.error("❌ Voice cloning failed.");
                         }
+                    } catch (e) {
+                        ui.notifications.error("❌ Network error.");
                     }
-                },
-                default: "record"
-            });
-            dlg.render(true);
+                    stream.getTracks().forEach(t => t.stop());
+                    overlay.remove();
+                };
+
+                statusEl.textContent = '🔴 Recording... read the script above.';
+                recorder.start();
+                setTimeout(() => recorder.stop(), 35000);
+            };
         });
 
     } // activateListeners
