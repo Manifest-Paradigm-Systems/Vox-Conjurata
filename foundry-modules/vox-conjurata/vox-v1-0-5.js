@@ -1790,7 +1790,13 @@ Hooks.on("renderActorSheet", (app, html, data) => {
     var header = html.parents(".window-app").find(".window-header").first();
     if (!header.length) header = html.parents(".app").find(".window-header").first();
     if (header.length) {
-        header.prepend(tab);
+        
+        var closeBtn = header.find(".header-button.close, .close, a:last");
+        if (closeBtn.length) {
+            closeBtn.before(tab);
+        } else {
+            header.append(tab);
+        }
     } else {
         // Fallback: add to the sheet body
         html.find(".sheet-header, .window-content").first().prepend(tab);
