@@ -1804,6 +1804,9 @@ Hooks.on("renderActorSheet", (app, html, data) => {
             "<button class='vox-sc' data-a='"+actor.id+"' data-n='"+actor.name+"' style='height:24px;font-size:10px;flex:1;background:#004d00;color:#00ff88;border:1px solid #00aa44;border-radius:3px;cursor:pointer;'>Clone</button>" +
             "<button class='vox-sf' data-a='"+actor.id+"' style='height:24px;font-size:10px;flex:1;background:#664400;color:#ffaa22;border:1px solid #aa7700;border-radius:3px;cursor:pointer;'>Forge</button>" +
             "<button class='vox-st2' data-a='"+actor.id+"' style='height:24px;font-size:10px;flex:1;background:#222;color:#00ccff;border:1px solid #0088aa;border-radius:3px;cursor:pointer;'>Test</button></div>" +
+            "<div style='display:flex;gap:4px;margin-bottom:6px;'>" +
+                (isGM ? "<button class='vox-sapp' data-a='" + actor.id + "' style='height:24px;font-size:10px;flex:1;background:#003300;color:#00ff88;border:1px solid #00aa44;border-radius:3px;cursor:pointer;'>Approve</button><button class='vox-sdel' data-a='" + actor.id + "' style='height:24px;font-size:10px;flex:1;background:#440000;color:#ff4444;border:1px solid #880000;border-radius:3px;cursor:pointer;'>Delete</button>" : "") +
+                "<button class='vox-sref' data-a='" + actor.id + "' style='height:24px;font-size:10px;flex:1;background:#b34a00;color:white;border:1px solid #ff6400;border-radius:3px;cursor:pointer;'>Re-Forge</button></div>" +
             "<textarea class='vox-sd' placeholder='Describe voice...' style='width:100%;height:36px;background:#222;color:#fff;border:1px solid #444;border-radius:3px;padding:3px 6px;font-size:11px;margin-bottom:4px;box-sizing:border-box;'></textarea>" +
             "<input class='vox-sts' placeholder='Test sentence...' style='width:100%;background:#222;color:#fff;border:1px solid #444;border-radius:3px;padding:3px 6px;font-size:11px;box-sizing:border-box;'>" +
             "<div style='margin-top:4px;font-size:10px;color:#666;font-family:monospace;'>ID: "+actor.id+"</div>" +
@@ -1820,6 +1823,23 @@ Hooks.on("renderActorSheet", (app, html, data) => {
             const r = await fetch("/api/ingest-actor?force_refresh=true",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({actorId:actor.id,name:actor.name,lore:"",artPath:"",isMonster:false,customDescription:d,userId:game.user.id})});
             if (r.ok) { ui.notifications.success("Voice forged!"); document.getElementById("vox-ss-"+actor.id).textContent = "Active"; }
         };
+        p.querySelector('.vox-sapp')?.addEventListener('click', async function() {
+            await fetch('/api/v1/approve-voice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({actorId:actor.id})});
+            document.getElementById('vox-ss-'+actor.id).textContent='Active';
+            ui.notifications.success('Voice approved!');
+        });
+        p.querySelector('.vox-sdel')?.addEventListener('click', async function() {
+            if (!confirm('Delete this voice seed?')) return;
+            await fetch('/api/v1/registry/'+actor.id,{method:'DELETE'});
+            document.getElementById('vox-ss-'+actor.id).textContent='Deleted';
+            ui.notifications.success('Voice deleted.');
+        });
+        p.querySelector('.vox-sref')?.addEventListener('click', async function() {
+            var d = p.querySelector('.vox-sd').value.trim();
+            if(!d){ui.notifications.warn('Enter a description.');return;}
+            var r=await fetch('/api/ingest-actor?force_refresh=true',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({actorId:actor.id,name:actor.name,lore:'',artPath:'',isMonster:false,customDescription:d,userId:game.user.id})});
+            if(r.ok){ui.notifications.success('Voice re-forged!');document.getElementById('vox-ss-'+actor.id).textContent='Active';}
+        });
         p.querySelector(".vox-st2").onclick = async function() {
             const t = p.querySelector(".vox-sts").value || "Hello, this is a voice test.";
             const r = await fetch("/api/v1/tts-chunk",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({actor_id:actor.id,text:t,dsp_presets:{}})});
