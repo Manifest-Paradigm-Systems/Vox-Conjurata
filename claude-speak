@@ -188,10 +188,12 @@ def watch_session():
 
     print(f"👁️  Watching {session_file.name}", file=sys.stderr)
 
+    # Capture current size BEFORE catch-up, so any content written during
+    # the catch-up is not missed by the file-size poll loop below.
+    last_size = session_file.stat().st_size
+
     # ── Catch-up: speak the most recent unread assistant entry ──
     _speak_latest_entry(session_file)
-
-    last_size = session_file.stat().st_size
     seen_ids = set()
 
     while _running:
