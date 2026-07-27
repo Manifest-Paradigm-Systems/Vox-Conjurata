@@ -153,10 +153,10 @@ class InjectPopup(Gtk.Window):
         if not text:
             return
         self._result_text = text
-        # Minimize the window — this signals KWin to restore focus to the
-        # previously active window.  We inject text while minimized, THEN
-        # destroy on the next idle cycle.
+        # Minimize the window to restore focus to the previous app,
+        # then flush pending Wayland requests before quitting the loop.
         self.iconify()
+        Gdk.flush()
         Gtk.main_quit()
 
     def on_cancel(self, _btn=None):
