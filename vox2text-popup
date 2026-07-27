@@ -155,29 +155,45 @@ class InjectPopup(Gtk.Window):
         return False
 
 
-def do_inject(text: str):
-    """Copy to clipboard, try Ctrl+V, notify.
+def _ydotoold_alive() -> bool:
+    """Check if the ydotoold daemon is running and responsive.
 
-    The text is always in the clipboard, so the user can always manually
-    press Ctrl+V if auto-paste doesn't reach their app.
+    Tests the ydotool socket directly rather than relying on PID state,
+    since the socket is the ground truth for whether key injection works.
+    """
+    try:
+        sock = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")) / ".ydotool_socket"
+        if not sock.exists():
+            return False
+        result = subprocess.run(
+            ["ydotool", "type", "--", ""],
+            timeout=3, capture_output=True,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
+def do_inject(text: str):
+    """Copy to clipboard, try auto-paste via ydotool, then notify.
+
+    Key improvements over the original:
+      - Checks ydotoold is alive *before* attempting auto-paste so we
+        never send garbled / empty keystrokes.
+      - No clipboard save/restore — restoring immediately after
+        ydotool key ctrl+v races the asynchronous Wayland paste and
+        can leave the target app pasting old or empty content.
+      - The transcribed text stays in the clipboard as a guaranteed
+        fallback: if auto-paste fails the user presses Ctrl+V.
     """
     if not text:
         return
-
-    # Save clipboard to restore later
-    old_clip = ""
-    try:
-        old_clip = subprocess.run(
-            ["wl-paste"], timeout=3, capture_output=True, text=True,
-        ).stdout
-    except Exception:
-        pass
 
     # Copy our text to clipboard (always — reliable fallback)
     try:
         subprocess.run(["wl-copy"], input=text.encode(), timeout=5)
     except Exception:
-        # Can't even copy — total failure
+        # Can't even copy — total failure, show the text in the notification
         try:
             subprocess.run(
                 ["notify-send", "--urgency=critical",
@@ -188,45 +204,38 @@ def do_inject(text: str):
             pass
         return
 
-    # Try auto-paste via Ctrl+V
-    time.sleep(INJECT_DELAY)
-    pasted = False
-    try:
-        subprocess.run(
-            ["ydotool", "key", "ctrl+v"],
-            timeout=5, stderr=subprocess.DEVNULL,
-        )
-        pasted = True
-    except Exception:
-        pass
-
-    if pasted:
-        # Brief pause for paste to register, then restore clipboard
-        time.sleep(0.3)
-        if old_clip:
+    # Check if ydotoold is alive before attempting auto-paste
+    if _ydotoold_alive():
+        time.sleep(INJECT_DELAY)
+        try:
+            subprocess.run(
+                ["ydotool", "key", "ctrl+v"],
+                timeout=5, stderr=subprocess.DEVNULL,
+            )
+            # Text stayed in clipboard — no restore to race the paste
             try:
-                subprocess.run(["wl-copy"], input=old_clip.encode(), timeout=5)
+                subprocess.run(
+                    ["notify-send", "--urgency=low",
+                     "📝 vox2text", "Pasted! (text in clipboard)"],
+                    timeout=3,
+                )
             except Exception:
                 pass
-        try:
-            subprocess.run(
-                ["notify-send", "--urgency=low", "📝 vox2text", "Pasted!"],
-                timeout=3,
-            )
+            return
         except Exception:
             pass
-    else:
-        # Auto-paste failed — show notification so user knows to Ctrl+V
-        preview = text[:100] + ("…" if len(text) > 100 else "")
-        try:
-            subprocess.run(
-                ["notify-send", "--urgency=normal",
-                 "📝 vox2text",
-                 f"Press Ctrl+V to paste:\n{preview}"],
-                timeout=3,
-            )
-        except Exception:
-            pass
+
+    # Auto-paste unavailable or failed — notification with manual fallback
+    preview = text[:100] + ("…" if len(text) > 100 else "")
+    try:
+        subprocess.run(
+            ["notify-send", "--urgency=normal",
+             "📝 vox2text",
+             f"Press Ctrl+V to paste:\n{preview}"],
+            timeout=3,
+        )
+    except Exception:
+        pass
 
 
 def main():

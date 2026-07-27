@@ -337,6 +337,7 @@ def listen():
     combo_active = False
     recorder: Recorder | None = None
     last_release = 0.0  # debounce for rapid re-trigger
+    _transcribe_lock = threading.Lock()
 
     def do_transcribe():
         """Called after combo released: record → transcribe → launch popup."""
