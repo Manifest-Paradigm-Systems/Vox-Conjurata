@@ -332,13 +332,14 @@ def listen():
 
     def periodic_transcribe():
         """Run in a thread: every ~1.5 s transcribe new audio since last
-        checkpoint and type it.  Stops when combo_active turns False."""
-        # Capture recorder *locally* so we're immune to the main thread
-        # nulling it during cleanup.  (combo_active is a plain bool read
-        # from the closure — fine for a daemon loop.)
+        checkpoint.  Shows progress on stderr but does NOT type until the
+        combo is released — typing while Ctrl+Shift are held injects
+        control characters (Ctrl+char) instead of literal text, crashing
+        the focused terminal/application."""
         rec = recorder
         frame_index = 0
         last_text = ""
+        max_index = 0  # track for get_and_trim so _frames doesn't grow forever
 
         while combo_active:
             time.sleep(1.5)
@@ -351,7 +352,6 @@ def listen():
                 continue
 
             pcm = b"".join(new_frames)
-            # ~0.25 s of audio minimum
             if len(pcm) < 8192:
                 continue
 
@@ -362,28 +362,32 @@ def listen():
                 continue
 
             if not text:
+                # Still advance frame_index so we don't re-send the same
+                # silent audio on every cycle.
+                frame_index = total
                 continue
 
-            # Only type the delta if the new text extends the old one
+            # Show live progress on stderr (only visible in --foreground)
             lower_old = last_text.lower().strip()
             lower_new = text.lower().strip()
             if lower_new.startswith(lower_old) and len(lower_new) > len(lower_old):
                 delta = text[len(last_text):]
-                if delta.strip():
-                    print(f"   → {delta}", file=sys.stderr)
-                    type_text(delta + " ")
-            elif lower_new != lower_old:
-                # Couldn't match cleanly — just type the whole thing
-                print(f"   → {text}", file=sys.stderr)
-                type_text(text + " ")
+            else:
+                delta = text
+            if delta.strip():
+                print(f"   ~ {delta}", file=sys.stderr)
 
             last_text = text
             frame_index = total
+            # Trim consumed frames to keep memory bounded on long holds
+            max_index = total
+            rec.get_and_trim(max_index)
+            max_index = 0
 
-        # ── Final flush (combo released) ──
+        # ── Final flush (combo released — modifiers released too) ──
         if not rec:
             return
-        new_frames, total = rec.get_frames_since(frame_index)
+        new_frames, total = rec.get_frames_since(max_index)
         if new_frames:
             pcm = b"".join(new_frames)
             if len(pcm) > 4096:
