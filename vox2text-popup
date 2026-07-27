@@ -12,7 +12,6 @@ Injection strategy:
 """
 
 import argparse
-import os
 import shutil
 import signal
 import subprocess
@@ -84,7 +83,7 @@ class InjectPopup(Gtk.Window):
         hdr = Gtk.Box(spacing=8)
         icon = Gtk.Label()
         icon.set_markup("<span size='x-large'>🎤</span>")
-        lbl = Gtk.Label(label="Edit text — Enter to inject, Esc to cancel")
+        lbl = Gtk.Label(label="Edit text — Enter to paste into focused app")
         lbl.get_style_context().add_class("hint-label")
         hdr.pack_start(icon, False, False, 0)
         hdr.pack_start(lbl, False, False, 0)
@@ -178,14 +177,13 @@ class InjectPopup(Gtk.Window):
 def inject_text(text: str, injector: str) -> bool:
     """Inject text into the focused app.  Called AFTER window is closed.
 
-    Strategy (tiered):
-      1. Clipboard → Ctrl+V paste (saves/restores clipboard, works regardless
-         of compositor focus quirks since Ctrl+V is a simple key combo)
-      2. ydotool type  (uinput kernel input device)
-      3. wtype         (Wayland virtual keyboard protocol)
+    Strategy:
+      1. Copy to clipboard (always works — no focus needed)
+      2. Try Ctrl+V via ydotool (uinput key combo)
+      3. Show notification with text so user can Ctrl+V manually
     """
 
-    # Save current clipboard so we can restore it
+    # Save current clipboard for later restore
     old_clipboard = ""
     try:
         old_clipboard = subprocess.run(
@@ -194,59 +192,56 @@ def inject_text(text: str, injector: str) -> bool:
     except Exception:
         pass
 
-    # Wait for the compositor to settle after window close
-    time.sleep(INJECT_DELAY)
-
-    # ── Strategy 1: Clipboard → Ctrl+V paste ─────────────────────────
-    # This is the most reliable approach: the copy always works (no focus
-    # needed), and Ctrl+V is a simple uinput key combo that even a freshly
-    # refocused window should handle.
+    # ── Step 1: Copy to clipboard (always) ────────────────────────────
     try:
         subprocess.run(["wl-copy"], input=text.encode(), timeout=5)
-        time.sleep(0.1)
+    except Exception:
+        pass
+
+    # ── Step 2: Wait for focus, then try Ctrl+V ───────────────────────
+    time.sleep(INJECT_DELAY)
+
+    auto_pasted = False
+    try:
         subprocess.run(
             ["ydotool", "key", "ctrl+v"],
             timeout=5, stderr=subprocess.DEVNULL,
         )
-        # Restore old clipboard after a brief delay so the paste registers
+        auto_pasted = True
+    except Exception:
+        pass
+
+    # ── Step 3: Notify user ───────────────────────────────────────────
+    if auto_pasted:
+        # Restore clipboard after paste
         time.sleep(0.3)
         if old_clipboard:
             try:
                 subprocess.run(["wl-copy"], input=old_clipboard.encode(), timeout=5)
             except Exception:
                 pass
-        return True
-    except Exception:
-        pass
-
-    # ── Strategy 2: ydotool type (uinput) ─────────────────────────────
-    if injector == "ydotool":
         try:
             subprocess.run(
-                ["ydotool", "type", "--", text],
-                timeout=10, stderr=subprocess.DEVNULL,
+                ["notify-send", "--urgency=low", "📝 vox2text", "Pasted!"],
+                timeout=3,
             )
-            return True
         except Exception:
             pass
-
-    # ── Strategy 3: wtype (Wayland virtual keyboard) ──────────────────
-    if injector == "wtype" or shutil.which("wtype"):
+    else:
+        # Auto-paste failed — tell user to do it manually
+        # Show the text in the notification so they can verify
+        preview = text[:80] + ("…" if len(text) > 80 else "")
         try:
-            subprocess.run(["wtype", text], timeout=10)
-            return True
+            subprocess.run(
+                ["notify-send", "--urgency=normal",
+                 "📝 vox2text",
+                 f"Press Ctrl+V to paste:\n{preview}"],
+                timeout=3,
+            )
         except Exception:
             pass
 
-    # Total failure — notify
-    try:
-        subprocess.run(
-            ["notify-send", "📝 vox2text", "Could not inject text into app"],
-            timeout=5,
-        )
-    except Exception:
-        pass
-    return False
+    return auto_pasted
 
 
 def main():
