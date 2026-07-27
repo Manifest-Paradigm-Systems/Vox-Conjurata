@@ -1,164 +1,46 @@
 #!/usr/bin/env python3
-"""vox2text-popup — Popup speech-to-text window, injects into focused app.
+"""vox2text-popup — Show transcribed text, inject into focused app on Enter.
 
-Press the hotkey → small window appears → speak → text lands wherever
-your cursor is (terminal, browser, editor, anything).
+Called by vox2textd (the hold-to-talk daemon) via:
+    vox2text-popup --text "what you said"
 
-Completely terminal-independent — runs as its own window.
+A small GTK window appears with the text.  Edit if needed, then:
+  Enter / "Type it" → window closes, text types into the focused app
+  Escape / ✕        → cancel, nothing typed
+
+Uses ydotool for injection (wtype fallback).
 """
 
 import argparse
-import io
 import os
+import shutil
 import signal
-import struct
 import subprocess
 import sys
-import threading
-import wave
-from pathlib import Path
+import time
 
 import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, GLib, Pango, Gdk
 
-import numpy as np
-import pyaudio
-import requests
-
 # ── Config ────────────────────────────────────────────────────────────────
-STT_URL = os.getenv("VOX_STT_URL", "http://localhost:5000/v1/audio/transcriptions")
-
-RATE = 16000
-CHUNK = 1024
-FORMAT = pyaudio.paInt16
-CHANNELS = 1
-
-SILENCE_THRESHOLD = 500
-SILENCE_DURATION = 1.5
-MAX_RECORD_SEC = 30
-
 WINDOW_TITLE = "🎤 vox2text"
+
 COLOR_BG = "#2e3440"
 COLOR_FG = "#eceff4"
 COLOR_ACCENT = "#5e81ac"
 COLOR_GREEN = "#a3be8c"
 COLOR_RED = "#bf616a"
 COLOR_BORDER = "#4c566a"
+COLOR_TEXT_BG = "#3b4252"
 
 
-# ── Audio ─────────────────────────────────────────────────────────────────
+class InjectPopup(Gtk.Window):
+    """GTK popup — pre-filled text, edit, Enter to inject into focused app."""
 
-def rms(data: bytes) -> float:
-    count = len(data) // 2
-    if count == 0:
-        return 0.0
-    samples = struct.unpack(f"<{count}h", data)
-    return float(np.sqrt(np.mean(np.square(samples))))
-
-
-def find_good_device(pa: pyaudio.PyAudio) -> int:
-    best = None
-    for i in range(pa.get_device_count()):
-        info = pa.get_device_info_by_index(i)
-        if info["maxInputChannels"] == 0:
-            continue
-        name = info["name"]
-        if "EKSA" in name:
-            best = i
-            break
-        if best is None and ("Headset" in name or "Microphone" in name):
-            best = i
-    if best is None:
-        best = pa.get_default_input_device_info()["index"]
-    return best
-
-
-def record_utterance(pa: pyaudio.PyAudio, device: int,
-                     progress_cb=None) -> bytes:
-    """Record with VAD, optional progress callback (level 0-1)."""
-    stream = pa.open(
-        format=FORMAT, channels=CHANNELS, rate=RATE,
-        input=True, input_device_index=device,
-        frames_per_buffer=CHUNK,
-    )
-    frames: list[bytes] = []
-    silent_blocks = 0
-    silence_needed = int(SILENCE_DURATION * RATE / CHUNK)
-    max_blocks = int(MAX_RECORD_SEC * RATE / CHUNK)
-    recording = False
-    lead_in = 0
-
-    for _ in range(max_blocks):
-        data = stream.read(CHUNK, exception_on_overflow=False)
-        level = rms(data)
-
-        if progress_cb:
-            GLib.idle_add(progress_cb, min(level / 2000, 1.0))
-
-        if lead_in < 4:
-            lead_in += 1
-            frames.append(data)
-            continue
-
-        if not recording and level > SILENCE_THRESHOLD:
-            recording = True
-            silent_blocks = 0
-            frames.append(data)
-            continue
-
-        if not recording:
-            frames.append(data)
-            if len(frames) > int(0.5 * RATE / CHUNK):
-                frames.pop(0)
-            continue
-
-        frames.append(data)
-        if level < SILENCE_THRESHOLD:
-            silent_blocks += 1
-        else:
-            silent_blocks = 0
-
-        if silent_blocks >= silence_needed:
-            trim = silent_blocks * CHUNK
-            tail = b"".join(frames)
-            if trim < len(tail):
-                tail = tail[:-trim]
-            frames = [tail]
-            break
-
-    stream.stop_stream()
-    stream.close()
-    if not recording:
-        return b""
-    return b"".join(frames)
-
-
-def transcribe(pcm_data: bytes) -> str:
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as wf:
-        wf.setnchannels(CHANNELS)
-        wf.setsampwidth(2)
-        wf.setframerate(RATE)
-        wf.writeframes(pcm_data)
-    wav_bytes = buf.getvalue()
-
-    resp = requests.post(
-        STT_URL,
-        files={"file": ("voice.wav", wav_bytes, "audio/wav")},
-        data={"model_name": "base", "language": "en"},
-        timeout=30,
-    )
-    resp.raise_for_status()
-    return resp.json().get("text", "").strip()
-
-
-# ── GTK Popup Window ─────────────────────────────────────────────────────
-
-class VoxPopup(Gtk.Window):
-    def __init__(self):
+    def __init__(self, initial_text: str):
         super().__init__(title=WINDOW_TITLE)
-        self.set_default_size(500, 220)
+        self.set_default_size(520, 180)
         self.set_resizable(True)
         self.set_position(Gtk.WindowPosition.CENTER)
         self.set_keep_above(True)
@@ -166,23 +48,22 @@ class VoxPopup(Gtk.Window):
         self.set_decorated(True)
         self.set_border_width(0)
 
+        # Detect available injectors
+        self._injector = self._pick_injector()
+
         # ── CSS ────────────────────────────────────────────────────────
         css = f"""
         window {{ background: {COLOR_BG}; }}
         label {{ color: {COLOR_FG}; }}
-        .status-label {{ font-size: 14px; opacity: 0.8; }}
-        .text-label {{ font-size: 16px; background: {COLOR_BORDER};
-                       border-radius: 8px; padding: 12px; }}
+        .hint-label {{ font-size: 13px; color: #d8dee9; }}
+        .text-view {{ font-size: 15px; background: {COLOR_TEXT_BG};
+                      color: {COLOR_FG}; border-radius: 6px;
+                      padding: 10px; }}
         .btn-type {{ background: {COLOR_GREEN}; color: {COLOR_BG};
                      font-weight: bold; border-radius: 6px;
                      padding: 8px 24px; }}
-        .btn-retry {{ background: {COLOR_ACCENT}; color: {COLOR_FG};
-                      border-radius: 6px; padding: 8px 16px; }}
-        .btn-close {{ background: {COLOR_RED}; color: {COLOR_FG};
-                      border-radius: 6px; padding: 8px 16px; }}
-        .level-bar {{ background: {COLOR_BORDER}; border-radius: 4px;
-                      min-height: 6px; }}
-        .level-fill {{ background: {COLOR_GREEN}; border-radius: 4px; }}
+        .btn-cancel {{ background: {COLOR_RED}; color: {COLOR_FG};
+                       border-radius: 6px; padding: 8px 16px; }}
         """
         provider = Gtk.CssProvider()
         provider.load_from_data(css.encode())
@@ -192,256 +73,174 @@ class VoxPopup(Gtk.Window):
         )
 
         # ── Layout ─────────────────────────────────────────────────────
-        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        vbox.set_margin_top(20)
-        vbox.set_margin_bottom(20)
-        vbox.set_margin_start(20)
-        vbox.set_margin_end(20)
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        vbox.set_margin_top(16)
+        vbox.set_margin_bottom(16)
+        vbox.set_margin_start(16)
+        vbox.set_margin_end(16)
         self.add(vbox)
 
-        # Top: mic icon + status
-        top_row = Gtk.Box(spacing=8)
-        self.mic_label = Gtk.Label(label="🎤")
-        self.mic_label.set_markup("<span size='xx-large'>🎤</span>")
-        self.status_label = Gtk.Label(label="Listening...")
-        self.status_label.get_style_context().add_class("status-label")
-        top_row.pack_start(self.mic_label, False, False, 0)
-        top_row.pack_start(self.status_label, False, False, 0)
-        vbox.pack_start(top_row, False, False, 0)
-
-        # Level meter
-        level_box = Gtk.Box()
-        level_box.set_size_request(-1, 6)
-        self.level_fill = Gtk.LevelBar(min_value=0, max_value=1)
-        self.level_fill.set_size_request(-1, 6)
-        self.level_fill.set_valign(Gtk.Align.CENTER)
-        level_box.pack_start(self.level_fill, True, True, 0)
-        vbox.pack_start(level_box, False, False, 0)
+        # Header
+        hdr = Gtk.Box(spacing=8)
+        icon = Gtk.Label()
+        icon.set_markup("<span size='x-large'>🎤</span>")
+        lbl = Gtk.Label(label="Release to type — edit then press Enter")
+        lbl.get_style_context().add_class("hint-label")
+        hdr.pack_start(icon, False, False, 0)
+        hdr.pack_start(lbl, False, False, 0)
+        vbox.pack_start(hdr, False, False, 0)
 
         # Text area
         self.text_view = Gtk.TextView()
         self.text_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
         self.text_view.set_editable(True)
         self.text_view.set_cursor_visible(True)
-        self.text_view.get_style_context().add_class("text-label")
-        self.text_buffer = self.text_view.get_buffer()
-        # Set a nice font for the text view
+        self.text_view.get_style_context().add_class("text-view")
         font_desc = Pango.FontDescription("sans-serif 14")
         self.text_view.override_font(font_desc)
-        # Minimal padding via CSS
-        text_frame = Gtk.Frame()
-        text_frame.set_shadow_type(Gtk.ShadowType.NONE)
-        text_frame.add(self.text_view)
-        self.text_view.set_size_request(-1, 80)
-        vbox.pack_start(text_frame, True, True, 0)
+        self.text_buffer = self.text_view.get_buffer()
+        self.text_buffer.set_text(initial_text)
 
-        # Hint label
-        self.hint_label = Gtk.Label(
-            label="Speak now — text appears here. Edit if needed, then click Type it."
+        # Auto-select all text for easy replacement
+        self.text_buffer.select_range(
+            self.text_buffer.get_start_iter(),
+            self.text_buffer.get_end_iter(),
         )
-        self.hint_label.get_style_context().add_class("status-label")
-        vbox.pack_start(self.hint_label, False, False, 0)
+
+        frame = Gtk.Frame()
+        frame.set_shadow_type(Gtk.ShadowType.NONE)
+        frame.add(self.text_view)
+        self.text_view.set_size_request(-1, 70)
+        vbox.pack_start(frame, True, True, 0)
+
+        # Injector hint
+        self.injector_label = Gtk.Label(
+            label=f"via {self._injector}",
+        )
+        self.injector_label.get_style_context().add_class("hint-label")
+        self.injector_label.set_opacity(0.6)
+        vbox.pack_start(self.injector_label, False, False, 0)
 
         # Buttons
         btn_row = Gtk.Box(spacing=10)
         btn_row.set_halign(Gtk.Align.CENTER)
 
-        self.retry_btn = Gtk.Button(label="🔄 Retry")
-        self.retry_btn.get_style_context().add_class("btn-retry")
-        self.retry_btn.connect("clicked", self.on_retry)
-
-        self.type_btn = Gtk.Button(label="⌨️  Type it")
+        self.type_btn = Gtk.Button(label="⌨️  Type it  (Enter)")
         self.type_btn.get_style_context().add_class("btn-type")
         self.type_btn.connect("clicked", self.on_type)
 
-        self.close_btn = Gtk.Button(label="✕")
-        self.close_btn.get_style_context().add_class("btn-close")
-        self.close_btn.connect("clicked", self.on_close)
+        self.cancel_btn = Gtk.Button(label="✕  Cancel  (Esc)")
+        self.cancel_btn.get_style_context().add_class("btn-cancel")
+        self.cancel_btn.connect("clicked", self.on_cancel)
 
-        self.spinner = Gtk.Spinner()
-
-        btn_row.pack_start(self.retry_btn, False, False, 0)
         btn_row.pack_start(self.type_btn, False, False, 0)
-        btn_row.pack_start(self.spinner, False, False, 0)
-        btn_row.pack_end(self.close_btn, False, False, 0)
+        btn_row.pack_start(self.cancel_btn, False, False, 0)
         vbox.pack_start(btn_row, False, False, 0)
 
-        # Connect close/keyboard
+        # Events
         self.connect("key-press-event", self.on_key)
         self.connect("destroy", Gtk.main_quit)
 
-        # State
-        self.pcm_data: bytes | None = None
-        self.transcribed_text: str = ""
-        self.recording = False
-        self.transcribing = False
+        # Focus the text view so the user can type
+        GLib.idle_add(self.text_view.grab_focus)
 
-        # Kick off recording
-        GLib.idle_add(self.start_recording)
+    # ── Injector detection ──────────────────────────────────────────────
 
-    # ── UI updates (called from GLib.idle_add) ──────────────────────────
+    def _pick_injector(self) -> str:
+        """Return the best available injector command name."""
+        for cmd in ("ydotool", "wtype"):
+            if shutil.which(cmd):
+                return cmd
+        return "none"
 
-    def set_status(self, text: str):
-        self.status_label.set_text(text)
+    # ── Actions ──────────────────────────────────────────────────────────
 
-    def set_level(self, value: float):
-        self.level_fill.set_value(value)
-
-    def show_error(self, msg: str):
-        self.text_buffer.set_text(f"❌ {msg}")
-        self.retry_btn.set_sensitive(True)
-        self.type_btn.set_sensitive(False)
-        self.spinner.stop()
-
-    def show_text(self, text: str):
-        self.text_buffer.set_text(text)
-        self.transcribed_text = text
-        self.retry_btn.set_sensitive(True)
-        self.type_btn.set_sensitive(True)
-        self.spinner.stop()
-        self.hint_label.set_text("Edit if needed, then click Type it or press Enter.")
-
-    # ── Recording (runs in a thread) ────────────────────────────────────
-
-    def start_recording(self):
-        self.recording = True
-        self.set_status("Listening...")
-        self.hint_label.set_text("Speak now...")
-        self.retry_btn.set_sensitive(False)
-        self.type_btn.set_sensitive(False)
-        self.spinner.start()
-        self.text_buffer.set_text("")
-        self.pcm_data = None
-        self.transcribed_text = ""
-
-        def level_cb(val):
-            self.set_level(val)
-
-        def record_thread():
-            pa = pyaudio.PyAudio()
-            try:
-                device = find_good_device(pa)
-                pcm = record_utterance(pa, device, progress_cb=level_cb)
-                if not pcm:
-                    GLib.idle_add(self.show_error, "No speech detected.")
-                    GLib.idle_add(self.set_status, "No speech")
-                    self.recording = False
-                    return
-                self.pcm_data = pcm
-                GLib.idle_add(self.set_status, "Transcribing...")
-                GLib.idle_add(self.set_level, 0)
-                text = transcribe(pcm)
-                if not text:
-                    GLib.idle_add(self.show_error, "No transcription returned.")
-                    GLib.idle_add(self.set_status, "No text")
-                else:
-                    GLib.idle_add(self.show_text, text)
-                    GLib.idle_add(self.set_status, "Done")
-            except requests.exceptions.ConnectionError:
-                GLib.idle_add(self.show_error,
-                              f"Can't reach STT at {STT_URL}\nIs vox-voice running?")
-                GLib.idle_add(self.set_status, "Connection error")
-            except Exception as e:
-                GLib.idle_add(self.show_error, str(e))
-                GLib.idle_add(self.set_status, "Error")
-            finally:
-                pa.terminate()
-                self.recording = False
-
-        threading.Thread(target=record_thread, daemon=True).start()
-        return False  # run once
-
-    def on_retry(self, _btn=None):
-        self.start_recording()
+    def get_text(self) -> str:
+        buf = self.text_buffer
+        return buf.get_text(buf.get_start_iter(), buf.get_end_iter(), True).strip()
 
     def on_type(self, _btn=None):
-        text = self.transcribed_text or self.text_buffer.get_text(
-            self.text_buffer.get_start_iter(),
-            self.text_buffer.get_end_iter(),
-            True,
-        )
-        if not text.strip():
+        text = self.get_text()
+        if not text:
             return
-        self.spinner.start()
-        self.set_status("Typing...")
-        self.type_btn.set_sensitive(False)
-        self.hint_label.set_text("Injecting into focused app...")
 
-        def inject():
-            try:
+        # Phase 1: destroy window so focus returns to the previous app
+        self.hide()
+        Gtk.main_quit()
+
+        # Phase 2: brief pause for the compositor to refocus
+        time.sleep(0.15)
+
+        # Phase 3: inject into whatever is now focused
+        try:
+            if self._injector == "ydotool":
+                subprocess.run(
+                    ["ydotool", "type", "--", text],
+                    timeout=10,
+                    stderr=subprocess.DEVNULL,
+                )
+            elif self._injector == "wtype":
                 subprocess.run(
                     ["wtype", text],
                     timeout=10,
                 )
-                GLib.idle_add(Gtk.main_quit)
-            except Exception as e:
-                GLib.idle_add(self.show_error, f"Failed: {e}")
-                GLib.idle_add(self.set_status, "Error")
-                GLib.idle_add(self.type_btn.set_sensitive, True)
-                GLib.idle_add(self.spinner.stop)
+        except Exception:
+            # Last-ditch: clipboard + notification
+            try:
+                subprocess.run(["wl-copy"], input=text.encode(), timeout=5)
+                subprocess.run(
+                    ["notify-send", "📝 vox2text", "Copied to clipboard (inject failed)"],
+                    timeout=5,
+                )
+            except Exception:
+                pass
 
-        threading.Thread(target=inject, daemon=True).start()
-
-    def on_close(self, _btn=None):
+    def on_cancel(self, _btn=None):
         Gtk.main_quit()
 
     def on_key(self, _widget, event):
         if event.keyval == Gdk.KEY_Escape:
-            Gtk.main_quit()
+            self.on_cancel()
         elif event.keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
-            if self.type_btn.get_sensitive():
+            # Don't inject if Shift+Enter (user wants a newline)
+            if not (event.state & Gdk.ModifierType.SHIFT_MASK):
                 self.on_type()
+            else:
+                # Let Shift+Enter insert a newline normally
+                return False
         return False
 
 
 def main():
-    parser = argparse.ArgumentParser(description="vox2text-popup — speak → popup → typed into focused app")
-    parser.add_argument("--test", action="store_true", help="Check STT + mic")
-    parser.add_argument("--list-devices", action="store_true", help="List audio inputs")
+    parser = argparse.ArgumentParser(
+        description="vox2text-popup — show text, inject into focused app on Enter",
+    )
+    parser.add_argument("--text", help="Text to pre-fill in the popup")
+    parser.add_argument("--test", action="store_true", help="Check injector availability")
     args = parser.parse_args()
 
     if args.test:
         _test_mode()
         return
-    if args.list_devices:
-        _list_devices()
+
+    text = args.text or ""
+    if not text.strip():
+        # Nothing to show — exit silently
         return
 
-    # Ignore SIGINT in the main thread so GTK handles Ctrl-C gracefully
     signal.signal(signal.SIGINT, signal.SIG_DFL)
-    win = VoxPopup()
+    win = InjectPopup(text)
     win.show_all()
     Gtk.main()
 
 
 def _test_mode():
-    """Check STT endpoint + mic."""
     print("── vox2text-popup test ──")
-    try:
-        resp = requests.get(STT_URL.replace("/v1/audio/transcriptions", "/"), timeout=5)
-        print(f"✅ STT endpoint: {resp.json()}")
-    except Exception as e:
-        print(f"❌ STT endpoint unreachable: {e}")
-    pa = pyaudio.PyAudio()
-    dev = find_good_device(pa)
-    info = pa.get_device_info_by_index(dev)
-    print(f"🎤 Mic: [{dev}] {info['name']}")
-    pa.terminate()
-    print(f"⌨️  Text injector: wtype ({_which('wtype')})")
-
-
-def _list_devices():
-    pa = pyaudio.PyAudio()
-    for i in range(pa.get_device_count()):
-        info = pa.get_device_info_by_index(i)
-        if info["maxInputChannels"] > 0:
-            print(f"  {i}: {info['name']}  (ch={info['maxInputChannels']}, sr={int(info['defaultSampleRate'])})")
-    pa.terminate()
-
-
-def _which(cmd: str) -> str:
-    import shutil
-    return shutil.which(cmd) or "not found"
+    for cmd in ("ydotool", "wtype"):
+        path = shutil.which(cmd)
+        print(f"  {cmd}: {'✅ ' + path if path else '❌ not found'}")
+    print()
+    print("To launch: vox2text-popup --text \"hello world\"")
 
 
 if __name__ == "__main__":

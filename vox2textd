@@ -24,6 +24,7 @@ Usage:
 
 import io
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -162,29 +163,26 @@ def stop_ydotoold():
         _ydotoold_proc = None
 
 
-def type_text(text: str):
-    """Type text into the active window using ydotool.
+POPUP_SCRIPT = Path(__file__).resolve().parent / "vox2text-popup"
 
-    Falls back to wl-copy + notify-send if ydotool fails.
+
+def launch_popup(text: str):
+    """Show transcribed text in a popup window for user review.
+
+    The popup handles injection via ydotool/wtype when the user
+    presses Enter.  We just launch it and return immediately.
     """
-    if not text:
+    if not text or not POPUP_SCRIPT.exists():
         return
     try:
-        subprocess.run(
-            ["ydotool", "type", "--", text],
-            timeout=10,
+        subprocess.Popen(
+            [sys.executable, str(POPUP_SCRIPT), "--text", text],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
     except Exception:
-        # Fallback: clipboard + notification
-        try:
-            subprocess.run(["wl-copy"], input=text.encode(), timeout=5)
-            subprocess.run(
-                ["notify-send", "📝 vox2text", text],
-                timeout=5,
-            )
-        except Exception:
-            pass
+        pass
 
 
 # ── Recorder ──────────────────────────────────────────────────────────────
@@ -413,7 +411,7 @@ def listen():
                         delta = text
                     if delta.strip():
                         print(f"   → {delta}", file=sys.stderr)
-                        type_text(delta.strip())
+                        launch_popup(delta.strip())
 
     try:
         for event in dev.read_loop():
