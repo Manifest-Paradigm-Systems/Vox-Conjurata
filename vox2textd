@@ -38,6 +38,9 @@ import requests
 STT_URL = os.getenv("VOX_STT_URL", "http://localhost:5000/v1/audio/transcriptions")
 PIDFILE = Path(os.getenv("VOX2TEXT_PIDFILE", Path.home() / ".vox2textd.pid"))
 
+# Track ydotoold lifecycle — set by ensure_ydotoold, cleaned up on exit
+_ydotoold_proc: subprocess.Popen | None = None
+
 RATE = 16000
 CHUNK = 1024
 FORMAT = pyaudio.paInt16
