@@ -483,12 +483,95 @@ async function createVoxChatMessage(data) {
     } catch (e) {}
 })();
 
-globalThis.voxState = globalThis.voxState || { 
+globalThis.voxState = globalThis.voxState || {
     narratorActive: false, puppetActive: false, playerActive: false,
     activeSpeakerName: "", activeMicType: "", activeActorId: "", activeIsMonster: false,
     mediaRecorder: null, audioChunks: [],
     voiceConversionEndpoint: "/api/voice-conversion", ingestEndpoint: "/api/ingest-actor", targetVoxVoice: true
 };
+
+// ── Focus Tracker: remembers the last "real" element before popups stole focus ──
+let voxLastFocusedElement = null;
+(function trackVoxFocus() {
+    document.addEventListener('focusin', (event) => {
+        const el = event.target;
+        if (!el) return;
+        // Skip focus moves into dialogs, windows, popups, overlays, HUDs
+        if (el.closest('.window-app, .dialog, .app, [id*="vox-clone"], [id*="vox-overlay"], .vox-hud, .tabs')) {
+            return;
+        }
+        // Only track actual input-capable targets
+        if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable || el.closest('.ProseMirror')) {
+            voxLastFocusedElement = el;
+        }
+    }, true); // capture phase — fires before any element's own handler
+
+    // Also snapshot on mousedown (catches clicks that trigger dialogs synchronously)
+    document.addEventListener('mousedown', () => {
+        const el = document.activeElement;
+        if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable || el.closest('.ProseMirror'))) {
+            voxLastFocusedElement = el;
+        }
+    }, true);
+})();
+
+/**
+ * 🎯 voxInjectText: Insert text into the last-known user focus target.
+ * Works with <input>, <textarea>, contentEditable (ProseMirror), and falls
+ * back to the chat ProseMirror editor. Returns true if injection succeeded.
+ */
+function voxInjectText(text) {
+    if (!text) return false;
+
+    // Resolve target: saved element, or fallback to chat editor
+    let target = voxLastFocusedElement;
+    if (!target || !document.contains(target)) {
+        target = document.querySelector('.ProseMirror');
+    }
+    if (!target) return false;
+
+    target.focus();
+
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        const start = target.selectionStart ?? target.value.length;
+        const end = target.selectionEnd ?? start;
+        target.value = target.value.substring(0, start) + text + target.value.substring(end);
+        const newPos = start + text.length;
+        target.selectionStart = target.selectionEnd = newPos;
+        target.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+        target.dispatchEvent(new Event('change', { bubbles: true }));
+        return true;
+    }
+
+    if (target.isContentEditable || target.closest('.ProseMirror')) {
+        const editable = target.isContentEditable ? target : target.closest('.ProseMirror');
+        // Try ProseMirror API first (Foundry V12+)
+        const pmView = editable.pmView || editable.view;
+        if (pmView && typeof pmView.dispatch === 'function') {
+            const { state } = pmView;
+            const tr = state.tr.replaceSelectionWith(state.schema.text(text), false);
+            pmView.dispatch(tr);
+            return true;
+        }
+        // execCommand fallback for plain contentEditable
+        editable.focus();
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0) {
+            const range = sel.getRangeAt(0);
+            range.deleteContents();
+            range.insertNode(document.createTextNode(text));
+            range.collapse(false);
+            sel.removeAllRanges();
+            sel.addRange(range);
+        } else {
+            document.execCommand('insertText', false, text);
+        }
+        editable.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+        return true;
+    }
+
+    return false;
+}
 
 function resolveIsMonster(actor) {
     if (!actor) return false;
@@ -2152,7 +2235,7 @@ async function processAndSendAudio() {
                         const { transcription, audio_data, engine, voxType, ai_reply } = d;
             console.log(`🎙️ Vox | Received transcription: ${transcription}`);
             console.log(`🎙️ Vox | Audio Data present: ${!!audio_data}`);
-            
+
             const deliveryMode = game.settings.get("vox-conjurata", "narratorDeliveryMode");
             const isNarrator = activeActorId === 'narrator';
             const shouldWhisper = isNarrator && deliveryMode === "whisper";
@@ -2160,19 +2243,22 @@ async function processAndSendAudio() {
             // Scenario C: Manual Override / Scenario B: Puppeteer
             // Backend will return null audio_data if useVoxVoice was false
             if (audio_data && !shouldWhisper) await playAudio(audio_data, 1.0);
-            
-            const chatData = { 
-                content: transcription,
-                speaker: { actor: isNarrator ? null : activeActorId, alias: activeSpeakerName },
-                flags: { "vox-conjurata": { type: voxType, audioUrl: audio_data, engine: engine } } 
-            };
 
-            if (shouldWhisper) {
-                chatData.whisper = ChatMessage.getWhisperRecipients("GM");
-                chatData.content = `<em>(Narrator Whisper)</em><br/>${transcription}`;
+            // 🎯 AUTO-INJECT: inject transcription into the last focused element
+            // instead of auto-sending as a ChatMessage. User reviews and presses Enter.
+            const injected = transcription ? voxInjectText(transcription) : false;
+            console.log(`🎙️ Vox | Text injection ${injected ? 'SUCCESS' : 'skipped (no focus target)'}`);
+
+            // For whisper mode only: still send the whisper (private GM message)
+            // For regular transcription: injected above — user presses Enter to send
+            if (shouldWhisper && transcription) {
+                await createVoxChatMessage({
+                    content: `<em>(Narrator Whisper)</em><br/>${transcription}`,
+                    whisper: ChatMessage.getWhisperRecipients("GM"),
+                    speaker: { actor: null, alias: activeSpeakerName },
+                    flags: { "vox-conjurata": { type: voxType, audioUrl: audio_data, engine: engine } }
+                });
             }
-
-            const playerMessage = await createVoxChatMessage(chatData);
             
             // Handle AI Reply (Autonomous Scenario A)
             if (ai_reply) {
@@ -2238,9 +2324,9 @@ async function processAndSendAudio() {
                 }
             }
 
-            if (playerMessage && canvas.ready && !shouldWhisper && !ai_reply) {
-                const tId = playerMessage.speaker.token || canvas.tokens.placeables.find(t => t.actor?.id === activeActorId)?.id;
-                const token = canvas.tokens.get(tId);
+            // Speech bubble for the player's token when audio plays
+            if (audio_data && !shouldWhisper && !ai_reply && canvas.ready) {
+                const token = canvas.tokens.placeables.find(t => t.actor?.id === activeActorId);
                 if (token && typeof canvas.bubbles?.say === 'function') canvas.bubbles.say(token, transcription);
             }
         }
