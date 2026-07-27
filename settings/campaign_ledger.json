@@ -5,21 +5,21 @@
     "gm": 979.7102499999966,
     "G3SJW9rRHe7J3AOH": 204.96800000000005,
     "nXnKU6oZYzdg0xSY": 19.891499999999994,
-    "m6nkAzEdfbjIGhdz": 0.8567500000000011
+    "m6nkAzEdfbjIGhdz": 0.8537500000000011
   },
   "session_allowances": {
     "G3SJW9rRHe7J3AOH": 0.0,
-    "gm": 99.1182499999996
+    "gm": 99.1147499999996
   },
   "session_caps": {
     "G3SJW9rRHe7J3AOH": 0.0,
     "gm": 100.0
   },
   "session_spent": {
-    "gm": 0.8817499999999985,
+    "gm": 0.8852499999999984,
     "G3SJW9rRHe7J3AOH": 0.032,
     "nXnKU6oZYzdg0xSY": 0.11075000000000006,
-    "m6nkAzEdfbjIGhdz": 0.14325000000000007
+    "m6nkAzEdfbjIGhdz": 0.14625000000000007
   },
   "transactions": [
     {
@@ -3153,6 +3153,18 @@
       "amount": 0.003,
       "description": "Vision Scan for scene SnsldnjiIy1OA1C0",
       "timestamp": 1785125803.6716626
+    },
+    {
+      "user_id": "m6nkAzEdfbjIGhdz",
+      "amount": 0.003,
+      "description": "AI Orchestration Fee: Ezren",
+      "timestamp": 1785125856.235442
+    },
+    {
+      "user_id": "gm",
+      "amount": 0.0035,
+      "description": "Autonomous NPC Reply: Ort",
+      "timestamp": 1785125862.4491532
     }
   ]
 }
