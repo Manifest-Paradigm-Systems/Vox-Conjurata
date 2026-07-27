@@ -105,27 +105,79 @@ def transcribe(pcm_data: bytes) -> str:
     return resp.json().get("text", "").strip()
 
 
-def type_text(text: str):
-    """Type text into the active window via wtype.
+def ensure_ydotoold():
+    """Start ydotoold if it isn't already running.
 
-    Falls back to wl-copy + notify-send if wtype is unavailable.
+    Returns True if ydotoold is (now) available.
+    """
+    global _ydotoold_proc
+
+    # Already running and we started it
+    if _ydotoold_proc is not None and _ydotoold_proc.poll() is None:
+        return True
+
+    # Check if an external ydotoold is already running (common socket path)
+    sock = Path(os.getenv("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")) / ".ydotool_socket"
+    if sock.exists():
+        try:
+            subprocess.run(
+                ["ydotool", "type", "--", ""],
+                timeout=3, capture_output=True,
+            )
+            if sock.exists():
+                _ydotoold_proc = subprocess.Popen(["true"])  # sentinel: running but not ours
+                return True
+        except Exception:
+            pass
+
+    # Need to start it ourselves
+    try:
+        _ydotoold_proc = subprocess.Popen(
+            ["ydotoold"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        time.sleep(0.3)  # give it a moment to claim the socket
+        return _ydotoold_proc.poll() is None
+    except FileNotFoundError:
+        return False
+
+
+def stop_ydotoold():
+    """Kill ydotoold only if we started it."""
+    global _ydotoold_proc
+    if _ydotoold_proc is not None:
+        cmd = _ydotoold_proc.args
+        # Only kill if we started it (not a sentinel `true` or external one)
+        if isinstance(cmd, list) and "ydotoold" in cmd:
+            _ydotoold_proc.terminate()
+            _ydotoold_proc.wait(timeout=5)
+        _ydotoold_proc = None
+
+
+def type_text(text: str):
+    """Type text into the active window using ydotool.
+
+    Falls back to wl-copy + notify-send if ydotool fails.
     """
     if not text:
         return
     try:
         subprocess.run(
-            ["wtype", "--", text],
+            ["ydotool", "type", "--", text],
             timeout=10,
             stderr=subprocess.DEVNULL,
         )
-    except FileNotFoundError:
-        subprocess.run(["wl-copy"], input=text.encode(), timeout=5)
-        subprocess.run(
-            ["notify-send", "📝 vox2text", text],
-            timeout=5,
-        )
-    except Exception as e:
-        print(f"type_text error: {e}", file=sys.stderr)
+    except Exception:
+        # Fallback: clipboard + notification
+        try:
+            subprocess.run(["wl-copy"], input=text.encode(), timeout=5)
+            subprocess.run(
+                ["notify-send", "📝 vox2text", text],
+                timeout=5,
+            )
+        except Exception:
+            pass
 
 
 # ── Recorder ──────────────────────────────────────────────────────────────
