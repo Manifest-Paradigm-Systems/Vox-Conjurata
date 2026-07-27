@@ -1,18 +1,22 @@
 #!/usr/bin/env python3
-"""vox2textd — Push-to-talk: hold Ctrl+Shift+Space → speak → release → text typed.
+"""vox2textd — Push-to-talk: hold Ctrl+Shift+Space → speak → release → popup.
 
-Hold the combo, speak, release — transcription is typed directly into the
-active window (terminal, browser, anywhere) via ydotool.
+Hold the combo, speak, release — a popup window appears with the transcribed
+text.  Edit it, then press Enter to inject into the focused app (terminal,
+browser, editor — anything).
 
 Key differences from v1:
   - NO keyboard grab — your keyboard works normally until you hold the combo
-  - Hold-to-talk, release-to-send — not fire-once
-  - Text lands in the focused app via ydotool (not clipboard)
+  - Hold-to-talk → review popup → Enter-to-inject (not type-raw)
+  - Text lands in the focused app via the popup (ydotool/wtype)
   - No live-typing during hold (typing while modifiers are held sends control
     characters, crashing the focused app) — text only appears on release
 
-WARNING: ydotool types into the focused window.  Hold+typing is safe now
-because we defer all output until release, when modifiers are no longer held.
+Popup behavior:
+  - Shows transcribed text in a GTK window (always-on-top)
+  - Edit if needed
+  - Enter → window closes → text types into whatever app is focused
+  - Escape → window closes, nothing typed
 
 Usage:
   vox2textd                     — daemonize (background)
@@ -319,7 +323,7 @@ def listen():
 
     dev = find_keyboard()
     print(f"✅ vox2textd listening on {dev.path}: {dev.name}", file=sys.stderr)
-    print(f"   Hold Ctrl+Shift+Space → speak → release → text typed", file=sys.stderr)
+    print(f"   Hold Ctrl+Shift+Space → speak → release → popup → Enter to type", file=sys.stderr)
     sys.stderr.flush()
 
     # Resolve audio device once up front
