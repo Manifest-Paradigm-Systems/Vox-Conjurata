@@ -4,11 +4,8 @@
 Called by vox2textd (the hold-to-talk daemon) via:
     vox2text-popup --text "what you said"
 
-A small GTK window appears with the text.  Edit if needed, then:
-  Enter / "Type it" → window closes, text types into the focused app
-  Escape / ✕        → cancel, nothing typed
-
-Uses ydotool for injection (wtype fallback).
+Key design: the popup does NOT steal focus.  The underlying app stays focused,
+so ydotool/wtype can inject text directly without any window-close timing dance.
 """
 
 import argparse
@@ -36,27 +33,26 @@ COLOR_TEXT_BG = "#3b4252"
 
 
 class InjectPopup(Gtk.Window):
-    """GTK popup — pre-filled text, edit, Enter to inject into focused app.
-
-    The confirm action ONLY sets _result_text and quits the main loop.
-    Actual injection happens in main() after the window is fully gone and
-    the compositor has refocused the previous app.
-    """
+    """GTK popup — does NOT steal focus.  Text is typed directly into the
+    app that was focused when the popup appeared."""
 
     def __init__(self, initial_text: str):
         super().__init__(title=WINDOW_TITLE)
+
+        # ── Critical: don't steal focus from the underlying app ───────
+        self.set_accept_focus(False)
+        self.set_focus_on_map(False)
+        # Keep above but DON'T grab focus
+        self.set_keep_above(True)
+
         self.set_default_size(520, 180)
         self.set_resizable(True)
         self.set_position(Gtk.WindowPosition.CENTER)
-        self.set_keep_above(True)
         self.set_type_hint(Gdk.WindowTypeHint.DIALOG)
         self.set_decorated(True)
         self.set_border_width(0)
 
-        # None = cancelled, string = text to inject
         self._result_text: str | None = None
-
-        # Detect available injectors
         self._injector = self._pick_injector()
 
         # ── CSS ────────────────────────────────────────────────────────
@@ -93,7 +89,7 @@ class InjectPopup(Gtk.Window):
         hdr = Gtk.Box(spacing=8)
         icon = Gtk.Label()
         icon.set_markup("<span size='x-large'>🎤</span>")
-        lbl = Gtk.Label(label="Edit then press Enter to type into focused app")
+        lbl = Gtk.Label(label="Edit then press Enter — focused app stays focused")
         lbl.get_style_context().add_class("hint-label")
         hdr.pack_start(icon, False, False, 0)
         hdr.pack_start(lbl, False, False, 0)
@@ -146,8 +142,7 @@ class InjectPopup(Gtk.Window):
         self.connect("key-press-event", self.on_key)
         self.connect("destroy", Gtk.main_quit)
 
-        # Focus the text view so the user can type
-        GLib.idle_add(self.text_view.grab_focus)
+        # NOT grabbing focus, so don't try to focus the text view
 
     # ── Injector detection ──────────────────────────────────────────────
 
@@ -157,7 +152,7 @@ class InjectPopup(Gtk.Window):
                 return cmd
         return "none"
 
-    # ── Actions (only save intent + quit — actual injection is in main()) ─
+    # ── Actions ──────────────────────────────────────────────────────────
 
     def get_text(self) -> str:
         buf = self.text_buffer
@@ -167,8 +162,54 @@ class InjectPopup(Gtk.Window):
         text = self.get_text()
         if not text:
             return
+        # The underlying app IS STILL focused (we never stole focus),
+        # so we can inject directly without closing the window first.
         self._result_text = text
-        Gtk.main_quit()
+
+        if self._injector == "ydotool":
+            ok = self._try_ydotool(text)
+        elif self._injector == "wtype":
+            ok = self._try_wtype(text)
+        else:
+            ok = False
+
+        if not ok:
+            self._try_clipboard(text)
+            # Show error in popup
+            self.injector_label.set_text("❌ Inject failed — copied to clipboard")
+            self.injector_label.set_opacity(1.0)
+            self.type_btn.set_sensitive(False)
+        else:
+            # Success — close the window
+            Gtk.main_quit()
+
+    def _try_ydotool(self, text: str) -> bool:
+        try:
+            subprocess.run(
+                ["ydotool", "type", "--", text],
+                timeout=10,
+                stderr=subprocess.DEVNULL,
+            )
+            return True
+        except Exception:
+            return False
+
+    def _try_wtype(self, text: str) -> bool:
+        try:
+            subprocess.run(["wtype", text], timeout=10)
+            return True
+        except Exception:
+            return False
+
+    def _try_clipboard(self, text: str):
+        try:
+            subprocess.run(["wl-copy"], input=text.encode(), timeout=5)
+            subprocess.run(
+                ["notify-send", "📝 vox2text", "Copied to clipboard (inject failed)"],
+                timeout=5,
+            )
+        except Exception:
+            pass
 
     def on_cancel(self, _btn=None):
         self._result_text = None
@@ -181,45 +222,8 @@ class InjectPopup(Gtk.Window):
             if not (event.state & Gdk.ModifierType.SHIFT_MASK):
                 self.on_type()
             else:
-                return False  # Shift+Enter inserts newline normally
+                return False
         return False
-
-
-def inject_text(text: str, injector: str):
-    """Inject text into the focused application.  Called AFTER Gtk main loop
-    has fully exited, so the window is gone and focus has returned.
-
-    Tries ydotool → wtype → clipboard+notify as fallback.
-    """
-    if not text:
-        return
-
-    # Brief pause for the compositor to settle focus (window gone, prev app refocused)
-    time.sleep(0.5)
-
-    try:
-        if injector == "ydotool":
-            subprocess.run(
-                ["ydotool", "type", "--", text],
-                timeout=10,
-                stderr=subprocess.DEVNULL,
-            )
-            return
-        elif injector == "wtype":
-            subprocess.run(["wtype", text], timeout=10)
-            return
-    except Exception:
-        pass
-
-    # Last-ditch fallback: clipboard + notification
-    try:
-        subprocess.run(["wl-copy"], input=text.encode(), timeout=5)
-        subprocess.run(
-            ["notify-send", "📝 vox2text", "Copied to clipboard (inject failed)"],
-            timeout=5,
-        )
-    except Exception:
-        pass
 
 
 def main():
@@ -242,12 +246,6 @@ def main():
     win = InjectPopup(text)
     win.show_all()
     Gtk.main()
-
-    # ── Window is now gone, previous app has focus ──────────────────────
-
-    injection_text = win._result_text
-    if injection_text:
-        inject_text(injection_text, win._injector)
 
 
 def _test_mode():
