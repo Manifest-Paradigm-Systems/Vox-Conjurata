@@ -138,16 +138,13 @@ class InjectPopup(Gtk.Window):
         if not text:
             return
         self._result_text = text
-        # Destroy window so KWin refocuses the previous app (minimize alone
-        # doesn't transfer focus on KDE/Wayland, leaving ydotool keystrokes
-        # aimed at a ghost window).
+        # Just close — parent daemon restores focus + injects
         self.destroy()
         Gdk.flush()
-        # Gtk.main_quit is connected to the "destroy" signal above
 
     def on_cancel(self, _btn=None):
         self._result_text = None
-        Gtk.main_quit()
+        self.destroy()
 
     def on_key(self, _widget, event):
         if event.keyval == Gdk.KEY_Escape:
@@ -266,10 +263,11 @@ def main():
     win.show_all()
     Gtk.main()
 
-    # Window minimized — now inject
-    injection_text = win._result_text
-    if injection_text:
-        do_inject(injection_text)
+    # Popup closed — print result to stdout.  Parent daemon reads it and
+    # handles focus restoration + injection so we don't fight Wayland focus.
+    result = win._result_text
+    if result:
+        print(result, end="")
 
 
 def _test_mode():

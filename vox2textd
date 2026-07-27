@@ -248,23 +248,85 @@ def _ydotoold_alive() -> bool:
         return False
 
 
+def _save_active_window() -> tuple[str, str]:
+    """Save the currently focused window for later restoration.
+
+    Returns (xdotool_id, kwin_uuid) — either may be empty.
+    """
+    xid = ""
+    uuid = ""
+    try:
+        xid = subprocess.run(
+            ["xdotool", "getactivewindow"],
+            capture_output=True, text=True, timeout=3,
+        ).stdout.strip()
+    except Exception:
+        pass
+    try:
+        raw = subprocess.run(
+            ["qdbus", "--literal", "org.kde.KWin", "/KWin", "org.kde.KWin.queryWindowInfo"],
+            capture_output=True, text=True, timeout=3,
+        ).stdout
+        import re
+        m = re.search(r'uuid.*?\{([^}]+)\}', raw)
+        if m:
+            uuid = m.group(1)
+    except Exception:
+        pass
+    return (xid, uuid)
+
+
+def _restore_window_focus(saved: tuple[str, str]):
+    """Restore focus to a previously saved window.
+
+    Tries xdotool first (XWayland apps), then falls through.
+    """
+    xid, uuid = saved
+    if xid:
+        try:
+            subprocess.run(
+                ["xdotool", "windowactivate", xid],
+                timeout=3, stderr=subprocess.DEVNULL,
+            )
+            time.sleep(0.3)  # let KDE settle after focus change
+        except Exception:
+            pass
+
+
 def launch_popup(text: str):
     """Show transcribed text in a popup window for user review.
 
-    The popup handles injection via ydotool/wtype when the user
-    presses Enter.  We just launch it and return immediately.
+    Saves focus BEFORE the popup opens.  After the popup exits,
+    restores focus and injects the final text — all from here,
+    so the popup never needs to fight Wayland's focus rules.
     """
     if not text or not POPUP_SCRIPT.exists():
         return
+
+    # 1. Save active window before popup steals focus
+    saved = _save_active_window()
+
+    # 2. Launch popup and wait for it
     try:
-        subprocess.Popen(
+        result = subprocess.run(
             [sys.executable, str(POPUP_SCRIPT), "--text", text],
+            capture_output=True, text=True, timeout=120,
             stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
         )
+        final_text = result.stdout.strip()
+    except subprocess.TimeoutExpired:
+        return
     except Exception:
-        pass
+        return
+
+    if not final_text:
+        return
+
+    # 3. Restore focus to the window user was on before popup
+    _restore_window_focus(saved)
+
+    # 4. Inject
+    _inject_direct(final_text)
 
 
 # ── Recorder ──────────────────────────────────────────────────────────────
