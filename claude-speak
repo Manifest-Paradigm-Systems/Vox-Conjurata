@@ -26,6 +26,9 @@ PROJECT_DIR = Path(os.getenv("CLAUDE_PROJECT_DIR", Path.home() / ".claude/projec
 PIDFILE = Path(os.getenv("CLAUDE_SPEAK_PIDFILE", Path.home() / ".claude-speak.pid"))
 NPC_ID = "c3po"
 
+# Serialise audio playback so multiple requests never overlap
+_speak_lock = threading.Lock()
+
 # DSP presets for C-3PO voice
 DSP_C3PO = {
     "pitch_shift": 0,
@@ -39,37 +42,42 @@ WATCH_INTERVAL = 0.5  # seconds between poll
 
 
 def speak_text(text: str):
-    """Send text to vox-audio-core for C-3PO voice synthesis and play it."""
+    """Send text to vox-audio-core for C-3PO voice synthesis and play it.
+
+    Serialised via _speak_lock so concurrent calls queue up rather than
+    producing overlapping audio.
+    """
     import requests
 
     if not text.strip():
         return
 
-    print(f"🔊 C-3PO: {text[:80]}…", file=sys.stderr)
+    with _speak_lock:
+        print(f"🔊 C-3PO: {text[:80]}…", file=sys.stderr)
 
-    try:
-        resp = requests.post(
-            f"{VOX_AUDIO_URL}/generate",
-            json={
-                "npc_id": NPC_ID,
-                "dialogue_text": text.strip(),
-                "dsp_presets": DSP_C3PO,
-                "control_instruction": None,
-            },
-            timeout=120,
-        )
-        resp.raise_for_status()
+        try:
+            resp = requests.post(
+                f"{VOX_AUDIO_URL}/generate",
+                json={
+                    "npc_id": NPC_ID,
+                    "dialogue_text": text.strip(),
+                    "dsp_presets": DSP_C3PO,
+                    "control_instruction": None,
+                },
+                timeout=120,
+            )
+            resp.raise_for_status()
 
-        # Save to temp file and play
-        wav_path = Path("/tmp/claude-speak.wav")
-        wav_path.write_bytes(resp.content)
-        subprocess.run(
-            ["pw-play", str(wav_path)],
-            timeout=60, stderr=subprocess.DEVNULL,
-        )
-    except Exception as e:
-        print(f"  ⚠️ speak error: {e}", file=sys.stderr)
-        _fallback_espeak(text)
+            # Save to temp file and play
+            wav_path = Path("/tmp/claude-speak.wav")
+            wav_path.write_bytes(resp.content)
+            subprocess.run(
+                ["pw-play", str(wav_path)],
+                timeout=60, stderr=subprocess.DEVNULL,
+            )
+        except Exception as e:
+            print(f"  ⚠️ speak error: {e}", file=sys.stderr)
+            _fallback_espeak(text)
 
 
 def _fallback_espeak(text: str):
