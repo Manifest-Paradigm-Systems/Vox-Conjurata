@@ -71,17 +71,31 @@ TRIGGER_KEYS = {
 def find_good_device(pa: pyaudio.PyAudio) -> int:
     """Auto-pick the best mic device.
 
-    Prefers PipeWire virtual devices (which handle resampling) over raw
-    ALSA hardware devices that may not support 16kHz directly.
+    Tries, in order of preference:
+      1. "default" / "sysdefault" ALSA PCM  — system default, always reliable
+      2. "pipewire" virtual device          — handles resampling
+      3. Named hardware devices (brand keywords)
+      4. Whatever PyAudio thinks is default
+
+    The separate passes matter because "default" (always index 17 on this
+    system) is a safer choice than "pipewire" (index 16) — PipeWire's
+    virtual device can intermittently reject our stream parameters when
+    the PipeWire graph is in transition.
     """
-    # Prefer the "default" PipeWire device — it handles sample rate
-    # conversion transparently so our 16kHz request just works.
+    # First pass: the system default PCM
     for i in range(pa.get_device_count()):
         info = pa.get_device_info_by_index(i)
         if info["maxInputChannels"] == 0:
             continue
-        name = info["name"]
-        if name in ("default", "pipewire", "sysdefault"):
+        if info["name"] in ("default", "sysdefault"):
+            return i
+
+    # Second pass: PipeWire virtual device
+    for i in range(pa.get_device_count()):
+        info = pa.get_device_info_by_index(i)
+        if info["maxInputChannels"] == 0:
+            continue
+        if info["name"] == "pipewire":
             return i
 
     # Fallback: match by brand keywords
@@ -234,14 +248,40 @@ class Recorder:
             return new_frames, len(self._frames)
 
     def _record(self):
-        """Thread target: capture audio until stop is set."""
+        """Thread target: capture audio until stop is set.
+
+        Tries the configured device first.  If it fails to open, falls
+        back to scanning all input-capable devices for one that works
+        with our format (16 kHz / 1 channel / paInt16).  This handles
+        the case where PipeWire's virtual device temporarily refuses a
+        stream while the graph reconfigures.
+        """
         pa = pyaudio.PyAudio()
-        try:
-            stream = pa.open(
-                format=FORMAT, channels=CHANNELS, rate=RATE,
-                input=True, input_device_index=self._device,
-                frames_per_buffer=CHUNK,
-            )
+        stream = None
+        candidates = [self._device]
+        candidates.extend(
+            i for i in range(pa.get_device_count())
+            if i != self._device
+            and pa.get_device_info_by_index(i)["maxInputChannels"] > 0
+        )
+
+        for dev in candidates:
+            try:
+                stream = pa.open(
+                    format=FORMAT, channels=CHANNELS, rate=RATE,
+                    input=True, input_device_index=dev,
+                    frames_per_buffer=CHUNK,
+                )
+                if dev != self._device:
+                    self._device = dev  # update for any downstream readers
+                break
+            except Exception:
+                continue
+
+        if stream is None:
+            print("recording error: no working input device found", file=sys.stderr)
+            pa.terminate()
+            return
             for _ in range(8):  # skip mic pop
                 stream.read(CHUNK, exception_on_overflow=False)
 
