@@ -154,6 +154,9 @@ class InjectPopup(Gtk.Window):
         if not text:
             return
         self._result_text = text
+        # Hide immediately so the compositor starts refocusing.  The main
+        # loop will quit on the next iteration.
+        self.hide()
         Gtk.main_quit()
 
     def on_cancel(self, _btn=None):
