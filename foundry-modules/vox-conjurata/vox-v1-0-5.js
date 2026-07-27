@@ -545,15 +545,19 @@ function voxInjectText(text) {
 
     if (target.isContentEditable || target.closest('.ProseMirror')) {
         const editable = target.isContentEditable ? target : target.closest('.ProseMirror');
-        // Try ProseMirror API first (Foundry V12+)
-        const pmView = editable.pmView || editable.view;
-        if (pmView && typeof pmView.dispatch === 'function') {
-            const { state } = pmView;
+
+        // 1) Try Foundry's chatEditor API (most reliable for chat editor)
+        let view = ui.chat?.chatEditor?.view;
+        // 2) Try pmView/view on the DOM element (used by some Foundry editors)
+        if (!view) view = editable.pmView || editable.view;
+        if (view && typeof view.dispatch === 'function') {
+            const { state } = view;
             const tr = state.tr.replaceSelectionWith(state.schema.text(text), false);
-            pmView.dispatch(tr);
+            view.dispatch(tr);
             return true;
         }
-        // execCommand fallback for plain contentEditable
+
+        // 3) execCommand fallback for plain contentEditable
         editable.focus();
         const sel = window.getSelection();
         if (sel && sel.rangeCount > 0) {
