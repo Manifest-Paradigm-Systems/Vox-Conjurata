@@ -25,7 +25,7 @@ from gi.repository import Gtk, GLib, Gdk
 
 # ── Config ────────────────────────────────────────────────────────────────
 WINDOW_TITLE = "🎤 vox2text"
-INJECT_DELAY = 0.6  # seconds to wait for focus to return after window closes
+INJECT_DELAY = 0.3  # seconds to wait after hiding/minimizing for focus to return
 
 COLOR_BG = "#2e3440"
 COLOR_FG = "#eceff4"
@@ -154,8 +154,9 @@ class InjectPopup(Gtk.Window):
         if not text:
             return
         self._result_text = text
-        # Hide immediately so the compositor starts refocusing.  The main
-        # loop will quit on the next iteration.
+        # Minimize then hide — this signals to KWin that we're giving up
+        # focus, so it restores focus to the previously active window.
+        self.iconify()
         self.hide()
         Gtk.main_quit()
 
