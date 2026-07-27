@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""vox2textd — Push-to-talk: hold Ctrl+Shift+V → speak → release → text typed.
+"""vox2textd — Push-to-talk: hold Ctrl+Shift+Space → speak → release → text typed.
 
 Hold the combo, speak, release — transcription is typed directly into the
 active window (terminal, browser, anywhere) via wtype.
@@ -292,7 +292,7 @@ def listen():
 
     dev = find_keyboard()
     print(f"✅ vox2textd listening on {dev.path}: {dev.name}", file=sys.stderr)
-    print(f"   Hold Ctrl+Shift+V → speak → release → text typed", file=sys.stderr)
+    print(f"   Hold Ctrl+Shift+Space → speak → release → text typed", file=sys.stderr)
     sys.stderr.flush()
 
     # Resolve audio device once up front
