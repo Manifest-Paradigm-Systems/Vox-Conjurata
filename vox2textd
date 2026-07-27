@@ -340,28 +340,40 @@ def listen():
     _transcribe_lock = threading.Lock()
 
     def do_transcribe():
-        """Called after combo released: record → transcribe → launch popup."""
+        """Called after combo released: record → transcribe → launch popup.
+
+        Guarded by a threading.Lock so rapid re-triggers don't race on the
+        `recorder` variable.  If a transcription is already in flight the
+        second call is dropped (the recording is still stopped by the caller
+        setting combo_active=False — no audio is lost, only the duplicate
+        work).
+        """
         nonlocal recorder
-        if not recorder:
+        if not _transcribe_lock.acquire(blocking=False):
             return
-        recorder.stop()
-        frames, total = recorder.get_frames_since(0)
-        pcm = b"".join(frames)
-        recorder = None
-
-        if len(pcm) < 4096:
-            return
-
-        text = ""
         try:
-            text = transcribe(pcm)
-        except Exception as e:
-            print(f"   transcribe error: {e}", file=sys.stderr)
-            return
+            if not recorder:
+                return
+            recorder.stop()
+            frames, total = recorder.get_frames_since(0)
+            pcm = b"".join(frames)
+            recorder = None
 
-        if text.strip():
-            print(f"   → {text}", file=sys.stderr)
-            launch_popup(text.strip())
+            if len(pcm) < 4096:
+                return
+
+            text = ""
+            try:
+                text = transcribe(pcm)
+            except Exception as e:
+                print(f"   transcribe error: {e}", file=sys.stderr)
+                return
+
+            if text.strip():
+                print(f"   → {text}", file=sys.stderr)
+                launch_popup(text.strip())
+        finally:
+            _transcribe_lock.release()
 
     try:
         for event in dev.read_loop():
