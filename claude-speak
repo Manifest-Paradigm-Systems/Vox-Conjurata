@@ -27,10 +27,10 @@ NPC_ID = "c3po"
 
 # DSP presets for C-3PO voice
 DSP_C3PO = {
-    "pitch_shift": 4,
-    "highpass_hz": 300,
-    "chorus_depth": 0.15,
-    "reverb_size": 0.05,
+    "pitch_shift": 0,
+    "highpass_hz": 100,
+    "chorus_depth": 0.05,
+    "reverb_size": 0.02,
     "distortion_db": 0,
 }
 
