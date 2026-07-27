@@ -332,17 +332,20 @@ def listen():
     def periodic_transcribe():
         """Run in a thread: every ~1.5 s transcribe new audio since last
         checkpoint and type it.  Stops when combo_active turns False."""
-        nonlocal recorder
+        # Capture recorder *locally* so we're immune to the main thread
+        # nulling it during cleanup.  (combo_active is a plain bool read
+        # from the closure — fine for a daemon loop.)
+        rec = recorder
         frame_index = 0
         last_text = ""
 
         while combo_active:
             time.sleep(1.5)
 
-            if not recorder:
+            if not rec:
                 continue
 
-            new_frames, total = recorder.get_frames_since(frame_index)
+            new_frames, total = rec.get_frames_since(frame_index)
             if not new_frames:
                 continue
 
@@ -377,9 +380,9 @@ def listen():
             frame_index = total
 
         # ── Final flush (combo released) ──
-        if not recorder:
+        if not rec:
             return
-        new_frames, total = recorder.get_frames_since(frame_index)
+        new_frames, total = rec.get_frames_since(frame_index)
         if new_frames:
             pcm = b"".join(new_frames)
             if len(pcm) > 4096:
