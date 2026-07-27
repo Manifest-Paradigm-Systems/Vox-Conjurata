@@ -1,27 +1,51 @@
 #!/usr/bin/env python3
-"""vox2textd — background daemon: listens for Ctrl+Shift+V, records, transcribes.
+"""vox2textd — Push-to-talk: hold Ctrl+Shift+V → speak → release → text typed.
 
-Runs as a user service. Press Ctrl+Shift+V anywhere → speak → text lands in
-~/.vox_transcript + notification + clipboard.
+Hold the combo, speak, release — transcription is typed directly into the
+active window (terminal, browser, anywhere) via wtype.
 
-Use --foreground to run interactively (for testing).
-Use --find-keys to see which key events your keyboard produces.
+Key differences from v1:
+  - NO keyboard grab — your keyboard works normally until you hold the combo
+  - Hold-to-talk, release-to-send — not fire-once
+  - Text lands in the focused app via wtype (not clipboard)
+
+Usage:
+  vox2textd                     — daemonize (background)
+  vox2textd --foreground        — run in terminal (testing)
+  vox2textd stop                — stop daemon
+  vox2textd status              — check if running
+  vox2textd --find-keys         — see key scancodes for debugging
 """
 
+import io
 import os
 import signal
+import struct
 import subprocess
 import sys
+import threading
 import time
+import wave
 from pathlib import Path
 
 import evdev
 from evdev import ecodes
+import numpy as np
+import pyaudio
+import requests
 
-VOX2TEXT = os.getenv("VOX2TEXT", "/var/home/EvokeStudio/vox-conjurata/vox2text")
+# ── Config ────────────────────────────────────────────────────────────────
+STT_URL = os.getenv("VOX_STT_URL", "http://localhost:5000/v1/audio/transcriptions")
 PIDFILE = Path(os.getenv("VOX2TEXT_PIDFILE", Path.home() / ".vox2textd.pid"))
 
-# The combo we're listening for
+RATE = 16000
+CHUNK = 1024
+FORMAT = pyaudio.paInt16
+CHANNELS = 1
+SILENCE_THRESHOLD = 300
+MAX_RECORD_SEC = 30
+
+# The combo: Ctrl+Shift+V
 TRIGGER_KEYS = {
     ecodes.KEY_LEFTCTRL,
     ecodes.KEY_LEFTSHIFT,
@@ -29,47 +53,230 @@ TRIGGER_KEYS = {
 }
 
 
+# ── Helpers ───────────────────────────────────────────────────────────────
+
+def rms(data: bytes) -> float:
+    """Root-mean-square of int16 PCM — for VAD if needed."""
+    count = len(data) // 2
+    if count == 0:
+        return 0.0
+    samples = struct.unpack(f"<{count}h", data)
+    return float(np.sqrt(np.mean(np.square(samples))))
+
+
+def find_good_device(pa: pyaudio.PyAudio) -> int:
+    """Auto-pick the best mic device."""
+    best = None
+    for i in range(pa.get_device_count()):
+        info = pa.get_device_info_by_index(i)
+        if info["maxInputChannels"] == 0:
+            continue
+        name = info["name"]
+        if "EKSA" in name or "Headset" in name or "Microphone" in name:
+            best = i
+        if "EKSA" in name:
+            best = i
+            break
+    if best is None:
+        best = pa.get_default_input_device_info()["index"]
+    return best
+
+
+def transcribe(pcm_data: bytes) -> str:
+    """Send PCM to vox-voice STT endpoint, return text."""
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(CHANNELS)
+        wf.setsampwidth(2)
+        wf.setframerate(RATE)
+        wf.writeframes(pcm_data)
+    wav_bytes = buf.getvalue()
+
+    resp = requests.post(
+        STT_URL,
+        files={"file": ("voice.wav", wav_bytes, "audio/wav")},
+        data={"model_name": "base", "language": "en"},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    return resp.json().get("text", "").strip()
+
+
+def type_text(text: str):
+    """Type text into the active window via wtype.
+
+    Falls back to wl-copy + notify-send if wtype is unavailable.
+    """
+    if not text:
+        return
+    try:
+        subprocess.run(
+            ["wtype", "--", text],
+            timeout=10,
+            stderr=subprocess.DEVNULL,
+        )
+    except FileNotFoundError:
+        subprocess.run(["wl-copy"], input=text.encode(), timeout=5)
+        subprocess.run(
+            ["notify-send", "📝 vox2text", text],
+            timeout=5,
+        )
+    except Exception as e:
+        print(f"type_text error: {e}", file=sys.stderr)
+
+
+# ── Recorder ──────────────────────────────────────────────────────────────
+
+class Recorder:
+    """Captures audio in a daemon thread until told to stop."""
+
+    def __init__(self, device_index: int):
+        self._device = device_index
+        self._stop = threading.Event()
+        self._pcm: bytes | None = None
+
+    def start(self):
+        """Begin recording in a background thread."""
+        self._stop.clear()
+        t = threading.Thread(target=self._record, daemon=True)
+        t.start()
+        return t
+
+    def stop(self) -> bytes | None:
+        """Signal stop, wait for thread, return PCM data (or None)."""
+        self._stop.set()
+        # brief wait for thread to finish
+        for _ in range(50):  # up to ~5s
+            if not self._pcm and not self._pcm_can_be_none:
+                pass
+        return self._pcm
+
+    def _record(self):
+        """Thread target: capture audio until stop is set."""
+        self._pcm = None
+        pa = pyaudio.PyAudio()
+        try:
+            stream = pa.open(
+                format=FORMAT, channels=CHANNELS, rate=RATE,
+                input=True, input_device_index=self._device,
+                frames_per_buffer=CHUNK,
+            )
+            frames = []
+            for _ in range(4):  # skip mic pop
+                stream.read(CHUNK, exception_on_overflow=False)
+
+            while not self._stop.is_set():
+                data = stream.read(CHUNK, exception_on_overflow=False)
+                frames.append(data)
+
+            stream.stop_stream()
+            stream.close()
+
+            if frames:
+                self._pcm = b"".join(frames)
+        except Exception as e:
+            print(f"recording error: {e}", file=sys.stderr)
+        finally:
+            pa.terminate()
+
+    @property
+    def pcm(self) -> bytes | None:
+        return self._pcm
+
+
+# ── Keyboard ──────────────────────────────────────────────────────────────
+
 def find_keyboard() -> evdev.InputDevice:
-    """Find the best keyboard device — prefer a real keyboard over mouse/mice."""
+    """Find a suitable keyboard device.  Does NOT grab."""
     candidates = []
     for path in evdev.list_devices():
         dev = evdev.InputDevice(path)
         caps = dev.capabilities()
-        # A keyboard should have EV_KEY and some KEY_* codes
         if ecodes.EV_KEY in caps:
-            key_codes = caps[ecodes.EV_KEY]
-            # Real keyboards have letter keys
-            if ecodes.KEY_A in key_codes and ecodes.KEY_LEFTCTRL in key_codes:
-                # Prefer devices with "Keyboard" in name
+            keys = caps[ecodes.EV_KEY]
+            if ecodes.KEY_A in keys and ecodes.KEY_LEFTCTRL in keys:
                 score = 2 if "Keyboard" in dev.name else 1
-                # Avoid mouse-only devices with keyboard passthrough
                 if "Mouse" in dev.name and "Keyboard" not in dev.name:
                     score = -1
-                candidates.append((score, dev))
-            else:
-                dev.close()
-        else:
-            dev.close()
+                candidates.append((score, path))
+        dev.close()
 
     if not candidates:
         raise RuntimeError("No suitable keyboard found")
 
-    # Sort by score desc, pick the first
     candidates.sort(key=lambda x: -x[0])
-    dev = candidates[0][1]
-    dev.grab()
+    dev = evdev.InputDevice(candidates[0][1])
     return dev
 
 
-def listen(foreground: bool = False):
-    """Main loop: listen for trigger combo, fire vox2text."""
+def find_keys_mode():
+    """Debug: print scancodes for pressed keys."""
+    dev = find_keyboard()
+    try:
+        print(f"Reading from {dev.path}: {dev.name}", file=sys.stderr)
+        print("Press keys to see codes. Ctrl+C to exit.", file=sys.stderr)
+        for event in dev.read_loop():
+            if event.type == ecodes.EV_KEY:
+                kev = evdev.categorize(event)
+                if kev.keystate == kev.key_down:
+                    name = ecodes.KEY.get(kev.scancode, f"UNKNOWN[{kev.scancode}]")
+                    print(f"  {kev.scancode:3d} = {name}")
+    except KeyboardInterrupt:
+        pass
+    finally:
+        dev.close()
+
+
+# ── Main loop ─────────────────────────────────────────────────────────────
+
+def listen():
+    """No-grab event loop: hold combo to record, release to transcribe+type."""
     dev = find_keyboard()
     print(f"✅ vox2textd listening on {dev.path}: {dev.name}", file=sys.stderr)
-    print(f"   Press Ctrl+Shift+V to transcribe voice → terminal", file=sys.stderr)
+    print(f"   Hold Ctrl+Shift+V → speak → release → text typed", file=sys.stderr)
     sys.stderr.flush()
 
-    held = set()
-    fired = False  # debounce: don't fire repeatedly while held
+    # Resolve audio device once up front
+    pa_i = pyaudio.PyAudio()
+    audio_device = find_good_device(pa_i)
+    pa_i.terminate()
+    print(f"🎤 Mic device [{audio_device}]", file=sys.stderr)
+    sys.stderr.flush()
+
+    held: set[int] = set()
+    combo_active = False
+    recorder: Recorder | None = None
+    record_thread: threading.Thread | None = None
+    # Debounce: ignore brief re-trigger within combo (e.g., V repeating)
+    last_release = 0.0
+
+    def start_recording():
+        nonlocal recorder, record_thread
+        recorder = Recorder(audio_device)
+        record_thread = recorder.start()
+        print(f"\n🎤 [hold] Recording… release to stop", file=sys.stderr)
+        sys.stderr.flush()
+
+    def stop_recording():
+        nonlocal recorder, record_thread, last_release
+        if recorder is None:
+            return
+        recorder.stop()
+        pcm = recorder.pcm
+        recorder = None
+        record_thread = None
+
+        if pcm and len(pcm) > 4096:
+            print(f"   Transcribing…", file=sys.stderr, end="", flush=True)
+            text = transcribe(pcm)
+            if text:
+                print(f"\r📝 {text}", file=sys.stderr)
+                type_text(text)
+            else:
+                print(f"\r   (no speech detected)", file=sys.stderr)
+        else:
+            print(f"   (too short / silent)", file=sys.stderr)
+        sys.stderr.flush()
 
     try:
         for event in dev.read_loop():
@@ -83,56 +290,51 @@ def listen(foreground: bool = False):
                 held.add(keycode)
             elif kev.keystate == kev.key_up:
                 held.discard(keycode)
-                fired = False  # reset debounce on release
+                last_release = time.monotonic()
 
-            # Check if all trigger keys are held
-            if TRIGGER_KEYS.issubset(held) and not fired:
-                fired = True
-                sys.stderr.write("\n🎤 Triggered!\n")
-                sys.stderr.flush()
-                # Fire vox2text (non-blocking)
-                subprocess.Popen(
-                    [VOX2TEXT],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    stdin=subprocess.DEVNULL,
-                )
-                # Small debounce delay
-                time.sleep(0.3)
+            all_down = TRIGGER_KEYS.issubset(held)
+
+            # Combo fully held → start recording
+            if all_down and not combo_active and (time.monotonic() - last_release) > 0.15:
+                combo_active = True
+                start_recording()
+
+            # Any trigger key released → stop recording + transcribe
+            if not all_down and combo_active:
+                combo_active = False
+                stop_recording()
 
     except KeyboardInterrupt:
         pass
     finally:
-        dev.ungrab()
+        if recorder:
+            recorder.stop()
         dev.close()
         print("vox2textd stopped", file=sys.stderr)
 
 
+# ── Daemon lifecycle ──────────────────────────────────────────────────────
+
 def daemonize():
-    """Fork into background."""
+    """Fork into background, write PID file, start listen()."""
     pid = os.fork()
     if pid > 0:
-        # Parent exits
         PIDFILE.write_text(str(pid))
         print(f"vox2textd started (PID {pid})", file=sys.stderr)
         sys.exit(0)
-    # Child continues
     os.setsid()
-    # Second fork to fully detach
     pid2 = os.fork()
     if pid2 > 0:
         sys.exit(0)
-    # Close stdio
     with open(os.devnull, "r") as f:
         os.dup2(f.fileno(), sys.stdin.fileno())
     with open(os.devnull, "w") as f:
         os.dup2(f.fileno(), sys.stdout.fileno())
         os.dup2(f.fileno(), sys.stderr.fileno())
-    listen(foreground=False)
+    listen()
 
 
 def stop():
-    """Stop the daemon."""
     if not PIDFILE.exists():
         print("vox2textd not running (no PID file)", file=sys.stderr)
         return
@@ -146,28 +348,9 @@ def stop():
         PIDFILE.unlink(missing_ok=True)
 
 
-def find_keys_mode():
-    """Helper: press keys and see what scancodes they produce."""
-    dev = find_keyboard()
-    print(f"Reading from {dev.path}: {dev.name}", file=sys.stderr)
-    print("Press keys to see their codes. Ctrl+C to exit.", file=sys.stderr)
-    try:
-        for event in dev.read_loop():
-            if event.type == ecodes.EV_KEY:
-                kev = evdev.categorize(event)
-                if kev.keystate == kev.key_down:
-                    name = ecodes.KEY.get(kev.scancode, f"UNKNOWN[{kev.scancode}]")
-                    print(f"  {kev.scancode:3d} = {name}")
-    except KeyboardInterrupt:
-        pass
-    finally:
-        dev.close()
-
-
 def status():
-    """Check if daemon is running."""
     if not PIDFILE.exists():
-        print("vox2textd: stopped (no PID file)", file=sys.stderr)
+        print("vox2textd: stopped", file=sys.stderr)
         return
     pid = int(PIDFILE.read_text().strip())
     try:
@@ -177,6 +360,8 @@ def status():
         print(f"vox2textd: stopped (stale PID {pid})", file=sys.stderr)
         PIDFILE.unlink(missing_ok=True)
 
+
+# ── Entry ─────────────────────────────────────────────────────────────────
 
 def main():
     if len(sys.argv) > 1:
@@ -188,7 +373,7 @@ def main():
             status()
             return
         if cmd == "--foreground":
-            listen(foreground=True)
+            listen()
             return
         if cmd == "--find-keys":
             find_keys_mode()
@@ -201,7 +386,6 @@ def main():
             time.sleep(0.5)
             daemonize()
             return
-
     # Default: daemonize
     daemonize()
 
