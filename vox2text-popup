@@ -36,7 +36,12 @@ COLOR_TEXT_BG = "#3b4252"
 
 
 class InjectPopup(Gtk.Window):
-    """GTK popup — pre-filled text, edit, Enter to inject into focused app."""
+    """GTK popup — pre-filled text, edit, Enter to inject into focused app.
+
+    The confirm action ONLY sets _result_text and quits the main loop.
+    Actual injection happens in main() after the window is fully gone and
+    the compositor has refocused the previous app.
+    """
 
     def __init__(self, initial_text: str):
         super().__init__(title=WINDOW_TITLE)
@@ -47,6 +52,9 @@ class InjectPopup(Gtk.Window):
         self.set_type_hint(Gdk.WindowTypeHint.DIALOG)
         self.set_decorated(True)
         self.set_border_width(0)
+
+        # None = cancelled, string = text to inject
+        self._result_text: str | None = None
 
         # Detect available injectors
         self._injector = self._pick_injector()
@@ -85,7 +93,7 @@ class InjectPopup(Gtk.Window):
         hdr = Gtk.Box(spacing=8)
         icon = Gtk.Label()
         icon.set_markup("<span size='x-large'>🎤</span>")
-        lbl = Gtk.Label(label="Release to type — edit then press Enter")
+        lbl = Gtk.Label(label="Edit then press Enter to type into focused app")
         lbl.get_style_context().add_class("hint-label")
         hdr.pack_start(icon, False, False, 0)
         hdr.pack_start(lbl, False, False, 0)
@@ -113,9 +121,7 @@ class InjectPopup(Gtk.Window):
         vbox.pack_start(frame, True, True, 0)
 
         # Injector hint
-        self.injector_label = Gtk.Label(
-            label=f"via {self._injector}",
-        )
+        self.injector_label = Gtk.Label(label=f"via {self._injector}")
         self.injector_label.get_style_context().add_class("hint-label")
         self.injector_label.set_opacity(0.6)
         vbox.pack_start(self.injector_label, False, False, 0)
@@ -146,13 +152,12 @@ class InjectPopup(Gtk.Window):
     # ── Injector detection ──────────────────────────────────────────────
 
     def _pick_injector(self) -> str:
-        """Return the best available injector command name."""
         for cmd in ("ydotool", "wtype"):
             if shutil.which(cmd):
                 return cmd
         return "none"
 
-    # ── Actions ──────────────────────────────────────────────────────────
+    # ── Actions (only save intent + quit — actual injection is in main()) ─
 
     def get_text(self) -> str:
         buf = self.text_buffer
@@ -162,52 +167,59 @@ class InjectPopup(Gtk.Window):
         text = self.get_text()
         if not text:
             return
-
-        # Phase 1: destroy window so focus returns to the previous app
-        self.hide()
+        self._result_text = text
         Gtk.main_quit()
 
-        # Phase 2: brief pause for the compositor to refocus
-        time.sleep(0.15)
-
-        # Phase 3: inject into whatever is now focused
-        try:
-            if self._injector == "ydotool":
-                subprocess.run(
-                    ["ydotool", "type", "--", text],
-                    timeout=10,
-                    stderr=subprocess.DEVNULL,
-                )
-            elif self._injector == "wtype":
-                subprocess.run(
-                    ["wtype", text],
-                    timeout=10,
-                )
-        except Exception:
-            # Last-ditch: clipboard + notification
-            try:
-                subprocess.run(["wl-copy"], input=text.encode(), timeout=5)
-                subprocess.run(
-                    ["notify-send", "📝 vox2text", "Copied to clipboard (inject failed)"],
-                    timeout=5,
-                )
-            except Exception:
-                pass
-
     def on_cancel(self, _btn=None):
+        self._result_text = None
         Gtk.main_quit()
 
     def on_key(self, _widget, event):
         if event.keyval == Gdk.KEY_Escape:
             self.on_cancel()
         elif event.keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
-            # Don't inject if Shift+Enter (user wants a newline)
             if not (event.state & Gdk.ModifierType.SHIFT_MASK):
                 self.on_type()
             else:
-                # Let Shift+Enter insert a newline normally
-                return False
+                return False  # Shift+Enter inserts newline normally
         return False
+
+
+def inject_text(text: str, injector: str):
+    """Inject text into the focused application.  Called AFTER Gtk main loop
+    has fully exited, so the window is gone and focus has returned.
+
+    Tries ydotool → wtype → clipboard+notify as fallback.
+    """
+    if not text:
+        return
+
+    # Brief pause for the compositor to settle focus
+    time.sleep(0.2)
+
+    try:
+        if injector == "ydotool":
+            subprocess.run(
+                ["ydotool", "type", "--", text],
+                timeout=10,
+                stderr=subprocess.DEVNULL,
+            )
+            return
+        elif injector == "wtype":
+            subprocess.run(["wtype", text], timeout=10)
+            return
+    except Exception:
+        pass
+
+    # Last-ditch fallback: clipboard + notification
+    try:
+        subprocess.run(["wl-copy"], input=text.encode(), timeout=5)
+        subprocess.run(
+            ["notify-send", "📝 vox2text", "Copied to clipboard (inject failed)"],
+            timeout=5,
+        )
+    except Exception:
+        pass
 
 
 def main():
@@ -224,13 +236,18 @@ def main():
 
     text = args.text or ""
     if not text.strip():
-        # Nothing to show — exit silently
         return
 
     signal.signal(signal.SIGINT, signal.SIG_DFL)
     win = InjectPopup(text)
     win.show_all()
     Gtk.main()
+
+    # ── Window is now gone, previous app has focus ──────────────────────
+
+    injection_text = win._result_text
+    if injection_text:
+        inject_text(injection_text, win._injector)
 
 
 def _test_mode():
