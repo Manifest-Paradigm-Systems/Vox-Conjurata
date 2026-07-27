@@ -31,11 +31,12 @@ from pathlib import Path
 import evdev
 from evdev import ecodes
 
-# Global flag so the signal handler can stop the event loop cleanly
-_running = True
 import numpy as np
 import pyaudio
 import requests
+
+# Global flag so the signal handler can stop the event loop cleanly
+_running = True
 
 # ── Config ────────────────────────────────────────────────────────────────
 STT_URL = os.getenv("VOX_STT_URL", "http://localhost:5000/v1/audio/transcriptions")
@@ -320,6 +321,7 @@ def _sigterm_handler(signum, frame):
 
 def listen():
     """No-grab event loop: hold combo to record, release to transcribe+type."""
+    signal.signal(signal.SIGTERM, _sigterm_handler)
     # Ensure ydotool daemon is running for text output
     if not ensure_ydotoold():
         print("⚠️  ydotoold not available — text will go to clipboard+notification instead",
