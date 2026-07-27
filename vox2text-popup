@@ -154,10 +154,10 @@ class InjectPopup(Gtk.Window):
         if not text:
             return
         self._result_text = text
-        # Minimize then hide — this signals to KWin that we're giving up
-        # focus, so it restores focus to the previously active window.
+        # Minimize the window — this signals KWin to restore focus to the
+        # previously active window.  We inject text while minimized, THEN
+        # destroy on the next idle cycle.
         self.iconify()
-        self.hide()
         Gtk.main_quit()
 
     def on_cancel(self, _btn=None):
