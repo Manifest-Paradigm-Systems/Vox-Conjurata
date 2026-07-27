@@ -3,7 +3,7 @@
   "stripe_customer_id": null,
   "personal_wallets": {
     "gm": 979.7102499999966,
-    "G3SJW9rRHe7J3AOH": 204.97100000000003,
+    "G3SJW9rRHe7J3AOH": 204.96800000000005,
     "nXnKU6oZYzdg0xSY": 19.891499999999994,
     "m6nkAzEdfbjIGhdz": 0.8567500000000011
   },
@@ -17,7 +17,7 @@
   },
   "session_spent": {
     "gm": 0.8817499999999985,
-    "G3SJW9rRHe7J3AOH": 0.028999999999999998,
+    "G3SJW9rRHe7J3AOH": 0.032,
     "nXnKU6oZYzdg0xSY": 0.11075000000000006,
     "m6nkAzEdfbjIGhdz": 0.14325000000000007
   },
@@ -3147,6 +3147,12 @@
       "amount": 0.00225,
       "description": "AI Orchestration Fee: Narrator",
       "timestamp": 1784535700.1932776
+    },
+    {
+      "user_id": "G3SJW9rRHe7J3AOH",
+      "amount": 0.003,
+      "description": "Vision Scan for scene SnsldnjiIy1OA1C0",
+      "timestamp": 1785125803.6716626
     }
   ]
 }
