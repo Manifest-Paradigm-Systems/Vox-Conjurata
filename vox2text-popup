@@ -23,7 +23,9 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, GLib, Gdk
 
 WINDOW_TITLE = "🎤 vox2text"
-INJECT_DELAY = 0.3  # seconds after minimize to let focus settle
+INJECT_DELAY = 0.5  # seconds after window close to let focus settle (KDE/Wayland)
+INJECT_RETRIES = 3
+INJECT_RETRY_INTERVAL = 0.15
 
 COLOR_BG = "#2e3440"
 COLOR_FG = "#eceff4"
