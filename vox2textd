@@ -48,11 +48,11 @@ CHANNELS = 1
 SILENCE_THRESHOLD = 300
 MAX_RECORD_SEC = 30
 
-# The combo: Ctrl+Shift+V
+# The combo: Ctrl+Shift+Space
 TRIGGER_KEYS = {
     ecodes.KEY_LEFTCTRL,
     ecodes.KEY_LEFTSHIFT,
-    ecodes.KEY_V,
+    ecodes.KEY_SPACE,
 }
 
 
