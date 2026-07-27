@@ -30,6 +30,9 @@ from pathlib import Path
 
 import evdev
 from evdev import ecodes
+
+# Global flag so the signal handler can stop the event loop cleanly
+_running = True
 import numpy as np
 import pyaudio
 import requests
@@ -306,6 +309,14 @@ def find_keys_mode():
 
 
 # ── Main loop ─────────────────────────────────────────────────────────────
+
+def _sigterm_handler(signum, frame):
+    """Clean shutdown on SIGTERM — raises KeyboardInterrupt so the finally
+    block in listen() runs (evdev close, ydotoold stop, etc.)."""
+    global _running
+    _running = False
+    raise KeyboardInterrupt()
+
 
 def listen():
     """No-grab event loop: hold combo to record, release to transcribe+type."""
