@@ -48,6 +48,7 @@ _running = True
 # ── Config ────────────────────────────────────────────────────────────────
 STT_URL = os.getenv("VOX_STT_URL", "http://localhost:5000/v1/audio/transcriptions")
 PIDFILE = Path(os.getenv("VOX2TEXT_PIDFILE", Path.home() / ".vox2textd.pid"))
+INJECT_MODE = os.getenv("VOX_INJECT_MODE", "direct")  # "direct" or "popup"
 
 # Track ydotoold lifecycle — set by ensure_ydotoold, cleaned up on exit
 _ydotoold_proc: subprocess.Popen | None = None
@@ -182,6 +183,69 @@ def stop_ydotoold():
 
 
 POPUP_SCRIPT = Path(__file__).resolve().parent / "vox2text-popup"
+
+
+def _notify(summary: str, body: str = "", urgency: str = "low"):
+    """Send a Plasma notification."""
+    try:
+        subprocess.run(
+            ["notify-send", f"--urgency={urgency}", summary, body],
+            timeout=3, stderr=subprocess.DEVNULL,
+        )
+    except Exception:
+        pass
+
+
+def _inject_direct(text: str):
+    """Inject text into the focused app — no popup, no stealing focus.
+
+    Copies the text to clipboard, then sends Ctrl+V via ydotool.
+    This avoids the popup-steals-focus problem entirely because
+    WE NEVER OPEN A WINDOW.  The user was already focused on their
+    target (terminal, browser, editor) when they held the combo,
+    and that focus never moves.
+
+    If injection fails (ydotool unavailable), falls back to a
+    notification telling the user to Ctrl+V manually.
+    """
+    if not text:
+        return
+
+    # 1. Copy to clipboard (always — reliable fallback)
+    try:
+        subprocess.run(["wl-copy"], input=text.encode(), timeout=5)
+    except Exception:
+        _notify("📝 vox2text", f"Clipboard failed:\n{text[:120]}", "critical")
+        return
+
+    # 2. Inject via ydotool — no focus delay needed since no window opened
+    if _ydotoold_alive():
+        try:
+            subprocess.run(
+                ["ydotool", "key", "ctrl+v"],
+                timeout=5, stderr=subprocess.DEVNULL,
+            )
+        except Exception:
+            pass
+
+    # 3. Notification confirming injection (don't block on it)
+    preview = text[:120] + ("…" if len(text) > 120 else "")
+    _notify("📝 vox2text", f"Injected: {preview}")
+
+
+def _ydotoold_alive() -> bool:
+    """Check if the ydotoold daemon is running and responsive."""
+    try:
+        sock = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")) / ".ydotool_socket"
+        if not sock.exists():
+            return False
+        result = subprocess.run(
+            ["ydotool", "type", "--", ""],
+            timeout=3, capture_output=True,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
 
 
 def launch_popup(text: str):
