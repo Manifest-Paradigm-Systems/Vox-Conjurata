@@ -68,21 +68,32 @@ def rms(data: bytes) -> float:
 
 
 def find_good_device(pa: pyaudio.PyAudio) -> int:
-    """Auto-pick the best mic device."""
-    best = None
+    """Auto-pick the best mic device.
+
+    Prefers PipeWire virtual devices (which handle resampling) over raw
+    ALSA hardware devices that may not support 16kHz directly.
+    """
+    # Prefer the "default" PipeWire device — it handles sample rate
+    # conversion transparently so our 16kHz request just works.
+    for i in range(pa.get_device_count()):
+        info = pa.get_device_info_by_index(i)
+        if info["maxInputChannels"] == 0:
+            continue
+        name = info["name"]
+        if name in ("default", "pipewire", "sysdefault"):
+            return i
+
+    # Fallback: match by brand keywords
     for i in range(pa.get_device_count()):
         info = pa.get_device_info_by_index(i)
         if info["maxInputChannels"] == 0:
             continue
         name = info["name"]
         if "EKSA" in name or "Headset" in name or "Microphone" in name:
-            best = i
-        if "EKSA" in name:
-            best = i
-            break
-    if best is None:
-        best = pa.get_default_input_device_info()["index"]
-    return best
+            return i
+
+    # Last resort
+    return pa.get_default_input_device_info()["index"]
 
 
 def transcribe(pcm_data: bytes) -> str:
