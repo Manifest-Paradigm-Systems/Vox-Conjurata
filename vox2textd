@@ -479,7 +479,10 @@ def listen():
 
             if text.strip():
                 print(f"   → {text}", file=sys.stderr)
-                launch_popup(text.strip())
+                if INJECT_MODE == "direct":
+                    _inject_direct(text.strip())
+                else:
+                    launch_popup(text.strip())
         finally:
             _transcribe_lock.release()
 
