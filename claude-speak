@@ -108,57 +108,40 @@ def _is_noise(line: str) -> bool:
     return False
 
 
-def summarize_bullets(text: str) -> str:
-    """Extract bullet points from a response and condense into a concise spoken summary.
+def summarize_bullets(text: str) -> list[str]:
+    """Extract individual bullet points from markdown text.
 
-    1. Picks lines starting with `- ` or `* `
-    2. Strips markdown, file paths, and code noise
-    3. Condenses multiple related bullets into 1-2 sentences
-    4. Returns a clean spoken string (no symbols, no paths).
+    For bullet lists: returns each bullet as a clean spoken sentence.
+    For prose: returns the first 1-2 sentences.
     """
     import re
 
-    raw_bullets = []
+    results = []
     for line in text.split("\n"):
         stripped = line.strip()
         if stripped.startswith("- ") or stripped.startswith("* "):
             content = stripped[2:]
             cleaned = _clean_line(content)
             if cleaned and not _is_noise(cleaned) and len(cleaned) > 10:
-                raw_bullets.append(cleaned)
+                results.append(cleaned)
 
-    if not raw_bullets:
-        # Fallback: speak the first 1-2 sentences of prose
-        sentences = re.split(r'(?<=[.!?])\s+', text.strip())
-        spoken = []
-        for s in sentences:
-            cleaned = _clean_line(s)
-            if cleaned and not _is_noise(cleaned) and len(cleaned) > 15:
-                spoken.append(cleaned)
-                if len(spoken) >= 2:
-                    break
-        if spoken:
-            return " ".join(spoken)
-        return ""
+    # Bullet count cap: don't drone on
+    if len(results) > 6:
+        results = results[:6]
 
-    # Condense: if too many bullets, pick the first few most important ones
-    if len(raw_bullets) > 4:
-        # Keep first 3, then summarize the count
-        kept = raw_bullets[:3]
-        remaining = len(raw_bullets) - 3
-        kept.append(f"And {remaining} additional changes.")
-        raw_bullets = kept
+    if results:
+        return results
 
-    # Join into a natural spoken summary
-    if len(raw_bullets) == 1:
-        return raw_bullets[0]
-    elif len(raw_bullets) == 2:
-        return f"{raw_bullets[0]} And, {raw_bullets[1][0].lower()}{raw_bullets[1][1:]}"
-    else:
-        *most, last = raw_bullets
-        return "; ".join(most) + f". And, {last[0].lower()}{last[1:]}"
+    # Prose fallback: first 1-2 sentences
+    sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+    for s in sentences:
+        cleaned = _clean_line(s)
+        if cleaned and not _is_noise(cleaned) and len(cleaned) > 15:
+            results.append(cleaned)
+            if len(results) >= 2:
+                break
 
-    return ""
+    return results
 
 
 def find_current_session() -> Path | None:
@@ -354,9 +337,11 @@ def _speak_latest_entry(session_file: Path | None = None):
                 full_text += block.get("text", "") + "\n"
         if not full_text.strip():
             continue
-        summary = summarize_bullets(full_text)
-        if summary:
-            speak_text(summary)
+        parts = summarize_bullets(full_text)
+        if parts:
+            for part in parts:
+                speak_text(part)
+                time.sleep(1.0)
         return
 
 
