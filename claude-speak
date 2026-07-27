@@ -187,8 +187,11 @@ def watch_session():
         return
 
     print(f"👁️  Watching {session_file.name}", file=sys.stderr)
-    last_size = session_file.stat().st_size
 
+    # ── Catch-up: speak the most recent unread assistant entry ──
+    _speak_latest_entry(session_file)
+
+    last_size = session_file.stat().st_size
     seen_ids = set()
 
     while _running:
@@ -301,14 +304,13 @@ def status():
     print("claude-speak: stopped", file=sys.stderr)
 
 
-def speak_last_response():
-    """Speak bullet points from the most recent assistant response."""
-    session_file = find_current_session()
+def _speak_latest_entry(session_file: Path | None = None):
+    """Find and speak the most recent assistant response from the session file."""
+    if session_file is None:
+        session_file = find_current_session()
     if not session_file:
-        print("No session file found", file=sys.stderr)
         return
 
-    # Walk backwards through file to find last assistant entry
     with open(session_file) as f:
         lines = f.readlines()
 
@@ -328,13 +330,14 @@ def speak_last_response():
         if not full_text.strip():
             continue
         summary = summarize_bullets(full_text)
-        if not summary:
-            print("Nothing to summarize", file=sys.stderr)
-            return
-        speak_text(summary)
+        if summary:
+            speak_text(summary)
         return
 
-    print("No assistant response found", file=sys.stderr)
+
+def speak_last_response():
+    """Speak bullet points from the most recent assistant response (CLI entry)."""
+    _speak_latest_entry()
 
 
 def main():
