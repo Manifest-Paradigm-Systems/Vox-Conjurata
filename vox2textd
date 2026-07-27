@@ -285,6 +285,11 @@ def find_keys_mode():
 
 def listen():
     """No-grab event loop: hold combo to record, release to transcribe+type."""
+    # Ensure ydotool daemon is running for text output
+    if not ensure_ydotoold():
+        print("⚠️  ydotoold not available — text will go to clipboard+notification instead",
+              file=sys.stderr)
+
     dev = find_keyboard()
     print(f"✅ vox2textd listening on {dev.path}: {dev.name}", file=sys.stderr)
     print(f"   Hold Ctrl+Shift+V → speak → release → text typed", file=sys.stderr)
@@ -363,6 +368,7 @@ def listen():
         if recorder:
             recorder.stop()
         dev.close()
+        stop_ydotoold()
         print("vox2textd stopped", file=sys.stderr)
 
 
