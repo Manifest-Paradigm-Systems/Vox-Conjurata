@@ -21,7 +21,7 @@ import time
 
 import gi
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk, GLib, Pango, Gdk
+from gi.repository import Gtk, GLib, Gdk
 
 # ── Config ────────────────────────────────────────────────────────────────
 WINDOW_TITLE = "🎤 vox2text"
@@ -56,7 +56,8 @@ class InjectPopup(Gtk.Window):
         window {{ background: {COLOR_BG}; }}
         label {{ color: {COLOR_FG}; }}
         .hint-label {{ font-size: 13px; color: #d8dee9; }}
-        .text-view {{ font-size: 15px; background: {COLOR_TEXT_BG};
+        .text-view {{ font-size: 15px; font-family: sans-serif;
+                      background: {COLOR_TEXT_BG};
                       color: {COLOR_FG}; border-radius: 6px;
                       padding: 10px; }}
         .btn-type {{ background: {COLOR_GREEN}; color: {COLOR_BG};
@@ -96,8 +97,6 @@ class InjectPopup(Gtk.Window):
         self.text_view.set_editable(True)
         self.text_view.set_cursor_visible(True)
         self.text_view.get_style_context().add_class("text-view")
-        font_desc = Pango.FontDescription("sans-serif 14")
-        self.text_view.override_font(font_desc)
         self.text_buffer = self.text_view.get_buffer()
         self.text_buffer.set_text(initial_text)
 
