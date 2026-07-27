@@ -223,6 +223,17 @@ class Recorder:
         with self._lock:
             return self._frames[index:], len(self._frames)
 
+    def get_and_trim(self, index: int) -> tuple[list[bytes], int]:
+        """Return frames since *index* and discard everything before it.
+
+        This bounds memory growth during a long hold: old frames are freed
+        atomically with the read so no frames are lost to a race.
+        """
+        with self._lock:
+            new_frames = self._frames[index:]
+            self._frames = list(new_frames)
+            return new_frames, len(self._frames)
+
     def _record(self):
         """Thread target: capture audio until stop is set."""
         pa = pyaudio.PyAudio()
