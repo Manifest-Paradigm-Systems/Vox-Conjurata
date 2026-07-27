@@ -118,10 +118,10 @@ def _is_noise(line: str) -> bool:
 
 
 def summarize_bullets(text: str) -> list[str]:
-    """Extract individual bullet points from markdown text.
+    """Extract all content from a response for speaking.
 
     For bullet lists: returns each bullet as a clean spoken sentence.
-    For prose: returns the first 1-2 sentences.
+    For prose: returns the entire cleaned text as a single utterance.
     """
     import re
 
@@ -134,23 +134,17 @@ def summarize_bullets(text: str) -> list[str]:
             if cleaned and not _is_noise(cleaned) and len(cleaned) > 10:
                 results.append(cleaned)
 
-    # Bullet count cap: don't drone on
     if len(results) > 6:
         results = results[:6]
 
     if results:
         return results
 
-    # Prose fallback: first 1-2 sentences
-    sentences = re.split(r'(?<=[.!?])\s+', text.strip())
-    for s in sentences:
-        cleaned = _clean_line(s)
-        if cleaned and not _is_noise(cleaned) and len(cleaned) > 15:
-            results.append(cleaned)
-            if len(results) >= 2:
-                break
-
-    return results
+    # Prose: return the entire text, cleaned, as one utterance
+    cleaned = _clean_line(text)
+    if cleaned and not _is_noise(cleaned) and len(cleaned) > 15:
+        return [cleaned]
+    return []
 
 
 def find_current_session() -> Path | None:
