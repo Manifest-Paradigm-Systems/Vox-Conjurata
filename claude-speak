@@ -208,7 +208,7 @@ def watch_session():
         print("⚠️  No Claude Code session found", file=sys.stderr)
         return
 
-    print(f"👁️  Watching {session_file.name}", file=stderr)
+    print(f"👁️  Watching {session_file.name}", file=sys.stderr)
 
     seen_ids: set[str] = set()
     _seed_seen_ids(session_file, seen_ids)
@@ -265,9 +265,14 @@ def watch_session():
             if not full_text.strip():
                 continue
             summary = summarize_bullets(full_text)
-            if summary:
-                print(f"🔊 Speaking: {summary[:60]}…", file=sys.stderr)
-                speak_text(summary)
+            if not summary:
+                continue
+
+            # Speak each bullet individually so they flow with the conversation
+            for part in summary:
+                print(f"🔊 C-3PO: {part[:60]}…", file=sys.stderr)
+                speak_text(part)
+                time.sleep(1.0)  # brief gap between bullets
 
 
 # ── Daemon lifecycle ──
