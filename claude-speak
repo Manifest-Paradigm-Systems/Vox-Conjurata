@@ -201,6 +201,8 @@ def watch_session():
             session_file = find_current_session()
             if not session_file:
                 continue
+            # Switched to a new session — catch up on its latest entry
+            _speak_latest_entry(session_file)
             last_size = 0
 
         current_size = session_file.stat().st_size
