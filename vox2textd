@@ -20,7 +20,6 @@ Usage:
 import io
 import os
 import signal
-import struct
 import subprocess
 import sys
 import threading
@@ -30,8 +29,6 @@ from pathlib import Path
 
 import evdev
 from evdev import ecodes
-
-import numpy as np
 import pyaudio
 import requests
 
@@ -49,7 +46,6 @@ RATE = 16000
 CHUNK = 1024
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
-SILENCE_THRESHOLD = 300
 MAX_RECORD_SEC = 30
 
 # The combo: Ctrl+Shift+Space
