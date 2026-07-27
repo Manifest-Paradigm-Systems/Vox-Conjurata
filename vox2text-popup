@@ -194,8 +194,8 @@ def inject_text(text: str, injector: str):
     if not text:
         return
 
-    # Brief pause for the compositor to settle focus
-    time.sleep(0.2)
+    # Brief pause for the compositor to settle focus (window gone, prev app refocused)
+    time.sleep(0.5)
 
     try:
         if injector == "ydotool":
