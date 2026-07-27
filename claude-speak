@@ -194,10 +194,10 @@ def watch_session():
     print(f"👁️  Watching {session_file.name}", file=sys.stderr)
 
     seen_ids: set[str] = set()
-    _seed_seen_ids(session_file, seen_ids)
-    _speak_latest_entry(session_file)
-
+    # Capture file position BEFORE catch-up so content written during the
+    # catch-up is not permanently missed by the position tracker.
     last_byte = session_file.stat().st_size
+    _speak_latest_entry(session_file)
 
     while _running:
         time.sleep(WATCH_INTERVAL)
@@ -207,9 +207,8 @@ def watch_session():
             if not session_file:
                 continue
             seen_ids.clear()
-            _seed_seen_ids(session_file, seen_ids)
-            _speak_latest_entry(session_file)
             last_byte = session_file.stat().st_size
+            _speak_latest_entry(session_file)
             continue
 
         try:
