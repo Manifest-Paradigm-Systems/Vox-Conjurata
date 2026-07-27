@@ -336,86 +336,30 @@ def listen():
     held: set[int] = set()
     combo_active = False
     recorder: Recorder | None = None
-    transcribe_thread: threading.Thread | None = None
-    # Debounce: ignore brief re-trigger within combo
-    last_release = 0.0
 
-    def periodic_transcribe():
-        """Run in a thread: every ~1.5 s transcribe new audio since last
-        checkpoint.  Shows progress on stderr but does NOT type until the
-        combo is released — typing while Ctrl+Shift are held injects
-        control characters (Ctrl+char) instead of literal text, crashing
-        the focused terminal/application."""
-        rec = recorder
-        frame_index = 0
-        last_text = ""
-        max_index = 0  # track for get_and_trim so _frames doesn't grow forever
-
-        while combo_active:
-            time.sleep(1.5)
-
-            if not rec:
-                continue
-
-            new_frames, total = rec.get_frames_since(frame_index)
-            if not new_frames:
-                continue
-
-            pcm = b"".join(new_frames)
-            if len(pcm) < 8192:
-                continue
-
-            try:
-                text = transcribe(pcm)
-            except Exception as e:
-                print(f"   live transcribe error: {e}", file=sys.stderr)
-                continue
-
-            if not text:
-                # Still advance frame_index so we don't re-send the same
-                # silent audio on every cycle.
-                frame_index = total
-                continue
-
-            # Show live progress on stderr (only visible in --foreground)
-            lower_old = last_text.lower().strip()
-            lower_new = text.lower().strip()
-            if lower_new.startswith(lower_old) and len(lower_new) > len(lower_old):
-                delta = text[len(last_text):]
-            else:
-                delta = text
-            if delta.strip():
-                print(f"   ~ {delta}", file=sys.stderr)
-
-            last_text = text
-            frame_index = total
-            # Trim consumed frames to keep memory bounded on long holds
-            max_index = total
-            rec.get_and_trim(max_index)
-            max_index = 0
-
-        # ── Final flush (combo released — modifiers released too) ──
-        if not rec:
+    def do_transcribe():
+        """Called after combo released: record → transcribe → launch popup."""
+        nonlocal recorder
+        if not recorder:
             return
-        new_frames, total = rec.get_frames_since(max_index)
-        if new_frames:
-            pcm = b"".join(new_frames)
-            if len(pcm) > 4096:
-                try:
-                    text = transcribe(pcm)
-                except Exception as e:
-                    print(f"   final transcribe error: {e}", file=sys.stderr)
-                    return
-                if text:
-                    lower_old = last_text.lower().strip()
-                    lower_new = text.lower().strip()
-                    if lower_new.startswith(lower_old) and len(lower_new) > len(lower_old):
-                        delta = text[len(last_text):]
-                    else:
-                        delta = text
-                    if delta.strip():
-                        print(f"   → {delta}", file=sys.stderr)
-                        launch_popup(delta.strip())
+        recorder.stop()
+        frames, total = recorder.get_frames_since(0)
+        pcm = b"".join(frames)
+        recorder = None
+
+        if len(pcm) < 4096:
+            return
+
+        text = ""
+        try:
+            text = transcribe(pcm)
+        except Exception as e:
+            print(f"   transcribe error: {e}", file=sys.stderr)
+            return
+
+        if text.strip():
+            print(f"   → {text}", file=sys.stderr)
+            launch_popup(text.strip())
 
     try:
         for event in dev.read_loop():
@@ -433,27 +377,19 @@ def listen():
 
             all_down = TRIGGER_KEYS.issubset(held)
 
-            # Combo fully held → start recording + live transcriber
+            # Combo fully held → start recording
             if all_down and not combo_active and (time.monotonic() - last_release) > 0.15:
                 combo_active = True
                 recorder = Recorder(audio_device, max_sec=MAX_RECORD_SEC)
                 recorder.start()
-                print(f"\n🎤 [hold] Live… release to stop", file=sys.stderr)
+                print(f"\n🎤 [hold] Speak… release to stop", file=sys.stderr)
                 sys.stderr.flush()
-                transcribe_thread = threading.Thread(target=periodic_transcribe, daemon=True)
-                transcribe_thread.start()
 
-            # Any trigger key released → stop everything.
-            # Join the transcribe thread *before* nulling recorder so the
-            # final flush has a valid reference and no AttributeError race.
+            # Any trigger key released → stop, transcribe, launch popup
             if not all_down and combo_active:
                 combo_active = False
-                if transcribe_thread:
-                    transcribe_thread.join(timeout=10)
-                    transcribe_thread = None
-                if recorder:
-                    recorder.stop()
-                    recorder = None
+                # do_transcribe handles stopping + transcribing + popup
+                threading.Thread(target=do_transcribe, daemon=True).start()
                 print(file=sys.stderr)
                 sys.stderr.flush()
 
