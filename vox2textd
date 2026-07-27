@@ -258,30 +258,34 @@ class Recorder:
         """
         pa = pyaudio.PyAudio()
         stream = None
-        candidates = [self._device]
-        candidates.extend(
-            i for i in range(pa.get_device_count())
-            if i != self._device
-            and pa.get_device_info_by_index(i)["maxInputChannels"] > 0
-        )
+        try:
+            # Build candidate list: preferred device first, then every
+            # other input-capable device as a fallback.
+            candidates = [self._device]
+            candidates.extend(
+                i for i in range(pa.get_device_count())
+                if i != self._device
+                and pa.get_device_info_by_index(i)["maxInputChannels"] > 0
+            )
 
-        for dev in candidates:
-            try:
-                stream = pa.open(
-                    format=FORMAT, channels=CHANNELS, rate=RATE,
-                    input=True, input_device_index=dev,
-                    frames_per_buffer=CHUNK,
-                )
-                if dev != self._device:
-                    self._device = dev  # update for any downstream readers
-                break
-            except Exception:
-                continue
+            for dev in candidates:
+                try:
+                    stream = pa.open(
+                        format=FORMAT, channels=CHANNELS, rate=RATE,
+                        input=True, input_device_index=dev,
+                        frames_per_buffer=CHUNK,
+                    )
+                    if dev != self._device:
+                        print(f"   mic fallback: device {self._device} → {dev}", file=sys.stderr)
+                        self._device = dev
+                    break
+                except Exception:
+                    continue
 
-        if stream is None:
-            print("recording error: no working input device found", file=sys.stderr)
-            pa.terminate()
-            return
+            if stream is None:
+                print("recording error: no working input device found", file=sys.stderr)
+                return
+
             for _ in range(8):  # skip mic pop
                 stream.read(CHUNK, exception_on_overflow=False)
 
