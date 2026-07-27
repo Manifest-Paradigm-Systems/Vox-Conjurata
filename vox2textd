@@ -58,15 +58,6 @@ TRIGGER_KEYS = {
 
 # ── Helpers ───────────────────────────────────────────────────────────────
 
-def rms(data: bytes) -> float:
-    """Root-mean-square of int16 PCM — for VAD if needed."""
-    count = len(data) // 2
-    if count == 0:
-        return 0.0
-    samples = struct.unpack(f"<{count}h", data)
-    return float(np.sqrt(np.mean(np.square(samples))))
-
-
 def find_good_device(pa: pyaudio.PyAudio) -> int:
     """Auto-pick the best mic device.
 
