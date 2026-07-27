@@ -2,12 +2,12 @@
 """vox2textd — Push-to-talk: hold Ctrl+Shift+Space → speak → release → text typed.
 
 Hold the combo, speak, release — transcription is typed directly into the
-active window (terminal, browser, anywhere) via wtype.
+active window (terminal, browser, anywhere) via ydotool.
 
 Key differences from v1:
   - NO keyboard grab — your keyboard works normally until you hold the combo
   - Hold-to-talk, release-to-send — not fire-once
-  - Text lands in the focused app via wtype (not clipboard)
+  - Text lands in the focused app via ydotool (not clipboard)
 
 Usage:
   vox2textd                     — daemonize (background)
