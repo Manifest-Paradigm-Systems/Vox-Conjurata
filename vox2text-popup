@@ -138,9 +138,12 @@ class InjectPopup(Gtk.Window):
         if not text:
             return
         self._result_text = text
-        self.iconify()
+        # Destroy window so KWin refocuses the previous app (minimize alone
+        # doesn't transfer focus on KDE/Wayland, leaving ydotool keystrokes
+        # aimed at a ghost window).
+        self.destroy()
         Gdk.flush()
-        Gtk.main_quit()
+        # Gtk.main_quit is connected to the "destroy" signal above
 
     def on_cancel(self, _btn=None):
         self._result_text = None
@@ -177,16 +180,13 @@ def _ydotoold_alive() -> bool:
 
 
 def do_inject(text: str):
-    """Copy to clipboard, try auto-paste via ydotool, then notify.
+    """Copy to clipboard, auto-paste via ydotool with retry, then notify.
 
-    Key improvements over the original:
-      - Checks ydotoold is alive *before* attempting auto-paste so we
-        never send garbled / empty keystrokes.
-      - No clipboard save/restore — restoring immediately after
-        ydotool key ctrl+v races the asynchronous Wayland paste and
-        can leave the target app pasting old or empty content.
-      - The transcribed text stays in the clipboard as a guaranteed
-        fallback: if auto-paste fails the user presses Ctrl+V.
+    Strategy:
+      1. wl-copy — always succeeds or we show the text in a notification.
+      2. ydotool key ctrl+v — retries a few times with a small gap so that
+         KWin has time to refocus the previous app after the popup closes.
+      3. Fallback — notification telling the user to press Ctrl+V manually.
     """
     if not text:
         return
@@ -195,7 +195,6 @@ def do_inject(text: str):
     try:
         subprocess.run(["wl-copy"], input=text.encode(), timeout=5)
     except Exception:
-        # Can't even copy — total failure, show the text in the notification
         try:
             subprocess.run(
                 ["notify-send", "--urgency=critical",
@@ -206,28 +205,34 @@ def do_inject(text: str):
             pass
         return
 
-    # Check if ydotoold is alive before attempting auto-paste
+    # Wait for focus to settle after popup window is destroyed
+    time.sleep(INJECT_DELAY)
+
+    # Auto-paste with retries — the first attempt may land before KWin has
+    # fully refocused the previous app after the popup close.
     if _ydotoold_alive():
-        time.sleep(INJECT_DELAY)
-        try:
-            subprocess.run(
-                ["ydotool", "key", "ctrl+v"],
-                timeout=5, stderr=subprocess.DEVNULL,
-            )
-            # Text stayed in clipboard — no restore to race the paste
+        for attempt in range(INJECT_RETRIES):
             try:
                 subprocess.run(
-                    ["notify-send", "--urgency=low",
-                     "📝 vox2text", "Pasted! (text in clipboard)"],
-                    timeout=3,
+                    ["ydotool", "key", "ctrl+v"],
+                    timeout=5, stderr=subprocess.DEVNULL,
                 )
+                # Success — notify and return
+                try:
+                    subprocess.run(
+                        ["notify-send", "--urgency=low",
+                         "📝 vox2text", "Pasted! (text in clipboard)"],
+                        timeout=3,
+                    )
+                except Exception:
+                    pass
+                return
             except Exception:
-                pass
-            return
-        except Exception:
-            pass
+                if attempt < INJECT_RETRIES - 1:
+                    time.sleep(INJECT_RETRY_INTERVAL)
+                continue
 
-    # Auto-paste unavailable or failed — notification with manual fallback
+    # Auto-paste unavailable or all retries failed — notification fallback
     preview = text[:100] + ("…" if len(text) > 100 else "")
     try:
         subprocess.run(
