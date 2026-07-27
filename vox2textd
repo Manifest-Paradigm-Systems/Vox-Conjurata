@@ -8,6 +8,11 @@ Key differences from v1:
   - NO keyboard grab — your keyboard works normally until you hold the combo
   - Hold-to-talk, release-to-send — not fire-once
   - Text lands in the focused app via ydotool (not clipboard)
+  - No live-typing during hold (typing while modifiers are held sends control
+    characters, crashing the focused app) — text only appears on release
+
+WARNING: ydotool types into the focused window.  Hold+typing is safe now
+because we defer all output until release, when modifiers are no longer held.
 
 Usage:
   vox2textd                     — daemonize (background)
