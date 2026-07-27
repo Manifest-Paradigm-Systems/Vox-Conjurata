@@ -378,13 +378,15 @@ def daemonize():
     """Fork into background, write PID file, start listen()."""
     pid = os.fork()
     if pid > 0:
-        PIDFILE.write_text(str(pid))
-        print(f"vox2textd started (PID {pid})", file=sys.stderr)
+        # First parent exits — pid is the intermediate child
         sys.exit(0)
     os.setsid()
     pid2 = os.fork()
     if pid2 > 0:
+        # Intermediate child exits — now pid2 is the actual daemon
         sys.exit(0)
+    # ── Daemon process ──
+    PIDFILE.write_text(str(os.getpid()))
     with open(os.devnull, "r") as f:
         os.dup2(f.fileno(), sys.stdin.fileno())
     with open(os.devnull, "w") as f:
