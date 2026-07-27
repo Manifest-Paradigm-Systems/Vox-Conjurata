@@ -1,0 +1,318 @@
+#!/usr/bin/env python3
+"""
+claude-speak — Watch Claude Code's session transcript and speak bullet points
+in the C-3PO voice via vox-audio-core.
+
+Usage:
+  claude-speak start          — daemonize (background watcher)
+  claude-speak stop           — stop daemon
+  claude-speak <text>         — speak text once (foreground)
+  claude-speak --last         — speak bullet points from last assistant response
+  claude-speak status         — check if running
+"""
+
+import json
+import os
+import signal
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+# ── Config ──
+VOX_AUDIO_URL = os.getenv("VOX_AUDIO_URL", "http://localhost:8004")
+PROJECT_DIR = Path(os.getenv("CLAUDE_PROJECT_DIR", Path.home() / ".claude/projects"))
+PIDFILE = Path(os.getenv("CLAUDE_SPEAK_PIDFILE", Path.home() / ".claude-speak.pid"))
+NPC_ID = "c3po"
+
+# DSP presets for C-3PO voice
+DSP_C3PO = {
+    "pitch_shift": 4,
+    "highpass_hz": 300,
+    "chorus_depth": 0.15,
+    "reverb_size": 0.05,
+    "distortion_db": 0,
+}
+
+WATCH_INTERVAL = 0.5  # seconds between poll
+
+
+def speak_text(text: str):
+    """Send text to vox-audio-core for C-3PO voice synthesis and play it."""
+    import requests
+
+    if not text.strip():
+        return
+
+    print(f"🔊 C-3PO: {text[:80]}…", file=sys.stderr)
+
+    try:
+        resp = requests.post(
+            f"{VOX_AUDIO_URL}/generate",
+            json={
+                "npc_id": NPC_ID,
+                "dialogue_text": text.strip(),
+                "dsp_presets": DSP_C3PO,
+                "control_instruction": None,
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+
+        # Save to temp file and play
+        wav_path = Path("/tmp/claude-speak.wav")
+        wav_path.write_bytes(resp.content)
+        subprocess.run(
+            ["paplay", str(wav_path)],
+            timeout=10, stderr=subprocess.DEVNULL,
+        )
+    except Exception as e:
+        print(f"  ⚠️ speak error: {e}", file=sys.stderr)
+        _fallback_espeak(text)
+
+
+def _fallback_espeak(text: str):
+    """Fallback TTS via espeak-ng with C-3PO approximation."""
+    try:
+        subprocess.run(
+            ["espeak-ng", "-v", "en-gb-x-rp", "-p", "80", "-s", "135", text],
+            timeout=10, stderr=subprocess.DEVNULL,
+        )
+    except Exception:
+        pass
+
+
+def extract_bullets(text: str) -> list[str]:
+    """Extract main bullet points from markdown text.
+
+    Picks lines that start with `- ` or `* ` (bullet points), strips markdown
+    formatting (bold, code, links).
+    """
+    bullets = []
+    for line in text.split("\n"):
+        stripped = line.strip()
+        if stripped.startswith("- ") or stripped.startswith("* "):
+            # Remove the bullet marker
+            content = stripped[2:]
+            # Strip markdown formatting
+            content = content.replace("**", "")
+            content = content.replace("`", "")
+            content = content.replace("```", "")
+            # Strip link syntax [text](url) -> text
+            import re
+
+            content = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", content)
+            if content.strip():
+                bullets.append(content.strip())
+    return bullets
+
+
+def find_current_session() -> Path | None:
+    """Find the most recent session transcript file."""
+    if not PROJECT_DIR.exists():
+        return None
+
+    # Walk project subdirectories for the newest .jsonl
+    sessions = []
+    for project_dir in PROJECT_DIR.iterdir():
+        if project_dir.is_dir():
+            for f in project_dir.glob("*.jsonl"):
+                sessions.append(f)
+
+    if not sessions:
+        return None
+
+    return max(sessions, key=lambda f: f.stat().st_mtime)
+
+
+def watch_session():
+    """Tail the session transcript for new assistant responses."""
+    session_file = find_current_session()
+    if not session_file:
+        print("⚠️  No Claude Code session found", file=sys.stderr)
+        return
+
+    print(f"👁️  Watching {session_file.name}", file=sys.stderr)
+    last_size = session_file.stat().st_size
+
+    seen_ids = set()
+
+    while _running:
+        time.sleep(WATCH_INTERVAL)
+
+        if not session_file.exists():
+            session_file = find_current_session()
+            if not session_file:
+                continue
+            last_size = 0
+
+        current_size = session_file.stat().st_size
+        if current_size <= last_size:
+            continue
+
+        # Read new lines
+        try:
+            with open(session_file) as f:
+                f.seek(last_size)
+                new_lines = f.readlines()
+            last_size = current_size
+        except (OSError, IOError):
+            last_size = current_size
+            continue
+
+        for line in new_lines:
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            if entry.get("type") != "assistant":
+                continue
+
+            msg = entry.get("message", {})
+            msg_id = msg.get("id", "")
+            if msg_id in seen_ids:
+                continue
+            seen_ids.add(msg_id)
+
+            # Extract text from content blocks
+            content_blocks = msg.get("content", [])
+            full_text = ""
+            for block in content_blocks:
+                if isinstance(block, dict) and block.get("type") == "text":
+                    full_text += block.get("text", "") + "\n"
+
+            if not full_text.strip():
+                continue
+
+            bullets = extract_bullets(full_text)
+            if not bullets:
+                continue
+
+            # Speak each bullet
+            for bullet in bullets:
+                speak_text(bullet)
+                time.sleep(1.0)  # gap between bullets
+
+
+# ── Daemon lifecycle ──
+
+_running = True
+
+
+def _sigterm_handler(signum, frame):
+    global _running
+    _running = False
+
+
+def daemonize():
+    pid = os.fork()
+    if pid > 0:
+        sys.exit(0)
+    os.setsid()
+    pid2 = os.fork()
+    if pid2 > 0:
+        sys.exit(0)
+    PIDFILE.write_text(str(os.getpid()))
+    signal.signal(signal.SIGTERM, _sigterm_handler)
+    with open(os.devnull) as f:
+        os.dup2(f.fileno(), sys.stdin.fileno())
+    try:
+        watch_session()
+    finally:
+        if PIDFILE.exists():
+            PIDFILE.unlink()
+
+
+def stop():
+    if not PIDFILE.exists():
+        print("claude-speak: not running", file=sys.stderr)
+        return
+    pid = int(PIDFILE.read_text().strip())
+    try:
+        os.kill(pid, signal.SIGTERM)
+        print(f"claude-speak: stopped (PID {pid})", file=sys.stderr)
+        PIDFILE.unlink(missing_ok=True)
+    except ProcessLookupError:
+        PIDFILE.unlink(missing_ok=True)
+
+
+def status():
+    if PIDFILE.exists():
+        pid = int(PIDFILE.read_text().strip())
+        try:
+            os.kill(pid, 0)
+            print(f"claude-speak: running (PID {pid})", file=sys.stderr)
+            return
+        except ProcessLookupError:
+            PIDFILE.unlink(missing_ok=True)
+    print("claude-speak: stopped", file=sys.stderr)
+
+
+def speak_last_response():
+    """Speak bullet points from the most recent assistant response."""
+    session_file = find_current_session()
+    if not session_file:
+        print("No session file found", file=sys.stderr)
+        return
+
+    # Walk backwards through file to find last assistant entry
+    with open(session_file) as f:
+        lines = f.readlines()
+
+    for line in reversed(lines):
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if entry.get("type") != "assistant":
+            continue
+        msg = entry.get("message", {})
+        content_blocks = msg.get("content", [])
+        full_text = ""
+        for block in content_blocks:
+            if isinstance(block, dict) and block.get("type") == "text":
+                full_text += block.get("text", "") + "\n"
+        if not full_text.strip():
+            continue
+        bullets = extract_bullets(full_text)
+        if not bullets:
+            print("No bullet points to speak", file=sys.stderr)
+            return
+        for bullet in bullets:
+            speak_text(bullet)
+            time.sleep(1.0)
+        return
+
+    print("No assistant response found", file=sys.stderr)
+
+
+def main():
+    if len(sys.argv) > 1:
+        cmd = sys.argv[1]
+        if cmd == "start":
+            daemonize()
+            return
+        if cmd == "stop":
+            stop()
+            return
+        if cmd == "status":
+            status()
+            return
+        if cmd == "--last":
+            speak_last_response()
+            return
+
+    # Argument is text to speak
+    text = " ".join(sys.argv[1:])
+    if text:
+        speak_text(text)
+        return
+
+    # Default: foreground watch
+    signal.signal(signal.SIGTERM, _sigterm_handler)
+    watch_session()
+
+
+if __name__ == "__main__":
+    main()
