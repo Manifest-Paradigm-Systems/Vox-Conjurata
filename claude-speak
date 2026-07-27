@@ -295,11 +295,8 @@ def watch_session():
             if not summary:
                 continue
 
-            # Join all parts into a single utterance so VoxCPM2 generates
-            # the entire audio in one pass — no gaps between sentences.
-            full = " ".join(summary)
-            print(f"🔊 C-3PO: {full[:80]}…", file=sys.stderr)
-            speak_text(full)
+            # Pipeline: generate next chunk while current one plays
+            _speak_pipeline(summary)
 
 
 # ── Daemon lifecycle ──
@@ -383,7 +380,7 @@ def _speak_latest_entry(session_file: Path | None = None):
             continue
         parts = summarize_bullets(full_text)
         if parts:
-            speak_text(" ".join(parts))
+            _speak_pipeline(parts)
         return
 
 
@@ -411,7 +408,7 @@ def main():
     # Argument is text to speak
     text = " ".join(sys.argv[1:])
     if text:
-        speak_text(text)
+        _speak_pipeline([text])
         return
 
     # Default: foreground watch
