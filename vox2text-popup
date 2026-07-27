@@ -172,10 +172,16 @@ class InjectPopup(Gtk.Window):
 
 
 def inject_text(text: str, injector: str) -> bool:
-    """Inject text into the focused app.  Called AFTER window is closed and
-    the compositor has refocused the previous app."""
+    """Inject text into the focused app.  Called AFTER window is closed.
 
-    # Save current clipboard so we can restore it later
+    Strategy (tiered):
+      1. Clipboard → Ctrl+V paste (saves/restores clipboard, works regardless
+         of compositor focus quirks since Ctrl+V is a simple key combo)
+      2. ydotool type  (uinput kernel input device)
+      3. wtype         (Wayland virtual keyboard protocol)
+    """
+
+    # Save current clipboard so we can restore it
     old_clipboard = ""
     try:
         old_clipboard = subprocess.run(
@@ -184,10 +190,32 @@ def inject_text(text: str, injector: str) -> bool:
     except Exception:
         pass
 
-    # Wait for the compositor to refocus the previous window
+    # Wait for the compositor to settle after window close
     time.sleep(INJECT_DELAY)
 
-    # Strategy A: try ydotool type (uinput - routes through the kernel)
+    # ── Strategy 1: Clipboard → Ctrl+V paste ─────────────────────────
+    # This is the most reliable approach: the copy always works (no focus
+    # needed), and Ctrl+V is a simple uinput key combo that even a freshly
+    # refocused window should handle.
+    try:
+        subprocess.run(["wl-copy"], input=text.encode(), timeout=5)
+        time.sleep(0.1)
+        subprocess.run(
+            ["ydotool", "key", "ctrl+v"],
+            timeout=5, stderr=subprocess.DEVNULL,
+        )
+        # Restore old clipboard after a brief delay so the paste registers
+        time.sleep(0.3)
+        if old_clipboard:
+            try:
+                subprocess.run(["wl-copy"], input=old_clipboard.encode(), timeout=5)
+            except Exception:
+                pass
+        return True
+    except Exception:
+        pass
+
+    # ── Strategy 2: ydotool type (uinput) ─────────────────────────────
     if injector == "ydotool":
         try:
             subprocess.run(
@@ -198,34 +226,13 @@ def inject_text(text: str, injector: str) -> bool:
         except Exception:
             pass
 
-    # Strategy B: try wtype (Wayland virtual keyboard protocol)
+    # ── Strategy 3: wtype (Wayland virtual keyboard) ──────────────────
     if injector == "wtype" or shutil.which("wtype"):
         try:
             subprocess.run(["wtype", text], timeout=10)
             return True
         except Exception:
             pass
-
-    # Strategy C: clipboard + Ctrl+V paste (works regardless of focus quirks)
-    try:
-        # Copy text to clipboard
-        subprocess.run(["wl-copy"], input=text.encode(), timeout=5)
-        # Small delay for clipboard to be set
-        time.sleep(0.1)
-        # Simulate Ctrl+V
-        subprocess.run(
-            ["ydotool", "key", "ctrl+v"],
-            timeout=5, stderr=subprocess.DEVNULL,
-        )
-        # Restore old clipboard
-        if old_clipboard:
-            try:
-                subprocess.run(["wl-copy"], input=old_clipboard.encode(), timeout=5)
-            except Exception:
-                pass
-        return True
-    except Exception:
-        pass
 
     # Total failure — notify
     try:
