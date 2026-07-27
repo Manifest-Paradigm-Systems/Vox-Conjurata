@@ -197,27 +197,24 @@ def _seed_seen_ids(session_file: Path, seen_ids: set[str]):
 
 
 def watch_session():
-    """Watch session transcript for new assistant responses using UUID tracking.
+    """Watch session transcript for new assistant responses.
 
-    Instead of polling file size (which misses content written between reads),
-    this tracks known assistant message UUIDs.  On each poll it reads the last
-    portion of the file, finds assistant entries with unseen UUIDs, and speaks
-    them immediately.  This eliminates race conditions and picks up content as
-    soon as it is flushed to disk.
+    Tracks a file-position bookmark (last_byte) so every byte is read exactly
+    once, combined with UUID dedup so nothing is spoken twice even if the file
+    is truncated or rotated.
     """
     session_file = find_current_session()
     if not session_file:
         print("⚠️  No Claude Code session found", file=sys.stderr)
         return
 
-    print(f"👁️  Watching {session_file.name}", file=sys.stderr)
+    print(f"👁️  Watching {session_file.name}", file=stderr)
 
     seen_ids: set[str] = set()
-    # Pre-seed with IDs already in the file so we don't replay old entries
     _seed_seen_ids(session_file, seen_ids)
-
-    # Catch-up: speak the latest unread entry
     _speak_latest_entry(session_file)
+
+    last_byte = session_file.stat().st_size
 
     while _running:
         time.sleep(WATCH_INTERVAL)
@@ -226,50 +223,51 @@ def watch_session():
             session_file = find_current_session()
             if not session_file:
                 continue
+            seen_ids.clear()
+            _seed_seen_ids(session_file, seen_ids)
             _speak_latest_entry(session_file)
+            last_byte = session_file.stat().st_size
             continue
 
-        # Read the last 256 KB of the session file for new entries
         try:
             size = session_file.stat().st_size
-            if size == 0:
+            if size <= last_byte:
                 continue
-            read_size = min(size, 262144)  # 256 KB
-            with open(session_file) as f:
-                f.seek(size - read_size)
-                # Skip the first partial line so we always start clean
-                chunk = f.read()
-                if '\n' in chunk:
-                    chunk = chunk[chunk.index('\n') + 1:]
-                for line in chunk.split('\n'):
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        entry = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    if entry.get("type") != "assistant":
-                        continue
-                    msg = entry.get("message", {})
-                    msg_id = msg.get("id", "")
-                    if msg_id in seen_ids:
-                        continue
-                    seen_ids.add(msg_id)
 
-                    # Extract text from content blocks
-                    content_blocks = msg.get("content", [])
-                    full_text = ""
-                    for block in content_blocks:
-                        if isinstance(block, dict) and block.get("type") == "text":
-                            full_text += block.get("text", "") + "\n"
-                    if not full_text.strip():
-                        continue
-                    summary = summarize_bullets(full_text)
-                    if summary:
-                        speak_text(summary)
+            with open(session_file) as f:
+                f.seek(last_byte)
+                new_lines = f.readlines()
+            last_byte = size
         except (OSError, IOError):
             continue
+
+        for line in new_lines:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if entry.get("type") != "assistant":
+                continue
+            msg = entry.get("message", {})
+            msg_id = msg.get("id", "")
+            if msg_id in seen_ids:
+                continue
+            seen_ids.add(msg_id)
+
+            content_blocks = msg.get("content", [])
+            full_text = ""
+            for block in content_blocks:
+                if isinstance(block, dict) and block.get("type") == "text":
+                    full_text += block.get("text", "") + "\n"
+            if not full_text.strip():
+                continue
+            summary = summarize_bullets(full_text)
+            if summary:
+                print(f"🔊 Speaking: {summary[:60]}…", file=sys.stderr)
+                speak_text(summary)
 
 
 # ── Daemon lifecycle ──
