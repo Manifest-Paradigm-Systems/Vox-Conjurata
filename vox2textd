@@ -326,6 +326,7 @@ def listen():
     held: set[int] = set()
     combo_active = False
     recorder: Recorder | None = None
+    transcribe_thread: threading.Thread | None = None
     # Debounce: ignore brief re-trigger within combo
     last_release = 0.0
 
@@ -425,12 +426,17 @@ def listen():
                 recorder.start()
                 print(f"\n🎤 [hold] Live… release to stop", file=sys.stderr)
                 sys.stderr.flush()
-                t = threading.Thread(target=periodic_transcribe, daemon=True)
-                t.start()
+                transcribe_thread = threading.Thread(target=periodic_transcribe, daemon=True)
+                transcribe_thread.start()
 
-            # Any trigger key released → stop everything
+            # Any trigger key released → stop everything.
+            # Join the transcribe thread *before* nulling recorder so the
+            # final flush has a valid reference and no AttributeError race.
             if not all_down and combo_active:
                 combo_active = False
+                if transcribe_thread:
+                    transcribe_thread.join(timeout=10)
+                    transcribe_thread = None
                 if recorder:
                     recorder.stop()
                     recorder = None
