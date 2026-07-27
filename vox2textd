@@ -194,31 +194,37 @@ def type_text(text: str):
 # ── Recorder ──────────────────────────────────────────────────────────────
 
 class Recorder:
-    """Captures audio in a daemon thread until told to stop."""
+    """Captures audio in a daemon thread.  Supports partial reads for live
+    transcription: call get_frames_since() from another thread to fetch
+    audio recorded since the last checkpoint."""
 
     def __init__(self, device_index: int):
         self._device = device_index
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
-        self._pcm: bytes | None = None
+        self._lock = threading.Lock()
+        self._frames: list[bytes] = []
 
     def start(self):
         """Begin recording in a background thread."""
         self._stop.clear()
-        self._pcm = None
+        self._frames = []
         self._thread = threading.Thread(target=self._record, daemon=True)
         self._thread.start()
 
-    def stop(self) -> bytes | None:
-        """Signal stop, wait for thread, return PCM data (or None)."""
+    def stop(self):
+        """Signal stop, wait for thread to finish."""
         self._stop.set()
         if self._thread is not None:
             self._thread.join(timeout=5)
-        return self._pcm
+
+    def get_frames_since(self, index: int) -> tuple[list[bytes], int]:
+        """Return (new_frames, total_frame_count) since the given index."""
+        with self._lock:
+            return self._frames[index:], len(self._frames)
 
     def _record(self):
         """Thread target: capture audio until stop is set."""
-        self._pcm = None
         pa = pyaudio.PyAudio()
         try:
             stream = pa.open(
@@ -226,27 +232,20 @@ class Recorder:
                 input=True, input_device_index=self._device,
                 frames_per_buffer=CHUNK,
             )
-            frames = []
-            for _ in range(4):  # skip mic pop
+            for _ in range(8):  # skip mic pop
                 stream.read(CHUNK, exception_on_overflow=False)
 
             while not self._stop.is_set():
                 data = stream.read(CHUNK, exception_on_overflow=False)
-                frames.append(data)
+                with self._lock:
+                    self._frames.append(data)
 
             stream.stop_stream()
             stream.close()
-
-            if frames:
-                self._pcm = b"".join(frames)
         except Exception as e:
             print(f"recording error: {e}", file=sys.stderr)
         finally:
             pa.terminate()
-
-    @property
-    def pcm(self) -> bytes | None:
-        return self._pcm
 
 
 # ── Keyboard ──────────────────────────────────────────────────────────────
@@ -316,36 +315,78 @@ def listen():
     held: set[int] = set()
     combo_active = False
     recorder: Recorder | None = None
-    record_thread: threading.Thread | None = None
-    # Debounce: ignore brief re-trigger within combo (e.g., V repeating)
+    # Debounce: ignore brief re-trigger within combo
     last_release = 0.0
 
-    def start_recording():
-        nonlocal recorder, record_thread
-        recorder = Recorder(audio_device)
-        record_thread = recorder.start()
-        print(f"\n🎤 [hold] Recording… release to stop", file=sys.stderr)
-        sys.stderr.flush()
+    def periodic_transcribe():
+        """Run in a thread: every ~1.5 s transcribe new audio since last
+        checkpoint and type it.  Stops when combo_active turns False."""
+        nonlocal recorder
+        frame_index = 0
+        last_text = ""
 
-    def stop_recording():
-        nonlocal recorder, record_thread, last_release
-        if recorder is None:
+        while combo_active:
+            time.sleep(1.5)
+
+            if not recorder:
+                continue
+
+            new_frames, total = recorder.get_frames_since(frame_index)
+            if not new_frames:
+                continue
+
+            pcm = b"".join(new_frames)
+            # ~0.25 s of audio minimum
+            if len(pcm) < 8192:
+                continue
+
+            try:
+                text = transcribe(pcm)
+            except Exception as e:
+                print(f"   live transcribe error: {e}", file=sys.stderr)
+                continue
+
+            if not text:
+                continue
+
+            # Only type the delta if the new text extends the old one
+            lower_old = last_text.lower().strip()
+            lower_new = text.lower().strip()
+            if lower_new.startswith(lower_old) and len(lower_new) > len(lower_old):
+                delta = text[len(last_text):]
+                if delta.strip():
+                    print(f"   → {delta}", file=sys.stderr)
+                    type_text(delta + " ")
+            elif lower_new != lower_old:
+                # Couldn't match cleanly — just type the whole thing
+                print(f"   → {text}", file=sys.stderr)
+                type_text(text + " ")
+
+            last_text = text
+            frame_index = total
+
+        # ── Final flush (combo released) ──
+        if not recorder:
             return
-        pcm = recorder.stop()
-        recorder = None
-        record_thread = None
-
-        if pcm and len(pcm) > 4096:
-            print(f"   Transcribing…", file=sys.stderr, end="", flush=True)
-            text = transcribe(pcm)
-            if text:
-                print(f"\r📝 {text}", file=sys.stderr)
-                type_text(text)
-            else:
-                print(f"\r   (no speech detected)", file=sys.stderr)
-        else:
-            print(f"   (too short / silent)", file=sys.stderr)
-        sys.stderr.flush()
+        new_frames, total = recorder.get_frames_since(frame_index)
+        if new_frames:
+            pcm = b"".join(new_frames)
+            if len(pcm) > 4096:
+                try:
+                    text = transcribe(pcm)
+                except Exception as e:
+                    print(f"   final transcribe error: {e}", file=sys.stderr)
+                    return
+                if text:
+                    lower_old = last_text.lower().strip()
+                    lower_new = text.lower().strip()
+                    if lower_new.startswith(lower_old) and len(lower_new) > len(lower_old):
+                        delta = text[len(last_text):]
+                    else:
+                        delta = text
+                    if delta.strip():
+                        print(f"   → {delta}", file=sys.stderr)
+                        type_text(delta.strip())
 
     try:
         for event in dev.read_loop():
@@ -363,15 +404,24 @@ def listen():
 
             all_down = TRIGGER_KEYS.issubset(held)
 
-            # Combo fully held → start recording
+            # Combo fully held → start recording + live transcriber
             if all_down and not combo_active and (time.monotonic() - last_release) > 0.15:
                 combo_active = True
-                start_recording()
+                recorder = Recorder(audio_device)
+                recorder.start()
+                print(f"\n🎤 [hold] Live… release to stop", file=sys.stderr)
+                sys.stderr.flush()
+                t = threading.Thread(target=periodic_transcribe, daemon=True)
+                t.start()
 
-            # Any trigger key released → stop recording + transcribe
+            # Any trigger key released → stop everything
             if not all_down and combo_active:
                 combo_active = False
-                stop_recording()
+                if recorder:
+                    recorder.stop()
+                    recorder = None
+                print(file=sys.stderr)
+                sys.stderr.flush()
 
     except KeyboardInterrupt:
         pass
