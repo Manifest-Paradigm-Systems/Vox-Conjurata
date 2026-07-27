@@ -82,29 +82,72 @@ def _fallback_espeak(text: str):
         pass
 
 
-def extract_bullets(text: str) -> list[str]:
-    """Extract main bullet points from markdown text.
+def _clean_line(text: str) -> str:
+    """Strip markdown and heavy technical noise from a line of text."""
+    import re
+    text = text.replace("**", "").replace("__", "")
+    text = re.sub(r"`[^`]+`", "", text)           # remove inline code
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)  # [text](url) → text
+    text = re.sub(r"\([^)]*\.[a-zA-Z]{2,4}(:\d+)?\)", "", text)  # (file.ext) or (file.ext:123)
+    text = re.sub(r"[\w\-]+/[\w\-/.]+\.[a-zA-Z]{2,4}", "", text)  # path/file.ext
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
 
-    Picks lines that start with `- ` or `* ` (bullet points), strips markdown
-    formatting (bold, code, links).
+
+def _is_noise(line: str) -> bool:
+    """True if a line is mostly file paths, code, or symbols."""
+    if not line:
+        return True
+    # Lines that are >40% special chars are noise
+    special = sum(1 for c in line if not c.isalnum() and c not in " ,.-'")
+    if len(line) > 0 and special / len(line) > 0.4:
+        return True
+    # Check if it's mostly a path or filename
+    if "/" in line and "." in line:
+        return True
+    return False
+
+
+def summarize_bullets(text: str) -> str:
+    """Extract bullet points from a response and condense into a concise spoken summary.
+
+    1. Picks lines starting with `- ` or `* `
+    2. Strips markdown, file paths, and code noise
+    3. Condenses multiple related bullets into 1-2 sentences
+    4. Returns a clean spoken string (no symbols, no paths).
     """
-    bullets = []
+    import re
+
+    raw_bullets = []
     for line in text.split("\n"):
         stripped = line.strip()
         if stripped.startswith("- ") or stripped.startswith("* "):
-            # Remove the bullet marker
             content = stripped[2:]
-            # Strip markdown formatting
-            content = content.replace("**", "")
-            content = content.replace("`", "")
-            content = content.replace("```", "")
-            # Strip link syntax [text](url) -> text
-            import re
+            cleaned = _clean_line(content)
+            if cleaned and not _is_noise(cleaned) and len(cleaned) > 10:
+                raw_bullets.append(cleaned)
 
-            content = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", content)
-            if content.strip():
-                bullets.append(content.strip())
-    return bullets
+    if not raw_bullets:
+        return ""
+
+    # Condense: if too many bullets, pick the first few most important ones
+    if len(raw_bullets) > 4:
+        # Keep first 3, then summarize the count
+        kept = raw_bullets[:3]
+        remaining = len(raw_bullets) - 3
+        kept.append(f"And {remaining} additional changes.")
+        raw_bullets = kept
+
+    # Join into a natural spoken summary
+    if len(raw_bullets) == 1:
+        return raw_bullets[0]
+    elif len(raw_bullets) == 2:
+        return f"{raw_bullets[0]} And, {raw_bullets[1][0].lower()}{raw_bullets[1][1:]}"
+    else:
+        *most, last = raw_bullets
+        return "; ".join(most) + f". And, {last[0].lower()}{last[1:]}"
+
+    return ""
 
 
 def find_current_session() -> Path | None:
@@ -185,14 +228,12 @@ def watch_session():
             if not full_text.strip():
                 continue
 
-            bullets = extract_bullets(full_text)
-            if not bullets:
+            summary = summarize_bullets(full_text)
+            if not summary:
                 continue
 
-            # Speak each bullet
-            for bullet in bullets:
-                speak_text(bullet)
-                time.sleep(1.0)  # gap between bullets
+            # Speak the condensed summary
+            speak_text(summary)
 
 
 # ── Daemon lifecycle ──
@@ -275,13 +316,11 @@ def speak_last_response():
                 full_text += block.get("text", "") + "\n"
         if not full_text.strip():
             continue
-        bullets = extract_bullets(full_text)
-        if not bullets:
-            print("No bullet points to speak", file=sys.stderr)
+        summary = summarize_bullets(full_text)
+        if not summary:
+            print("Nothing to summarize", file=sys.stderr)
             return
-        for bullet in bullets:
-            speak_text(bullet)
-            time.sleep(1.0)
+        speak_text(summary)
         return
 
     print("No assistant response found", file=sys.stderr)
