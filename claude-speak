@@ -11,6 +11,7 @@ Usage:
   claude-speak status         — check if running
 """
 
+import concurrent.futures
 import json
 import os
 import signal
@@ -41,43 +42,82 @@ DSP_C3PO = {
 WATCH_INTERVAL = 0.5  # seconds between poll
 
 
-def speak_text(text: str):
-    """Send text to vox-audio-core for C-3PO voice synthesis and play it.
-
-    Serialised via _speak_lock so concurrent calls queue up rather than
-    producing overlapping audio.
-    """
+def _generate_audio(text: str) -> bytes | None:
+    """Send text to vox-audio-core, return WAV bytes."""
     import requests
 
-    if not text.strip():
+    try:
+        resp = requests.post(
+            f"{VOX_AUDIO_URL}/generate",
+            json={
+                "npc_id": NPC_ID,
+                "dialogue_text": text.strip(),
+                "dsp_presets": DSP_C3PO,
+                "control_instruction": None,
+            },
+            timeout=120,
+        )
+        resp.raise_for_status()
+        return resp.content
+    except Exception as e:
+        print(f"  ⚠️ generate error: {e}", file=sys.stderr)
+        return None
+
+
+def _play_wav(wav_data: bytes):
+    """Play WAV audio. Serialised via _speak_lock."""
+    if not wav_data:
         return
-
     with _speak_lock:
-        print(f"🔊 C-3PO: {text[:80]}…", file=sys.stderr)
-
+        path = Path("/tmp/claude-speak.wav")
+        path.write_bytes(wav_data)
         try:
-            resp = requests.post(
-                f"{VOX_AUDIO_URL}/generate",
-                json={
-                    "npc_id": NPC_ID,
-                    "dialogue_text": text.strip(),
-                    "dsp_presets": DSP_C3PO,
-                    "control_instruction": None,
-                },
-                timeout=120,
-            )
-            resp.raise_for_status()
-
-            # Save to temp file and play
-            wav_path = Path("/tmp/claude-speak.wav")
-            wav_path.write_bytes(resp.content)
             subprocess.run(
-                ["pw-play", str(wav_path)],
+                ["pw-play", str(path)],
                 timeout=60, stderr=subprocess.DEVNULL,
             )
         except Exception as e:
-            print(f"  ⚠️ speak error: {e}", file=sys.stderr)
-            _fallback_espeak(text)
+            print(f"  ⚠️ play error: {e}", file=sys.stderr)
+
+
+def _speak_pipeline(parts: list[str]):
+    """Generate audio for each part concurrently, play sequentially.
+
+    Uses a thread pool to overlap generation of chunk N+1 with playback
+    of chunk N.  Playback is serialised to prevent overlapping audio,
+    but generation runs in parallel (up to 2 concurrent requests).
+    """
+    if not parts:
+        return
+
+    print(f"🔊 C-3PO: {parts[0][:60]}… ({len(parts)} parts)", file=sys.stderr)
+
+    # Single part — simple generate-then-play
+    if len(parts) == 1:
+        wav = _generate_audio(parts[0])
+        if wav:
+            _play_wav(wav)
+        else:
+            _fallback_espeak(parts[0])
+        return
+
+    # Multiple parts — pipeline: generate part N+1 while part N plays
+    wavs: list[bytes | None] = [None] * len(parts)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        # Submit all generation tasks
+        futures = [
+            pool.submit(_generate_audio, p)
+            for p in parts
+        ]
+
+        # Collect and play in order
+        for i, future in enumerate(futures):
+            wavs[i] = future.result()
+            if wavs[i]:
+                _play_wav(wavs[i])
+            else:
+                _fallback_espeak(parts[i])
 
 
 def _fallback_espeak(text: str):
