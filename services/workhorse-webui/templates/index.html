@@ -50,6 +50,13 @@
     <nav class="navbar navbar-dark bg-dark mb-4">
         <div class="container-fluid">
             <span class="navbar-brand mb-0 h1">VOX WORKHORSE CONTROL PANEL</span>
+            <span class="ms-auto d-flex align-items-center" style="gap: 8px;">
+                <span class="small" style="color: #aaa;">C-3PO Voice</span>
+                <div class="form-check form-switch mb-0">
+                    <input class="form-check-input" type="checkbox" id="c3po-mute-switch" role="switch">
+                    <label class="form-check-label small" for="c3po-mute-switch" id="c3po-mute-label">On</label>
+                </div>
+            </span>
         </div>
     </nav>
 
@@ -276,11 +283,33 @@
             document.body.style.overflow = 'auto';
         }
 
+        // C-3PO voice mute toggle
+        const muteSwitch = document.getElementById('c3po-mute-switch');
+        const muteLabel = document.getElementById('c3po-mute-label');
+        function renderMute(muted) {
+            muteSwitch.checked = !muted;
+            muteLabel.textContent = muted ? 'Muted' : 'On';
+        }
+        fetch('/api/c3po-voice').then(r => r.json()).then(d => renderMute(d.muted)).catch(() => {});
+        muteSwitch.addEventListener('change', async () => {
+            try {
+                const r = await fetch('/api/c3po-voice', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ muted: !muteSwitch.checked })
+                });
+                const d = await r.json();
+                renderMute(d.muted);
+            } catch (e) {
+                renderMute(!muteSwitch.checked);
+            }
+        });
+
         fetchContainers();
         fetchAssets();
         fetchTelemetry();
-        setInterval(fetchContainers, 5000); 
-        setInterval(fetchTelemetry, 2000);  
+        setInterval(fetchContainers, 5000);
+        setInterval(fetchTelemetry, 2000);
     </script>
 </body>
 </html>
