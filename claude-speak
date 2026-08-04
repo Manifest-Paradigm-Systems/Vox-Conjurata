@@ -26,6 +26,8 @@ VOX_AUDIO_URL = os.getenv("VOX_AUDIO_URL", "http://localhost:8004")
 PROJECT_DIR = Path(os.getenv("CLAUDE_PROJECT_DIR", Path.home() / ".claude/projects"))
 PIDFILE = Path(os.getenv("CLAUDE_SPEAK_PIDFILE", Path.home() / ".claude-speak.pid"))
 NPC_ID = "c3po"
+# Mute switch: if this file exists, C-3PO stays silent (Workhorse UI toggle).
+MUTE_FILE = Path(os.getenv("C3PO_MUTE_FILE", Path.home() / ".config/vox/c3po-muted"))
 
 # Serialise audio playback so multiple requests never overlap
 _speak_lock = threading.Lock()
@@ -88,6 +90,9 @@ def _speak_pipeline(parts: list[str]):
     but generation runs in parallel (up to 2 concurrent requests).
     """
     if not parts:
+        return
+    if MUTE_FILE.exists():
+        print("🔇 C-3PO muted (mute file present), skipping speech", file=sys.stderr)
         return
 
     print(f"🔊 C-3PO: {parts[0][:60]}… ({len(parts)} parts)", file=sys.stderr)

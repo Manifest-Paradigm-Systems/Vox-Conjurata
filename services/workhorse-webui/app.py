@@ -137,6 +137,27 @@ async def get_containers():
         logger.exception("Error in get_containers")
         return JSONResponse(status_code=500, content={"error": str(e)})
 
+C3PO_MUTE_FILE = os.path.expanduser("~/.config/vox/c3po-muted")
+
+@app.get("/api/c3po-voice")
+async def c3po_voice_state():
+    """C-3PO voice mute switch state (file existence = muted)."""
+    return {"muted": os.path.exists(C3PO_MUTE_FILE)}
+
+@app.post("/api/c3po-voice")
+async def set_c3po_voice(state: dict):
+    """Set C-3PO voice mute switch: POST {"muted": true|false}."""
+    muted = bool(state.get("muted", False))
+    if muted:
+        os.makedirs(os.path.dirname(C3PO_MUTE_FILE), exist_ok=True)
+        open(C3PO_MUTE_FILE, "a").close()
+    else:
+        try:
+            os.remove(C3PO_MUTE_FILE)
+        except FileNotFoundError:
+            pass
+    return {"muted": muted}
+
 @app.get("/api/models")
 async def list_models():
     """Lists downloaded models and LORAs."""
