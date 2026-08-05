@@ -150,6 +150,18 @@ def test_containers_merge_stats(monkeypatch):
             return SimpleNamespace(returncode=0, stdout=json.dumps(containers), stderr="")
         if cmd[:2] == ["podman", "stats"]:
             return SimpleNamespace(returncode=0, stdout=stats_json, stderr="")
+        if cmd[0] == "podman" and cmd[1] == "inspect":
+            inspect_json = json.dumps([
+                {"Name": "vox-vision-reader",
+                 "HostConfig": {"NanoCpus": 4000000000, "Memory": 4294967296,
+                                "RestartPolicy": {"Name": "always"}, "PidsLimit": 1024},
+                 "State": {"Pid": 99999}},
+                {"Name": "cacbox",
+                 "HostConfig": {"NanoCpus": 0, "Memory": 0,
+                                "RestartPolicy": {"Name": "no"}, "PidsLimit": 0},
+                 "State": {"Pid": 0}},
+            ])
+            return SimpleNamespace(returncode=0, stdout=inspect_json, stderr="")
         raise AssertionError(f"unexpected podman call: {cmd}")
 
     monkeypatch.setattr(webui.subprocess, "run", fake_run)
@@ -168,6 +180,54 @@ def test_containers_merge_stats(monkeypatch):
     stopped = by_name["cacbox"]
     assert stopped["mem_usage"] is None
     assert stopped["cpu_percent"] is None
+    # limits parsed from inspect (pid 99999 not readable in tests → no peak)
+    assert up["settings"] == {"cpu_cores": 4.0, "mem_limit_gb": 4.0,
+                              "restart_policy": "always", "pids_limit": 1024}
+    assert up["peak_mem_gb"] is None
+    assert stopped["settings"]["cpu_cores"] == 0.0
+
+
+def test_settings_endpoint_builds_flags(monkeypatch):
+    calls = []
+
+    def fake_run(cmd, capture_output=None, text=None, timeout=None):
+        calls.append(list(cmd))
+        if cmd[0] == "podman" and cmd[1] == "update":
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        if cmd[0] == "podman" and cmd[1] == "inspect":
+            return SimpleNamespace(returncode=0, stdout=json.dumps([
+                {"Name": "cacbox",
+                 "HostConfig": {"NanoCpus": 2000000000, "Memory": 4294967296,
+                                "RestartPolicy": {"Name": "on-failure"}, "PidsLimit": 512},
+                 "State": {"Pid": 0}},
+            ]), stderr="")
+        raise AssertionError(f"unexpected: {cmd}")
+
+    monkeypatch.setattr(webui.subprocess, "run", fake_run)
+    from fastapi.testclient import TestClient
+    with TestClient(webui.app) as client:
+        resp = client.post("/api/container/cacbox/settings", json={
+            "cpu_cores": 2, "mem_limit_gb": 4, "restart_policy": "on-failure", "pids_limit": 512,
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["settings"]["cpu_cores"] == 2.0
+        assert data["settings"]["mem_limit_gb"] == 4.0
+        assert data["settings"]["restart_policy"] == "on-failure"
+        assert data["settings"]["pids_limit"] == 512
+    update_call = [c for c in calls if c[:2] == ["podman", "update"]][0]
+    assert update_call == ["podman", "update", "--cpus", "2", "--memory", "4g",
+                           "--restart", "on-failure", "--pids-limit", "512", "cacbox"]
+
+
+def test_settings_validation():
+    from fastapi.testclient import TestClient
+    with TestClient(webui.app) as client:
+        assert client.post("/api/container/cacbox/settings", json={"cpu_cores": 999}).status_code == 400
+        assert client.post("/api/container/cacbox/settings", json={"mem_limit_gb": -3}).status_code == 400
+        assert client.post("/api/container/cacbox/settings", json={"restart_policy": "bogus"}).status_code == 400
+        assert client.post("/api/container/cacbox/settings", json={"pids_limit": -5}).status_code == 400
+        assert client.post("/api/container/cacbox/settings", json={}).status_code == 400
 
 
 def test_bulk_stop_returns_failures(monkeypatch):

@@ -110,23 +110,24 @@ def load_project_registry():
 
 PROJECT_REGISTRY = load_project_registry()
 
-def project_for_container(name: str):
-    """Return the registered project owning a container by name, or None."""
+def projects_for_container(name: str):
+    """Return ALL registered projects that own a container (multi-project support)."""
+    matches = []
     for proj, cfg in PROJECT_REGISTRY.items():
         if name in cfg["containers"]:
-            return proj
-    return None
+            matches.append(proj)
+    return matches
 
 def assign_project(name: str, labels: dict) -> str:
-    """Classify a container into a project tab group.
+    """Classify a container into project tab groups (comma-separated for multi-project).
 
     Priority: project registry container lists (explicit), then the
     compose project label (vox-conjurata stack), then the vox-*/foundry
     name convention, finally "Other" for everything else.
     """
-    reg = project_for_container(name)
+    reg = projects_for_container(name)
     if reg:
-        return reg
+        return ",".join(reg)
     proj = (labels or {}).get(COMPOSE_PROJECT_LABEL)
     if proj:
         return proj
