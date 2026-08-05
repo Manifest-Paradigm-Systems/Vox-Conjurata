@@ -338,18 +338,17 @@
                     if (!card) {
                         const cardHtml = `
                             <div class="card" id="card-${safeName}" data-project="${c.project}">
-                                <div class="card-header d-flex justify-content-between align-items-center">
-                                    <span>${c.name} <small class="text-muted">(${c.role})</small></span>
+                                <div class="card-header d-flex justify-content-between align-items-center" style="padding:0.3rem 0.6rem;">
+                                    <span style="font-size:0.85rem;">${c.name} <small class="text-muted" style="font-size:0.7rem;">(${c.role})</small></span>
                                     <span class="badge badge-vram" id="vram-${safeName}">${c.vram}</span>
                                 </div>
-                                <div class="card-body">
-                                    <p class="mb-1"><small>Stack: ${c.stack} | Image: ${c.image}</small></p>
-                                    <p class="mb-2 badge-status" id="status-${safeName}">${c.status}</p>
-                                    <p class="mb-2 small text-muted" id="diag-${safeName}">
-                                        RAM: ${c.mem_usage || '—'} ${c.mem_percent ? '(' + c.mem_percent + ')' : ''} · PEAK: ${c.peak_mem_gb != null ? c.peak_mem_gb + ' GB' : '—'} · CPU: ${c.cpu_percent || '—'} · PIDs: ${c.pids || '—'}
-                                    </p>
-                                    <div class="mb-2">${renderSettingsRow(safeName, c.settings || {})}</div>
-                                    <div id="controls-${safeName}">
+                                <div class="card-body" style="padding:0.35rem 0.6rem;">
+                                    <div class="d-flex align-items-center gap-2 flex-wrap" style="font-size:0.7rem;">
+                                        <span class="badge-status" id="status-${safeName}">${c.status}</span>
+                                        <span class="text-muted">${c.image.split('/').pop() || c.image}</span>
+                                        <span class="text-muted" id="diag-${safeName}">RAM:${c.mem_usage||'—'} CPU:${c.cpu_percent||'—'}</span>
+                                    </div>
+                                    <div id="controls-${safeName}" style="margin-top:0.2rem;">
                                         ${renderControls(safeName, c.name)}
                                     </div>
                                 </div>
