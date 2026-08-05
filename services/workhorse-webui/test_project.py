@@ -171,8 +171,10 @@ def test_containers_merge_stats(monkeypatch):
 
 
 def test_bulk_stop_returns_failures(monkeypatch):
+    target = PROJECT_REGISTRY["LifePacket"]["containers"][0]
+
     def fake_run(cmd, capture_output=None, text=None):
-        if cmd[1] == "stop" and cmd[2] == "cacbox":
+        if cmd[1] == "stop" and cmd[2] == target:
             return SimpleNamespace(returncode=1, stdout="", stderr="no such container")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
@@ -182,7 +184,7 @@ def test_bulk_stop_returns_failures(monkeypatch):
         resp = client.post("/api/project/LifePacket/stop")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["ok"] == 2
-        assert data["total"] == 3
+        assert data["total"] == len(PROJECT_REGISTRY["LifePacket"]["containers"])
+        assert data["ok"] == data["total"] - 1
         failed = [r for r in data["results"] if not r["ok"]]
-        assert failed == [{"name": "cacbox", "ok": False, "detail": "no such container"}]
+        assert failed == [{"name": target, "ok": False, "detail": "no such container"}]
