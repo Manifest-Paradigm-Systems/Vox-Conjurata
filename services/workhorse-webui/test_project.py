@@ -55,6 +55,15 @@ def test_compose_project_label_is_source_of_truth():
         assert assign_project(name, labels) == "vox-conjurata", name
 
 
+def test_multi_project_assignment(monkeypatch):
+    # A container registered to several projects is comma-joined, in registry order
+    reg = {k: dict(v) for k, v in webui.PROJECT_REGISTRY.items()}
+    reg["AI-devteam"]["containers"] = list(reg["AI-devteam"]["containers"]) + ["ocr-box"]
+    monkeypatch.setattr(webui, "PROJECT_REGISTRY", reg)
+    assert assign_project("ocr-box", {}) == "AI-devteam,LifePacket"
+    assert assign_project("ocr-box", {}).split(",") == ["AI-devteam", "LifePacket"]
+
+
 def test_other_for_unassigned():
     for name in ("rootsmagic", "jellyfin-https", "fedora-toolbox-44"):
         assert assign_project(name, {}) == "Other", name
@@ -216,7 +225,7 @@ def test_settings_endpoint_builds_flags(monkeypatch):
         assert data["settings"]["restart_policy"] == "on-failure"
         assert data["settings"]["pids_limit"] == 512
     update_call = [c for c in calls if c[:2] == ["podman", "update"]][0]
-    assert update_call == ["podman", "update", "--cpus", "2", "--memory", "4g",
+    assert update_call == ["podman", "update", "--cpus", "2.0", "--memory", "4.0g",
                            "--restart", "on-failure", "--pids-limit", "512", "cacbox"]
 
 
