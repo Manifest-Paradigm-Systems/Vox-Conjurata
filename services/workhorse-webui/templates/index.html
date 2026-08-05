@@ -127,6 +127,18 @@
                         <!-- Project tabs injected by JS -->
                     </div>
                 </div>
+                <div id="project-bar" class="d-none mb-2 p-2" style="background:#1a1a1a; border:1px solid #333; border-radius:6px;">
+                    <div class="small text-info" id="project-ai"></div>
+                    <div class="small text-muted" id="project-repo"></div>
+                    <div class="d-flex align-items-center gap-3 mt-1 flex-wrap">
+                        <div class="form-check mb-0">
+                            <input class="form-check-input" type="checkbox" id="bulk-enable">
+                            <label class="form-check-label small" for="bulk-enable" id="bulk-enable-label">Enable all containers</label>
+                        </div>
+                        <button class="btn-control btn-stop" id="bulk-stop-all">STOP ALL</button>
+                        <span class="small text-muted" id="bulk-status"></span>
+                    </div>
+                </div>
                 <div id="container-list">
                     <!-- Containers will be loaded here -->
                 </div>
@@ -180,21 +192,25 @@
             } catch (e) { alert("Network error: " + e.message); }
         }
 
-        // Workhorse UI v2: project tab filtering
+        // Workhorse UI v3: per-repo project tabs + bulk power controls
         let activeTab = 'All';
-        const KNOWN_PROJECT_ORDER = ['vox-conjurata', 'LifePacket'];
+        let projectRegistry = [];
 
-        function orderedProjects(projects) {
-            const set = new Set(projects);
-            const known = KNOWN_PROJECT_ORDER.filter(p => set.has(p));
-            const rest = [...set].filter(p => !KNOWN_PROJECT_ORDER.includes(p) && p !== 'Other').sort();
+        function orderedTabs(containerProjects) {
+            const set = new Set(containerProjects);
+            const names = projectRegistry.map(p => p.name).filter(n => set.has(n));
             const other = set.has('Other') ? ['Other'] : [];
-            return ['All', ...known, ...rest, ...other];
+            return ['All', ...names, ...other];
         }
 
-        function renderTabs(projects) {
+        function activeProjectInfo() {
+            if (activeTab === 'All' || activeTab === 'Other') return null;
+            return projectRegistry.find(p => p.name === activeTab) || null;
+        }
+
+        function renderTabs(containerProjects) {
             const bar = document.getElementById('project-tabs');
-            const tabs = orderedProjects(projects);
+            const tabs = orderedTabs(containerProjects);
             const key = tabs.join(',');
             if (bar.dataset.tabs === key) return;
             bar.dataset.tabs = key;
@@ -210,6 +226,26 @@
             });
         }
 
+        function renderProjectBar() {
+            const info = activeProjectInfo();
+            const bar = document.getElementById('project-bar');
+            if (!info) {
+                bar.classList.add('d-none');
+                return;
+            }
+            bar.classList.remove('d-none');
+            document.getElementById('project-ai').textContent = 'AI: ' + info.ai;
+            document.getElementById('project-repo').textContent = 'Repo: ' + info.repo;
+
+            const enable = document.getElementById('bulk-enable');
+            const status = document.getElementById('bulk-status');
+            const up = info.containers.filter(c => (c.status || '').includes('Up')).length;
+            status.textContent = `${info.containers.length} containers · ${up} up`;
+            if (!enable.disabled) {
+                enable.checked = info.containers.length > 0 && up === info.containers.length;
+            }
+        }
+
         function setActiveTab(p) {
             activeTab = p;
             document.querySelectorAll('#project-tabs .nav-link').forEach(b => {
@@ -218,7 +254,48 @@
             document.querySelectorAll('#container-list .card').forEach(card => {
                 card.style.display = (p === 'All' || card.dataset.project === p) ? '' : 'none';
             });
+            renderProjectBar();
         }
+
+        async function fetchProjects() {
+            try {
+                const resp = await fetch('/api/projects');
+                const data = await resp.json();
+                projectRegistry = data.projects || [];
+                renderTabs([...document.querySelectorAll('#container-list .card')].map(c => c.dataset.project).filter(Boolean));
+                renderProjectBar();
+            } catch (e) { console.error("Projects fetch error", e); }
+        }
+
+        async function bulkAction(turnOn) {
+            const info = activeProjectInfo();
+            if (!info) return;
+            if (!turnOn && !confirm(`Stop ALL ${info.name} containers? This includes: ${info.containers.map(c => c.name).join(', ')}`)) return;
+            const enable = document.getElementById('bulk-enable');
+            const status = document.getElementById('bulk-status');
+            enable.disabled = true;
+            status.textContent = turnOn ? 'Starting all…' : 'Stopping all…';
+            try {
+                const resp = await fetch(`/api/project/${encodeURIComponent(info.name)}/${turnOn ? 'start' : 'stop'}`, { method: 'POST' });
+                const data = await resp.json();
+                status.textContent = `${data.ok}/${data.total} ${turnOn ? 'started' : 'stopped'}`;
+                fetchContainers();
+                fetchProjects();
+            } catch (err) {
+                status.textContent = 'Error: ' + err.message;
+                enable.checked = !turnOn;
+            } finally {
+                enable.disabled = false;
+            }
+        }
+
+        document.getElementById('bulk-enable').addEventListener('change', (e) => bulkAction(e.target.checked));
+        document.getElementById('bulk-stop-all').addEventListener('click', () => {
+            const enable = document.getElementById('bulk-enable');
+            if (!enable.checked) return;
+            enable.checked = false;
+            bulkAction(false);
+        });
 
         async function fetchContainers() {
             try {
@@ -227,6 +304,7 @@
                 const list = document.getElementById('container-list');
 
                 renderTabs(data.map(c => c.project));
+                renderProjectBar();
 
                 data.forEach(c => {
                     const safeName = c.name.replace(/[^a-zA-Z0-9]/g, '_');

@@ -222,6 +222,58 @@ async def list_models():
                 
     return {"models": models, "loras": loras}
 
+@app.get("/api/projects")
+async def list_projects():
+    """Per-repo project registry with live per-container state."""
+    try:
+        out = subprocess.run(["podman", "ps", "-a", "--format", "json"], capture_output=True, text=True)
+        states = {}
+        if out.returncode == 0:
+            for c in json.loads(out.stdout):
+                names = c.get("Names")
+                name = names[0] if isinstance(names, list) and len(names) > 0 else (names if isinstance(names, str) else "Unknown")
+                states[name] = c.get("Status", "N/A")
+
+        projects = []
+        for name, cfg in PROJECT_REGISTRY.items():
+            containers = [{"name": cn, "status": states.get(cn, "missing")} for cn in cfg["containers"]]
+            projects.append({
+                "name": name,
+                "repo": cfg["repo"],
+                "ai": cfg["ai"],
+                "containers": containers,
+                "all_up": bool(containers) and all("Up" in (states.get(cn, "") or "") for cn in cfg["containers"]),
+            })
+        return {"projects": projects}
+    except Exception as e:
+        logger.exception("Error in list_projects")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+@app.post("/api/project/{project_name}/{action}")
+async def bulk_container_action(project_name: str, action: str):
+    """Start or stop every container registered to a project (bulk power)."""
+    if action not in ("start", "stop"):
+        raise HTTPException(status_code=400, detail="Action must be 'start' or 'stop'")
+    cfg = PROJECT_REGISTRY.get(project_name)
+    if not cfg:
+        raise HTTPException(status_code=404, detail=f"Unknown project '{project_name}'")
+
+    results = []
+    for name in cfg["containers"]:
+        r = subprocess.run(["podman", action, name], capture_output=True, text=True)
+        results.append({
+            "name": name,
+            "ok": r.returncode == 0,
+            "detail": (r.stderr or r.stdout or "").strip(),
+        })
+    return {
+        "project": project_name,
+        "action": action,
+        "results": results,
+        "ok": sum(1 for x in results if x["ok"]),
+        "total": len(results),
+    }
+
 @app.post("/api/container/{name}/{action}")
 async def manage_container(name: str, action: str):
     if action not in ["start", "stop", "restart"]:
