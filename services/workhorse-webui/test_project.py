@@ -32,10 +32,12 @@ def test_registry_entries_have_repo_and_ai():
 
 def test_registry_drives_assignment():
     # AI-devteam containers come from the registry (no compose labels)
-    for name in ("qa-box", "matrix-box", "conduit-live", "caddy-matrix",
-                 "vox-voice", "vox-audio-core"):
+    for name in ("qa-box", "matrix-box", "conduit-live", "caddy-matrix"):
         assert assign_project(name, {}) == "AI-devteam", name
-    assert assign_project("adobe-reader", {}) == "vox-pdf-importer"
+    # Shared infra: voice/audio serve both the stack and the devteam
+    assert assign_project("vox-voice", {}) == "vox-conjurata,AI-devteam"
+    assert assign_project("vox-audio-core", {}) == "vox-conjurata,AI-devteam"
+    assert assign_project("adobe-reader", {}) == "vox-pdf-importer,tiny11_CAC"
     assert assign_project("cacbox", {}) == "tiny11_CAC"
     assert assign_project("cac-setup", {}) == "tiny11_CAC"
     assert assign_project("ocr-box", {}) == "LifePacket"
@@ -46,22 +48,22 @@ def test_registry_wins_over_compose_label():
     labels = {"com.docker.compose.project": "vox-conjurata"}
     assert assign_project("cacbox", labels) == "tiny11_CAC"
     assert assign_project("qa-box", labels) == "AI-devteam"
+    assert assign_project("ocr-box", labels) == "LifePacket"
 
 
-def test_compose_project_label_is_source_of_truth():
+def test_compose_label_fallback_when_not_in_registry():
     labels = {"com.docker.compose.project": "vox-conjurata"}
-    for name in ("vox-vision-reader", "vox-conjurata-orchestrator",
-                 "foundry-vtt", "vox-llm-core", "caddy", "cloudflared"):
-        assert assign_project(name, labels) == "vox-conjurata", name
+    assert assign_project("vox-mystery-container", labels) == "vox-conjurata"
+    assert assign_project("some-other-stack", labels) == "vox-conjurata"
 
 
-def test_multi_project_assignment(monkeypatch):
-    # A container registered to several projects is comma-joined, in registry order
-    reg = {k: dict(v) for k, v in webui.PROJECT_REGISTRY.items()}
-    reg["AI-devteam"]["containers"] = list(reg["AI-devteam"]["containers"]) + ["ocr-box"]
-    monkeypatch.setattr(webui, "PROJECT_REGISTRY", reg)
-    assert assign_project("ocr-box", {}) == "AI-devteam,LifePacket"
-    assert assign_project("ocr-box", {}).split(",") == ["AI-devteam", "LifePacket"]
+def test_multi_project_assignment():
+    # Containers registered to several projects are comma-joined, in registry order
+    assert assign_project("vox-vision-reader", {}) == "vox-conjurata,vox-pdf-importer,LifePacket"
+    assert assign_project("foundry-vtt", {}) == "vox-conjurata,vox-pdf-importer"
+    assert assign_project("vox-llm-core", {}) == "vox-conjurata,LifePacket"
+    assert assign_project("vox-vision-reader", {}).split(",") == \
+        ["vox-conjurata", "vox-pdf-importer", "LifePacket"]
 
 
 def test_other_for_unassigned():
@@ -72,7 +74,7 @@ def test_other_for_unassigned():
 def test_vox_name_convention_fallback():
     # No compose label, but vox-*/foundry naming still belongs to the stack
     assert assign_project("vox-bg-remover", {}) == "vox-conjurata"
-    assert assign_project("foundry-vtt", {}) == "vox-conjurata"
+    assert assign_project("vox-mystery-container", {}) == "vox-conjurata"
 
 
 # ---------------------------------------------------------------- API

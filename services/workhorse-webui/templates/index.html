@@ -228,7 +228,8 @@
         let projectRegistry = [];
 
         function orderedTabs(containerProjects) {
-            const set = new Set(containerProjects);
+            const set = new Set();
+            (containerProjects || []).forEach(p => (p || '').split(',').forEach(x => { const t = x.trim(); if (t) set.add(t); }));
             const names = projectRegistry.map(p => p.name).filter(n => set.has(n));
             const other = set.has('Other') ? ['Other'] : [];
             return ['All', ...names, ...other];
