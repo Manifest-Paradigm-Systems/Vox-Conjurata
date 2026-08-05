@@ -89,6 +89,26 @@ SERVICES = {
     "vox-audio-generation-music": "http://127.0.0.1:8000",
 }
 
+# Project classification for container tabs (Workhorse UI v2)
+COMPOSE_PROJECT_LABEL = "com.docker.compose.project"
+LIFEPACKET_CONTAINERS = {"cacbox", "cac-setup", "ocr-box"}
+
+def assign_project(name: str, labels: dict) -> str:
+    """Classify a container into a project tab group.
+
+    Priority: compose project label (vox-conjurata stack), then the
+    LifePacket name table, then the vox-*/foundry name convention,
+    finally "Other" for everything else.
+    """
+    proj = (labels or {}).get(COMPOSE_PROJECT_LABEL)
+    if proj:
+        return proj
+    if name in LIFEPACKET_CONTAINERS:
+        return "LifePacket"
+    if name.startswith("vox-") or "foundry" in name:
+        return "vox-conjurata"
+    return "Other"
+
 class QueryRequest(BaseModel):
     service: str
     prompt: str
