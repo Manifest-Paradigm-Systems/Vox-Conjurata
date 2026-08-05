@@ -143,6 +143,7 @@ async def get_containers():
         for c in containers:
             names = c.get("Names")
             name = names[0] if isinstance(names, list) and len(names) > 0 else (names if isinstance(names, str) else "Unknown")
+            labels = c.get("Labels") or {}
             enriched.append({
                 "id": c.get("ID", "N/A")[:12],
                 "name": name,
@@ -150,7 +151,8 @@ async def get_containers():
                 "image": c.get("Image", "N/A"),
                 "vram": vram_map.get(name, "N/A"),
                 "stack": "vox-conjurata" if "vox-" in name or "foundry" in name else "External",
-                "role": name.replace("vox-", "").replace("-", " ").title()
+                "role": name.replace("vox-", "").replace("-", " ").title(),
+                "project": assign_project(name, labels)
             })
         return enriched
     except Exception as e:

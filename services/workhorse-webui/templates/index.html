@@ -7,21 +7,48 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body { background-color: #121212; color: #e0e0e0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        .card { background-color: #1e1e1e; border: 1px solid #333; margin-bottom: 20px; }
-        .card-header { background-color: #252525; border-bottom: 1px solid #333; color: #00bcd4; font-weight: bold; }
+        .card { background-color: #1e1e1e; border: 1px solid #333; margin-bottom: 12px; }
+        .card-header { background-color: #252525; border-bottom: 1px solid #333; color: #00bcd4; font-weight: bold; padding: 0.45rem 0.75rem; }
+        .card-body { padding: 0.6rem 0.75rem; }
         .badge-vram { background-color: #ff9800; color: #000; font-weight: bold; }
         .badge-status { font-size: 0.8rem; }
         .lora-slider { width: 100%; }
-        .prompt-box { background-color: #252525; border: 1px solid #444; color: #fff; border-radius: 4px; padding: 10px; width: 100%; margin-top: 10px; }
-        .btn-query { background-color: #00bcd4; color: #000; font-weight: bold; margin-top: 10px; }
+        .prompt-box { background-color: #252525; border: 1px solid #444; color: #fff; border-radius: 4px; padding: 8px; width: 100%; margin-top: 8px; font-size: 0.85rem; }
+        .btn-query { background-color: #00bcd4; color: #000; font-weight: bold; margin-top: 8px; }
         .btn-query:hover { background-color: #0097a7; }
         .status-up { color: #4caf50; }
         .status-exited { color: #f44336; }
-        .lora-controls { padding: 10px; background: #252525; border-radius: 4px; margin-top: 10px; border: 1px dashed #444; }
-        .btn-control { font-size: 0.7rem; font-weight: bold; padding: 2px 8px; margin-right: 5px; border: none; border-radius: 3px; }
+        .lora-controls { padding: 8px; background: #252525; border-radius: 4px; margin-top: 8px; border: 1px dashed #444; }
+        .btn-control { font-size: 0.7rem; font-weight: bold; padding: 1px 7px; margin-right: 5px; border: none; border-radius: 3px; }
         .btn-start { background-color: #4caf50; color: white; }
         .btn-stop { background-color: #f44336; color: white; }
         .btn-idle { background-color: #ff9800; color: black; }
+
+        /* Workhorse UI v2: project tabs + compact layout */
+        #project-tabs .nav-link {
+            color: #bbb;
+            border: 1px solid #444;
+            border-radius: 16px;
+            padding: 2px 14px;
+            font-size: 0.8rem;
+            margin-right: 6px;
+            margin-bottom: 4px;
+            background: transparent;
+        }
+        #project-tabs .nav-link:hover { color: #fff; border-color: #00bcd4; }
+        #project-tabs .nav-link.active {
+            background-color: #00bcd4;
+            border-color: #00bcd4;
+            color: #111;
+            font-weight: 700;
+        }
+        .container h3 { font-size: 1.1rem; margin-bottom: 0.4rem; }
+        #vram-percent { font-size: 1.6rem; margin-bottom: 0.1rem; }
+        #vram-peaks { max-height: 44px; }
+        @media (max-width: 576px) {
+            .navbar-brand { font-size: 0.9rem; }
+            .navbar .container-fluid { flex-wrap: wrap; }
+        }
         
         /* Image Pop-out Overlay */
         #image-overlay {
@@ -47,7 +74,7 @@
     <div id="image-overlay" onclick="closeOverlay()">
         <img id="overlay-img" src="" alt="Full size preview">
     </div>
-    <nav class="navbar navbar-dark bg-dark mb-4">
+    <nav class="navbar navbar-dark bg-dark mb-3">
         <div class="container-fluid">
             <span class="navbar-brand mb-0 h1">VOX WORKHORSE CONTROL PANEL</span>
             <span class="ms-auto d-flex align-items-center" style="gap: 8px;">
@@ -61,7 +88,7 @@
     </nav>
 
     <div class="container">
-        <div class="row mb-4">
+        <div class="row mb-3">
             <div class="col-12">
                 <div class="card">
                     <div class="card-header">GPU TELEMETRY: AMD RX 7900 (Workhorse VRAM)</div>
@@ -94,7 +121,12 @@
         </div>
         <div class="row">
             <div class="col-md-8">
-                <h3>System Workhorses</h3>
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-1">
+                    <h3 class="mb-0">System Workhorses</h3>
+                    <div class="nav nav-pills" id="project-tabs" role="tablist" aria-label="Filter containers by project">
+                        <!-- Project tabs injected by JS -->
+                    </div>
+                </div>
                 <div id="container-list">
                     <!-- Containers will be loaded here -->
                 </div>
@@ -148,20 +180,62 @@
             } catch (e) { alert("Network error: " + e.message); }
         }
 
+        // Workhorse UI v2: project tab filtering
+        let activeTab = 'All';
+        const KNOWN_PROJECT_ORDER = ['vox-conjurata', 'LifePacket'];
+
+        function orderedProjects(projects) {
+            const set = new Set(projects);
+            const known = KNOWN_PROJECT_ORDER.filter(p => set.has(p));
+            const rest = [...set].filter(p => !KNOWN_PROJECT_ORDER.includes(p) && p !== 'Other').sort();
+            const other = set.has('Other') ? ['Other'] : [];
+            return ['All', ...known, ...rest, ...other];
+        }
+
+        function renderTabs(projects) {
+            const bar = document.getElementById('project-tabs');
+            const tabs = orderedProjects(projects);
+            const key = tabs.join(',');
+            if (bar.dataset.tabs === key) return;
+            bar.dataset.tabs = key;
+            bar.innerHTML = '';
+            tabs.forEach(p => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'nav-link' + (p === activeTab ? ' active' : '');
+                btn.textContent = p;
+                btn.setAttribute('role', 'tab');
+                btn.addEventListener('click', () => setActiveTab(p));
+                bar.appendChild(btn);
+            });
+        }
+
+        function setActiveTab(p) {
+            activeTab = p;
+            document.querySelectorAll('#project-tabs .nav-link').forEach(b => {
+                b.classList.toggle('active', b.textContent === p);
+            });
+            document.querySelectorAll('#container-list .card').forEach(card => {
+                card.style.display = (p === 'All' || card.dataset.project === p) ? '' : 'none';
+            });
+        }
+
         async function fetchContainers() {
             try {
                 const resp = await fetch('/api/containers');
                 const data = await resp.json();
                 const list = document.getElementById('container-list');
-                
+
+                renderTabs(data.map(c => c.project));
+
                 data.forEach(c => {
                     const safeName = c.name.replace(/[^a-zA-Z0-9]/g, '_');
                     let card = document.getElementById(`card-${safeName}`);
                     const isUp = c.status.toLowerCase().includes('up');
-                    
+
                     if (!card) {
                         const cardHtml = `
-                            <div class="card" id="card-${safeName}">
+                            <div class="card" id="card-${safeName}" data-project="${c.project}">
                                 <div class="card-header d-flex justify-content-between align-items-center">
                                     <span>${c.name} <small class="text-muted">(${c.role})</small></span>
                                     <span class="badge badge-vram" id="vram-${safeName}">${c.vram}</span>
@@ -176,13 +250,17 @@
                             </div>
                         `;
                         list.insertAdjacentHTML('beforeend', cardHtml);
+                        const newCard = document.getElementById(`card-${safeName}`);
+                        if (activeTab !== 'All' && c.project !== activeTab) {
+                            newCard.style.display = 'none';
+                        }
                     } else {
                         const statusEl = document.getElementById(`status-${safeName}`);
                         if (statusEl.innerText !== c.status) {
                             statusEl.innerText = c.status;
                             statusEl.className = `mb-2 badge-status ${isUp ? 'status-up' : 'status-exited'}`;
                         }
-                        
+
                         const vramEl = document.getElementById(`vram-${safeName}`);
                         if (vramEl.innerText !== c.vram) vramEl.innerText = c.vram;
                     }
