@@ -165,19 +165,26 @@ async def get_containers():
         }
         
         enriched = []
+        stats = fetch_container_stats()
         for c in containers:
             names = c.get("Names")
             name = names[0] if isinstance(names, list) and len(names) > 0 else (names if isinstance(names, str) else "Unknown")
             labels = c.get("Labels") or {}
+            s = stats.get(name, {})
             enriched.append({
-                "id": c.get("ID", "N/A")[:12],
+                "id": (c.get("Id") or "N/A")[:12],
                 "name": name,
                 "status": c.get("Status", "N/A"),
                 "image": c.get("Image", "N/A"),
                 "vram": vram_map.get(name, "N/A"),
                 "stack": "vox-conjurata" if "vox-" in name or "foundry" in name else "External",
                 "role": name.replace("vox-", "").replace("-", " ").title(),
-                "project": assign_project(name, labels)
+                "project": assign_project(name, labels),
+                "cpu_percent": s.get("cpu_percent"),
+                "mem_usage": s.get("mem_usage"),
+                "mem_gb": s.get("mem_gb"),
+                "mem_percent": s.get("mem_percent"),
+                "pids": s.get("pids"),
             })
         return enriched
     except Exception as e:
@@ -290,6 +297,45 @@ async def manage_container(name: str, action: str):
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 import base64
+import re
+
+_MEM_UNITS = {"B": 1e-9, "KB": 1e-6, "MB": 1e-3, "GB": 1.0, "TB": 1e3}
+
+def parse_mem_usage(s):
+    """Parse podman stats mem_usage strings like '9.866GB / 64.53GB' or
+    '415.8MB / 64.53GB' into GB as a float (or None)."""
+    m = re.match(r"\s*([\d.]+)\s*([KMGT]?B)", s or "")
+    if not m:
+        return None
+    return round(float(m.group(1)) * _MEM_UNITS.get(m.group(2), 1.0), 2)
+
+def fetch_container_stats():
+    """podman stats --no-stream: name -> {cpu_percent, mem_usage, mem_gb,
+    mem_percent, pids}. Returns {} on any failure."""
+    try:
+        r = subprocess.run(
+            ["podman", "stats", "--no-stream", "--format", "json"],
+            capture_output=True, text=True, timeout=30,
+        )
+        if r.returncode != 0:
+            logger.error(f"Podman stats error: {r.stderr}")
+            return {}
+        stats = {}
+        for s in json.loads(r.stdout):
+            name = s.get("name")
+            if not name:
+                continue
+            stats[name] = {
+                "cpu_percent": s.get("cpu_percent"),
+                "mem_usage": s.get("mem_usage"),
+                "mem_gb": parse_mem_usage(s.get("mem_usage")),
+                "mem_percent": s.get("mem_percent"),
+                "pids": s.get("pids"),
+            }
+        return stats
+    except Exception as e:
+        logger.warning(f"fetch_container_stats failed: {repr(e)}")
+        return {}
 
 @app.post("/api/query")
 async def query_service(req: QueryRequest):

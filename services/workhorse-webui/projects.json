@@ -24,7 +24,7 @@
   },
   "AI-devteam": {
     "repo": "/var/home/EvokeStudio/AI-devteam",
-    "ai": "DeepSeek v4 via vox-llm-core OpenRouter proxy (coding-cheap=v4-flash, coding-pro=v4-pro)",
-    "containers": ["qa-box", "matrix-box", "conduit-live", "caddy-matrix"]
+    "ai": "DeepSeek v4 via vox-llm-core OpenRouter proxy · Faster-Whisper STT (vox-voice) · C-3PO TTS (vox-audio-core)",
+    "containers": ["qa-box", "matrix-box", "conduit-live", "caddy-matrix", "vox-voice", "vox-audio-core"]
   }
 }

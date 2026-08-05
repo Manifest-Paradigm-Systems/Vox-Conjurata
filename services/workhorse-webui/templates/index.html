@@ -96,17 +96,11 @@
                         <div class="row align-items-center">
                             <div class="col-md-3 text-center">
                                 <h2 id="vram-percent">0%</h2>
-                                <p class="small text-muted mb-0">TOTAL ALLOCATION</p>
+                                <p class="small text-muted mb-0">VRAM ALLOCATION</p>
                                 <p class="small text-info mb-0" id="vram-last-sync" style="font-size: 0.6rem;"></p>
                             </div>
-                            <div class="col-md-6">
-                                <div class="progress" style="height: 30px; background-color: #333;">
-                                    <div id="vram-progress" class="progress-bar progress-bar-striped progress-bar-animated bg-info" role="progressbar" style="width: 0%"></div>
-                                </div>
-                                <div class="d-flex justify-content-between mt-1 small">
-                                    <span id="vram-used">0 GB</span>
-                                    <span>32 GB TOTAL</span>
-                                </div>
+                            <div class="col-md-6 d-flex align-items-center">
+                                <div class="small fw-bold text-info">USED: <span id="vram-used">0 GB</span> / 32 GB TOTAL</div>
                             </div>
                             <div class="col-md-3 border-start border-secondary">
                                 <p class="small fw-bold mb-1 text-warning">HIGH WATERMARK LOG</p>
@@ -321,6 +315,9 @@
                                 <div class="card-body">
                                     <p class="mb-1"><small>Stack: ${c.stack} | Image: ${c.image}</small></p>
                                     <p class="mb-2 badge-status" id="status-${safeName}">${c.status}</p>
+                                    <p class="mb-2 small text-muted" id="diag-${safeName}">
+                                        RAM: ${c.mem_usage || '—'} ${c.mem_percent ? '(' + c.mem_percent + ')' : ''} · CPU: ${c.cpu_percent || '—'} · PIDs: ${c.pids || '—'}
+                                    </p>
                                     <div id="controls-${safeName}">
                                         ${renderControls(safeName, c.name)}
                                     </div>
@@ -384,7 +381,6 @@
                 
                 document.getElementById('vram-percent').innerText = `${percent}%`;
                 document.getElementById('vram-used').innerText = `${usedGB} GB`;
-                document.getElementById('vram-progress').style.width = `${percent}%`;
                 document.getElementById('vram-last-sync').innerText = `SYNC: ${new Date().toLocaleTimeString()}`;
                 
                 const peaksList = document.getElementById('vram-peaks');
