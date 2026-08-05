@@ -10,7 +10,7 @@ from types import SimpleNamespace
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import app as webui
-from app import assign_project, PROJECT_REGISTRY
+from app import assign_project, PROJECT_REGISTRY, parse_mem_usage
 
 
 # ---------------------------------------------------------------- registry
@@ -106,8 +106,9 @@ def test_bulk_start_endpoint(monkeypatch):
         resp = client.post("/api/project/AI-devteam/start")
         assert resp.status_code == 200
         data = resp.json()
+        n = len(PROJECT_REGISTRY["AI-devteam"]["containers"])
         assert data["action"] == "start"
-        assert data["ok"] == data["total"] == 4
+        assert data["ok"] == data["total"] == n
         assert all(r["ok"] for r in data["results"])
     assert calls == [["podman", "start", n] for n in PROJECT_REGISTRY["AI-devteam"]["containers"]]
 
@@ -117,6 +118,55 @@ def test_bulk_action_unknown_project():
     with TestClient(webui.app) as client:
         assert client.post("/api/project/nope/start").status_code == 404
         assert client.post("/api/project/vox-conjurata/frobnicate").status_code == 400
+
+
+# ---------------------------------------------------------------- diagnostics
+
+def test_parse_mem_usage():
+    assert parse_mem_usage("9.866GB / 64.53GB") == 9.87
+    assert parse_mem_usage("415.8MB / 64.53GB") == 0.42
+    assert parse_mem_usage("1.2TB / 2TB") == 1200.0
+    assert parse_mem_usage(None) is None
+    assert parse_mem_usage("") is None
+    assert parse_mem_usage("garbage") is None
+
+
+def test_containers_merge_stats(monkeypatch):
+    containers = [
+        {"Id": "abc123deadbeef", "Names": ["vox-vision-reader"],
+         "Status": "Up 1 hour", "Image": "img",
+         "Labels": {"com.docker.compose.project": "vox-conjurata"}},
+        {"Id": "def456cafebabe", "Names": ["cacbox"],
+         "Status": "Exited (0)", "Image": "img", "Labels": {}},
+    ]
+    stats_json = json.dumps([
+        {"name": "vox-vision-reader", "cpu_percent": "3.50%",
+         "mem_usage": "4.8GB / 64.53GB", "mem_percent": "7.44%", "pids": "37"},
+    ])
+
+    def fake_run(cmd, capture_output=None, text=None, timeout=None):
+        if cmd[:2] == ["podman", "ps"]:
+            return SimpleNamespace(returncode=0, stdout=json.dumps(containers), stderr="")
+        if cmd[:2] == ["podman", "stats"]:
+            return SimpleNamespace(returncode=0, stdout=stats_json, stderr="")
+        raise AssertionError(f"unexpected podman call: {cmd}")
+
+    monkeypatch.setattr(webui.subprocess, "run", fake_run)
+    from fastapi.testclient import TestClient
+    with TestClient(webui.app) as client:
+        data = client.get("/api/containers").json()
+    by_name = {c["name"]: c for c in data}
+    up = by_name["vox-vision-reader"]
+    assert up["id"] == "abc123deadbeef"  # Id key fixed, not N/A
+    assert up["mem_usage"] == "4.8GB / 64.53GB"
+    assert up["mem_gb"] == 4.8
+    assert up["mem_percent"] == "7.44%"
+    assert up["cpu_percent"] == "3.50%"
+    assert up["pids"] == "37"
+    # stopped container gets no stats
+    stopped = by_name["cacbox"]
+    assert stopped["mem_usage"] is None
+    assert stopped["cpu_percent"] is None
 
 
 def test_bulk_stop_returns_failures(monkeypatch):
