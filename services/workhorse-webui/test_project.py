@@ -157,7 +157,7 @@ def test_containers_merge_stats(monkeypatch):
         data = client.get("/api/containers").json()
     by_name = {c["name"]: c for c in data}
     up = by_name["vox-vision-reader"]
-    assert up["id"] == "abc123deadbeef"  # Id key fixed, not N/A
+    assert up["id"] == "abc123deadbe"  # Id key fixed (12-char truncation), not N/A
     assert up["mem_usage"] == "4.8GB / 64.53GB"
     assert up["mem_gb"] == 4.8
     assert up["mem_percent"] == "7.44%"
