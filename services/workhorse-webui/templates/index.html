@@ -165,14 +165,54 @@
                     <button class="btn-control btn-stop" onclick="controlContainer('${actualName}', 'stop')">STOP</button>
                     <button class="btn-control btn-idle" onclick="controlContainer('${actualName}', 'stop')">IDLE</button>
                 </div>
-                <div class="lora-controls">
-                    <label class="form-label small">LoRA Influence (Global)</label>
-                    <input type="range" class="form-range lora-slider" min="0" max="1" step="0.1" value="0.5">
-                </div>
                 <textarea class="prompt-box" id="prompt-${name}" placeholder="Enter manual query/prompt for ${name}..."></textarea>
                 <button class="btn btn-sm btn-query" onclick="queryService('${name}')">EXECUTE REQUEST</button>
                 <div class="mt-2 small text-info" id="result-${name}"></div>
             `;
+        }
+
+        function renderSettingsRow(name, c) {
+            const options = ['no', 'on-failure', 'always', 'unless-stopped', 'never']
+                .map(p => `<option value="${p}" ${p === c.restart_policy ? 'selected' : ''}>${p}</option>`).join('');
+            return `
+                <div class="d-flex align-items-center gap-2 small text-muted flex-wrap mt-1" id="settings-${name}" title="0 = unlimited">
+                    <span>CPU:</span>
+                    <input type="number" class="form-control form-control-sm" id="cpu-${name}" style="width:64px" min="0" step="0.5" value="${c.cpu_cores ?? 0}">
+                    <span>MEM:</span>
+                    <input type="number" class="form-control form-control-sm" id="mem-${name}" style="width:64px" min="0" step="0.5" value="${c.mem_limit_gb ?? 0}">
+                    <span>RESTART:</span>
+                    <select class="form-select form-select-sm" id="restart-${name}" style="width:112px">${options}</select>
+                    <button class="btn-control btn-start" onclick="applySettings('${c.name}')">APPLY</button>
+                    <span class="small text-info" id="setstat-${name}"></span>
+                </div>
+            `;
+        }
+
+        async function applySettings(name) {
+            const safe = name.replace(/[^a-zA-Z0-9]/g, '_');
+            const stat = document.getElementById(`setstat-${safe}`);
+            const payload = {
+                cpu_cores: parseFloat(document.getElementById(`cpu-${safe}`).value) || 0,
+                mem_limit_gb: parseFloat(document.getElementById(`mem-${safe}`).value) || 0,
+                restart_policy: document.getElementById(`restart-${safe}`).value,
+            };
+            stat.innerText = 'Applying…';
+            try {
+                const resp = await fetch(`/api/container/${encodeURIComponent(name)}/settings`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await resp.json();
+                if (data.settings) {
+                    stat.innerText = `Applied: CPU ${data.settings.cpu_cores} · MEM ${data.settings.mem_limit_gb}GB · RESTART ${data.settings.restart_policy}`;
+                    setTimeout(() => { stat.innerText = ''; }, 6000);
+                } else {
+                    stat.innerText = 'Error: ' + (data.error || 'unknown');
+                }
+            } catch (e) {
+                stat.innerText = 'Network error: ' + e.message;
+            }
         }
 
         async function controlContainer(name, action) {
@@ -323,8 +363,9 @@
                                     <p class="mb-1"><small>Stack: ${c.stack} | Image: ${c.image}</small></p>
                                     <p class="mb-2 badge-status" id="status-${safeName}">${c.status}</p>
                                     <p class="mb-2 small text-muted" id="diag-${safeName}">
-                                        RAM: ${c.mem_usage || '—'} ${c.mem_percent ? '(' + c.mem_percent + ')' : ''} · CPU: ${c.cpu_percent || '—'} · PIDs: ${c.pids || '—'}
+                                        RAM: ${c.mem_usage || '—'} ${c.mem_percent ? '(' + c.mem_percent + ')' : ''} · PEAK: ${c.peak_mem_gb != null ? c.peak_mem_gb + ' GB' : '—'} · CPU: ${c.cpu_percent || '—'} · PIDs: ${c.pids || '—'}
                                     </p>
+                                    <div class="mb-2">${renderSettingsRow(safeName, c.settings || {})}</div>
                                     <div id="controls-${safeName}">
                                         ${renderControls(safeName, c.name)}
                                     </div>
@@ -350,7 +391,8 @@
                         if (diagEl) {
                             const mem = c.mem_usage || '—';
                             const pct = c.mem_percent ? ` (${c.mem_percent})` : '';
-                            const text = `RAM: ${mem}${pct} · CPU: ${c.cpu_percent || '—'} · PIDs: ${c.pids || '—'}`;
+                            const peak = c.peak_mem_gb != null ? c.peak_mem_gb + ' GB' : '—';
+                            const text = `RAM: ${mem}${pct} · PEAK: ${peak} · CPU: ${c.cpu_percent || '—'} · PIDs: ${c.pids || '—'}`;
                             if (diagEl.innerText !== text) diagEl.innerText = text;
                         }
                     }
