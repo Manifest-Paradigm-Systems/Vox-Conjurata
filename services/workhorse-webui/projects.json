@@ -1,7 +1,7 @@
 {
   "vox-conjurata": {
     "repo": "/var/home/EvokeStudio/vox-conjurata",
-    "ai": "Kunou 14B (llama.cpp ROCm) · CyberRealistic Pony XL (vision-gen) · MiniCPM-V 2.6 (vision-reader) · VoxCPM2 (voice) · Stable Audio Open (SFX) · Faster-Whisper (STT)",
+    "ai": "Kunou 14B (llama.cpp ROCm) · CyberRealistic Pony XL (vision-gen) · MiniCPM-V 2.6 (vision-reader) · VoxCPM2 (voice) · Stable Audio Open (SFX)",
     "containers": [
       "vox-vision-reader",
       "vox-audio-generation",
@@ -9,22 +9,30 @@
       "vox-llm-core",
       "foundry-vtt",
       "vox-conjurata-orchestrator",
-      "vox-voice",
       "vox-vision-gen",
       "cloudflared",
       "caddy",
-      "vox-audio-core",
       "vox-llm-llama"
     ]
-  },
-  "LifePacket": {
-    "repo": "/var/home/EvokeStudio/LifePacket-AI",
-    "ai": "Local llama.cpp LLM (JSON fact extraction)",
-    "containers": ["cacbox", "cac-setup", "ocr-box"]
   },
   "AI-devteam": {
     "repo": "/var/home/EvokeStudio/AI-devteam",
     "ai": "DeepSeek v4 via vox-llm-core OpenRouter proxy · Faster-Whisper STT (vox-voice) · C-3PO TTS (vox-audio-core)",
     "containers": ["qa-box", "matrix-box", "conduit-live", "caddy-matrix", "vox-voice", "vox-audio-core"]
+  },
+  "vox-pdf-importer": {
+    "repo": "/var/home/EvokeStudio/vox-conjurata/foundry-modules/vox-pdf-importer",
+    "ai": "AI-powered PDF import fallback · MiniCPM-V 2.6 (vision-reader) · Adobe Reader (Wine)",
+    "containers": ["adobe-reader"]
+  },
+  "tiny11_CAC": {
+    "repo": "/var/home/EvokeStudio/cac-certs",
+    "ai": "Tiny11 Windows VM · DoD CAC smartcard auth · PKCS#11 middleware",
+    "containers": ["cacbox", "cac-setup"]
+  },
+  "LifePacket": {
+    "repo": "/var/home/EvokeStudio/LifePacket-AI",
+    "ai": "Local llama.cpp LLM (JSON fact extraction)",
+    "containers": ["ocr-box"]
   }
 }
