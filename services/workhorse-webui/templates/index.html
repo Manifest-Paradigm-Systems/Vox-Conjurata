@@ -285,6 +285,12 @@
         }
 
         document.getElementById('bulk-enable').addEventListener('change', (e) => bulkAction(e.target.checked));
+        document.getElementById('bulk-start-all').addEventListener('click', () => {
+            const enable = document.getElementById('bulk-enable');
+            if (enable.checked) return;
+            enable.checked = true;
+            bulkAction(true);
+        });
         document.getElementById('bulk-stop-all').addEventListener('click', () => {
             const enable = document.getElementById('bulk-enable');
             if (!enable.checked) return;
