@@ -1,7 +1,7 @@
 {
   "vox-conjurata": {
     "repo": "/var/home/EvokeStudio/vox-conjurata",
-    "ai": "Kunou 14B (llama.cpp ROCm) · CyberRealistic Pony XL (vision-gen) · MiniCPM-V 2.6 (vision-reader) · VoxCPM2 (voice) · Stable Audio Open (SFX)",
+    "ai": "Kunou 14B (llama.cpp ROCm) · CyberRealistic Pony XL (vision-gen) · MiniCPM-V 2.6 (vision-reader) · VoxCPM2 (voice) · Stable Audio Open (SFX) · Faster-Whisper (STT) · C-3PO TTS",
     "containers": [
       "vox-vision-reader",
       "vox-audio-generation",
@@ -12,27 +12,29 @@
       "vox-vision-gen",
       "cloudflared",
       "caddy",
-      "vox-llm-llama"
+      "vox-llm-llama",
+      "vox-voice",
+      "vox-audio-core"
     ]
   },
   "AI-devteam": {
     "repo": "/var/home/EvokeStudio/AI-devteam",
-    "ai": "DeepSeek v4 via vox-llm-core OpenRouter proxy · Faster-Whisper STT (vox-voice) · C-3PO TTS (vox-audio-core)",
+    "ai": "DeepSeek v4 via vox-llm-core OpenRouter proxy · Faster-Whisper STT · C-3PO TTS · Matrix Conduit + Caddy TLS",
     "containers": ["qa-box", "matrix-box", "conduit-live", "caddy-matrix", "vox-voice", "vox-audio-core"]
   },
   "vox-pdf-importer": {
     "repo": "/var/home/EvokeStudio/vox-conjurata/foundry-modules/vox-pdf-importer",
-    "ai": "AI-powered PDF import fallback · MiniCPM-V 2.6 (vision-reader) · Adobe Reader (Wine)",
-    "containers": ["adobe-reader"]
+    "ai": "AI-powered PDF import · MiniCPM-V 2.6 (vision-reader) · Adobe Reader (Wine) · Foundry VTT",
+    "containers": ["adobe-reader", "vox-vision-reader", "foundry-vtt"]
   },
   "tiny11_CAC": {
     "repo": "/var/home/EvokeStudio/cac-certs",
-    "ai": "Tiny11 Windows VM · DoD CAC smartcard auth · PKCS#11 middleware",
-    "containers": ["cacbox", "cac-setup"]
+    "ai": "Tiny11 Windows VM · DoD CAC smartcard auth · PKCS#11 middleware · Adobe Reader",
+    "containers": ["cacbox", "cac-setup", "adobe-reader"]
   },
   "LifePacket": {
     "repo": "/var/home/EvokeStudio/LifePacket-AI",
-    "ai": "Local llama.cpp LLM (JSON fact extraction)",
-    "containers": ["ocr-box"]
+    "ai": "llama.cpp 14B (vox-llm-llama) · vox-llm-core OpenRouter proxy · MiniCPM-V 2.6 OCR (vox-vision-reader)",
+    "containers": ["ocr-box", "vox-llm-llama", "vox-llm-core", "vox-vision-reader"]
   }
 }
