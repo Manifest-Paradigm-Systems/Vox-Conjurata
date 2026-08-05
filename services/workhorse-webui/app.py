@@ -166,11 +166,20 @@ async def get_containers():
         
         enriched = []
         stats = fetch_container_stats()
+
+        names = []
         for c in containers:
-            names = c.get("Names")
-            name = names[0] if isinstance(names, list) and len(names) > 0 else (names if isinstance(names, str) else "Unknown")
+            ns = c.get("Names")
+            names.append(ns[0] if isinstance(ns, list) and len(ns) > 0 else (ns if isinstance(ns, str) else "Unknown"))
+        details = fetch_container_details(names)
+        peaks = fetch_cgroup_peaks(details)
+
+        for c in containers:
+            ns = c.get("Names")
+            name = ns[0] if isinstance(ns, list) and len(ns) > 0 else (ns if isinstance(ns, str) else "Unknown")
             labels = c.get("Labels") or {}
             s = stats.get(name, {})
+            d = details.get(name, {})
             enriched.append({
                 "id": (c.get("Id") or "N/A")[:12],
                 "name": name,
@@ -185,6 +194,13 @@ async def get_containers():
                 "mem_gb": s.get("mem_gb"),
                 "mem_percent": s.get("mem_percent"),
                 "pids": s.get("pids"),
+                "peak_mem_gb": peaks.get(name),
+                "settings": {
+                    "cpu_cores": d.get("cpu_cores", 0),
+                    "mem_limit_gb": d.get("mem_limit_gb", 0),
+                    "restart_policy": d.get("restart_policy", "no"),
+                    "pids_limit": d.get("pids_limit", 0),
+                },
             })
         return enriched
     except Exception as e:
@@ -281,6 +297,51 @@ async def bulk_container_action(project_name: str, action: str):
         "total": len(results),
     }
 
+VALID_RESTART_POLICIES = {"no", "on-failure", "always", "unless-stopped", "never"}
+
+class SettingsRequest(BaseModel):
+    cpu_cores: Optional[float] = None
+    mem_limit_gb: Optional[float] = None
+    restart_policy: Optional[str] = None
+    pids_limit: Optional[int] = None
+
+@app.post("/api/container/{name}/settings")
+async def update_container_settings(name: str, req: SettingsRequest):
+    """Apply resource limits to a container via podman update.
+
+    Values of 0 mean 'unlimited' for CPU/memory limits.
+    """
+    flags = []
+    if req.cpu_cores is not None:
+        if not (0 <= req.cpu_cores <= 128):
+            raise HTTPException(status_code=400, detail="cpu_cores must be between 0 and 128")
+        flags += ["--cpus", f"{req.cpu_cores}"]
+    if req.mem_limit_gb is not None:
+        if not (0 <= req.mem_limit_gb <= 512):
+            raise HTTPException(status_code=400, detail="mem_limit_gb must be between 0 and 512")
+        flags += ["--memory", f"{req.mem_limit_gb}g"]
+    if req.restart_policy is not None:
+        if req.restart_policy not in VALID_RESTART_POLICIES:
+            raise HTTPException(status_code=400, detail=f"restart_policy must be one of {sorted(VALID_RESTART_POLICIES)}")
+        flags += ["--restart", req.restart_policy]
+    if req.pids_limit is not None:
+        if req.pids_limit < -1:
+            raise HTTPException(status_code=400, detail="pids_limit must be >= -1 (or 0 for unlimited)")
+        flags += ["--pids-limit", f"{req.pids_limit}"]
+    if not flags:
+        raise HTTPException(status_code=400, detail="no settings provided")
+
+    try:
+        r = subprocess.run(["podman", "update", *flags, name], capture_output=True, text=True)
+        if r.returncode != 0:
+            return JSONResponse(status_code=500, content={"error": r.stderr.strip()})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": repr(e)})
+
+    d = fetch_container_details([name]).get(name, {})
+    settings = {k: d.get(k) for k in ("cpu_cores", "mem_limit_gb", "restart_policy", "pids_limit")}
+    return {"name": name, "settings": settings, "message": f"Settings applied to {name}"}
+
 @app.post("/api/container/{name}/{action}")
 async def manage_container(name: str, action: str):
     if action not in ["start", "stop", "restart"]:
@@ -308,6 +369,48 @@ def parse_mem_usage(s):
     if not m:
         return None
     return round(float(m.group(1)) * _MEM_UNITS.get(m.group(2), 1.0), 2)
+
+def fetch_container_details(names):
+    """One podman inspect call for all containers: resource limits + pid."""
+    if not names:
+        return {}
+    try:
+        r = subprocess.run(["podman", "inspect"] + list(names), capture_output=True, text=True, timeout=30)
+        if r.returncode != 0:
+            logger.error(f"Podman inspect error: {r.stderr[:200]}")
+            return {}
+        details = {}
+        for d in json.loads(r.stdout):
+            name = (d.get("Name") or "").lstrip("/")
+            hc = d.get("HostConfig") or {}
+            state = d.get("State") or {}
+            details[name] = {
+                "cpu_cores": round((hc.get("NanoCpus") or 0) / 1e9, 2),
+                "mem_limit_gb": round((hc.get("Memory") or 0) / (1024 ** 3), 2),
+                "restart_policy": (hc.get("RestartPolicy") or {}).get("Name", "no"),
+                "pids_limit": hc.get("PidsLimit") or 0,
+                "pid": state.get("Pid") or 0,
+            }
+        return details
+    except Exception as e:
+        logger.warning(f"fetch_container_details failed: {repr(e)}")
+        return {}
+
+def fetch_cgroup_peaks(details):
+    """RAM high-watermark per running container via cgroup v2 memory.peak."""
+    peaks = {}
+    for name, d in details.items():
+        pid = d.get("pid") or 0
+        if pid <= 0:
+            continue
+        try:
+            with open(f"/proc/{pid}/cgroup", "r") as f:
+                cgp = f.read().split(":")[-1].strip()
+            with open(f"/sys/fs/cgroup{cgp}/memory.peak", "r") as f:
+                peaks[name] = round(int(f.read().strip()) / (1024 ** 3), 2)
+        except Exception:
+            continue
+    return peaks
 
 def fetch_container_stats():
     """podman stats --no-stream: name -> {cpu_percent, mem_usage, mem_gb,
