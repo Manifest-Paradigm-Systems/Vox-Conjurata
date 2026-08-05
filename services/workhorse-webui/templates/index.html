@@ -156,14 +156,10 @@
     <script>
         function renderControls(name, actualName) {
             return `
-                <div class="d-flex mb-2">
-                    <button class="btn-control btn-start" onclick="controlContainer('${actualName}', 'start')">START</button>
-                    <button class="btn-control btn-stop" onclick="controlContainer('${actualName}', 'stop')">STOP</button>
-                    <button class="btn-control btn-idle" onclick="controlContainer('${actualName}', 'stop')">IDLE</button>
+                <div>
+                    <button class="btn-control btn-start" onclick="controlContainer('${actualName}', 'start')">▶</button>
+                    <button class="btn-control btn-stop" onclick="controlContainer('${actualName}', 'stop')">⏹</button>
                 </div>
-                <textarea class="prompt-box" id="prompt-${name}" placeholder="Enter manual query/prompt for ${name}..."></textarea>
-                <button class="btn btn-sm btn-query" onclick="queryService('${name}')">EXECUTE REQUEST</button>
-                <div class="mt-2 small text-info" id="result-${name}"></div>
             `;
         }
 
