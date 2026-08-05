@@ -155,12 +155,22 @@
     </div>
 
     <script>
+        const AI_SERVICES = ['vox-llm-core', 'vox-audio-generation', 'vox-audio-core', 'vox-vision-gen'];
+
         function renderControls(name, actualName) {
+            const isAI = AI_SERVICES.includes(actualName);
             return `
                 <div>
                     <button class="btn-control btn-start" onclick="controlContainer('${actualName}', 'start')">▶</button>
                     <button class="btn-control btn-stop" onclick="controlContainer('${actualName}', 'stop')">⏹</button>
                 </div>
+                ${isAI ? `
+                <div style="margin-top:4px;">
+                    <textarea class="prompt-box" id="prompt-${name}" placeholder="Prompt ${actualName}..." style="font-size:0.75rem; padding:4px; margin-top:2px; height:40px;"></textarea>
+                    <button class="btn btn-sm btn-query" onclick="queryService('${actualName}')" style="font-size:0.7rem; padding:0 8px; margin-top:2px;">EXECUTE</button>
+                    <div class="small text-info" id="result-${name}" style="font-size:0.7rem;"></div>
+                </div>
+                ` : ''}
             `;
         }
 
