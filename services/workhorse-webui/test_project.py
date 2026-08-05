@@ -16,7 +16,9 @@ from app import assign_project, PROJECT_REGISTRY, parse_mem_usage
 # ---------------------------------------------------------------- registry
 
 def test_registry_has_expected_projects():
-    assert set(PROJECT_REGISTRY.keys()) == {"vox-conjurata", "LifePacket", "AI-devteam"}
+    assert set(PROJECT_REGISTRY.keys()) == {
+        "vox-conjurata", "AI-devteam", "vox-pdf-importer", "tiny11_CAC", "LifePacket",
+    }
 
 
 def test_registry_entries_have_repo_and_ai():
@@ -30,14 +32,19 @@ def test_registry_entries_have_repo_and_ai():
 
 def test_registry_drives_assignment():
     # AI-devteam containers come from the registry (no compose labels)
-    for name in ("qa-box", "matrix-box", "conduit-live", "caddy-matrix"):
+    for name in ("qa-box", "matrix-box", "conduit-live", "caddy-matrix",
+                 "vox-voice", "vox-audio-core"):
         assert assign_project(name, {}) == "AI-devteam", name
+    assert assign_project("adobe-reader", {}) == "vox-pdf-importer"
+    assert assign_project("cacbox", {}) == "tiny11_CAC"
+    assert assign_project("cac-setup", {}) == "tiny11_CAC"
+    assert assign_project("ocr-box", {}) == "LifePacket"
 
 
 def test_registry_wins_over_compose_label():
     # Explicit registry membership beats an inferred label
     labels = {"com.docker.compose.project": "vox-conjurata"}
-    assert assign_project("cacbox", labels) == "LifePacket"
+    assert assign_project("cacbox", labels) == "tiny11_CAC"
     assert assign_project("qa-box", labels) == "AI-devteam"
 
 
@@ -48,21 +55,15 @@ def test_compose_project_label_is_source_of_truth():
         assert assign_project(name, labels) == "vox-conjurata", name
 
 
-def test_lifepacket_table():
-    for name in ("cacbox", "cac-setup", "ocr-box"):
-        assert assign_project(name, {}) == "LifePacket", name
+def test_other_for_unassigned():
+    for name in ("rootsmagic", "jellyfin-https", "fedora-toolbox-44"):
+        assert assign_project(name, {}) == "Other", name
 
 
 def test_vox_name_convention_fallback():
     # No compose label, but vox-*/foundry naming still belongs to the stack
     assert assign_project("vox-bg-remover", {}) == "vox-conjurata"
     assert assign_project("foundry-vtt", {}) == "vox-conjurata"
-
-
-def test_other_for_unassigned():
-    for name in ("rootsmagic", "jellyfin-https", "fedora-toolbox-44",
-                 "adobe-reader"):
-        assert assign_project(name, {}) == "Other", name
 
 
 # ---------------------------------------------------------------- API
