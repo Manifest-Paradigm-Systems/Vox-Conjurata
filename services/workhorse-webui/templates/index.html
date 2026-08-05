@@ -363,7 +363,7 @@
                         const statusEl = document.getElementById(`status-${safeName}`);
                         if (statusEl.innerText !== c.status) {
                             statusEl.innerText = c.status;
-                            statusEl.className = `mb-2 badge-status ${isUp ? 'status-up' : 'status-exited'}`;
+                            statusEl.className = `badge-status ${isUp ? 'status-up' : 'status-exited'}`;
                         }
 
                         const vramEl = document.getElementById(`vram-${safeName}`);
@@ -371,10 +371,7 @@
 
                         const diagEl = document.getElementById(`diag-${safeName}`);
                         if (diagEl) {
-                            const mem = c.mem_usage || '—';
-                            const pct = c.mem_percent ? ` (${c.mem_percent})` : '';
-                            const peak = c.peak_mem_gb != null ? c.peak_mem_gb + ' GB' : '—';
-                            const text = `RAM: ${mem}${pct} · PEAK: ${peak} · CPU: ${c.cpu_percent || '—'} · PIDs: ${c.pids || '—'}`;
+                            const text = `RAM:${c.mem_usage||'—'} CPU:${c.cpu_percent||'—'}`;
                             if (diagEl.innerText !== text) diagEl.innerText = text;
                         }
                     }
