@@ -257,6 +257,11 @@
             });
         }
 
+        function cardInTab(card, tab) {
+            if (tab === 'All') return true;
+            return (card.dataset.project || '').split(',').includes(tab);
+        }
+
         function renderProjectBar() {
             const info = activeProjectInfo();
             const bar = document.getElementById('project-bar');
@@ -268,13 +273,9 @@
             document.getElementById('project-ai').textContent = 'AI: ' + info.ai;
             document.getElementById('project-repo').textContent = 'Repo: ' + info.repo;
 
-            const enable = document.getElementById('bulk-enable');
             const status = document.getElementById('bulk-status');
             const up = info.containers.filter(c => (c.status || '').includes('Up')).length;
             status.textContent = `${info.containers.length} containers · ${up} up`;
-            if (!enable.disabled) {
-                enable.checked = info.containers.length > 0 && up === info.containers.length;
-            }
         }
 
         function setActiveTab(p) {
@@ -283,7 +284,7 @@
                 b.classList.toggle('active', b.textContent === p);
             });
             document.querySelectorAll('#container-list .card').forEach(card => {
-                card.style.display = (p === 'All' || card.dataset.project === p) ? '' : 'none';
+                card.style.display = cardInTab(card, p) ? '' : 'none';
             });
             renderProjectBar();
         }
@@ -293,7 +294,8 @@
                 const resp = await fetch('/api/projects');
                 const data = await resp.json();
                 projectRegistry = data.projects || [];
-                renderTabs([...document.querySelectorAll('#container-list .card')].map(c => c.dataset.project).filter(Boolean));
+                renderTabs([...document.querySelectorAll('#container-list .card')]
+                    .flatMap(c => (c.dataset.project || '').split(',').filter(Boolean)));
                 renderProjectBar();
             } catch (e) { console.error("Projects fetch error", e); }
         }
@@ -302,9 +304,7 @@
             const info = activeProjectInfo();
             if (!info) return;
             if (!turnOn && !confirm(`Stop ALL ${info.name} containers? This includes: ${info.containers.map(c => c.name).join(', ')}`)) return;
-            const enable = document.getElementById('bulk-enable');
             const status = document.getElementById('bulk-status');
-            enable.disabled = true;
             status.textContent = turnOn ? 'Starting all…' : 'Stopping all…';
             try {
                 const resp = await fetch(`/api/project/${encodeURIComponent(info.name)}/${turnOn ? 'start' : 'stop'}`, { method: 'POST' });
@@ -314,25 +314,11 @@
                 fetchProjects();
             } catch (err) {
                 status.textContent = 'Error: ' + err.message;
-                enable.checked = !turnOn;
-            } finally {
-                enable.disabled = false;
             }
         }
 
-        document.getElementById('bulk-enable').addEventListener('change', (e) => bulkAction(e.target.checked));
-        document.getElementById('bulk-start-all').addEventListener('click', () => {
-            const enable = document.getElementById('bulk-enable');
-            if (enable.checked) return;
-            enable.checked = true;
-            bulkAction(true);
-        });
-        document.getElementById('bulk-stop-all').addEventListener('click', () => {
-            const enable = document.getElementById('bulk-enable');
-            if (!enable.checked) return;
-            enable.checked = false;
-            bulkAction(false);
-        });
+        document.getElementById('bulk-start-all').addEventListener('click', () => bulkAction(true));
+        document.getElementById('bulk-stop-all').addEventListener('click', () => bulkAction(false));
 
         async function fetchContainers() {
             try {
@@ -340,7 +326,7 @@
                 const data = await resp.json();
                 const list = document.getElementById('container-list');
 
-                renderTabs(data.map(c => c.project));
+                renderTabs(data.flatMap(c => (c.project || '').split(',').filter(Boolean)));
                 renderProjectBar();
 
                 data.forEach(c => {
@@ -370,7 +356,7 @@
                         `;
                         list.insertAdjacentHTML('beforeend', cardHtml);
                         const newCard = document.getElementById(`card-${safeName}`);
-                        if (activeTab !== 'All' && c.project !== activeTab) {
+                        if (activeTab !== 'All' && !(c.project || '').split(',').includes(activeTab)) {
                             newCard.style.display = 'none';
                         }
                     } else {
