@@ -12,3 +12,4 @@ This document tracks the execution of unit, integration, and E2E tests across th
 - [x] **Project Holodeck Voice Hotkey Routing**: Executed `test_hotkey_routing.py` confirming Narrator, Monster, and Player routes.
 - [x] **Project Holodeck Cinematic Narration**: Synthesized atmospheric DM narration to `/var/home/EvokeStudio/vox-conjurata/cinematic_scene_narration.mp3`.
 - [x] **Workhorse UI v2 Acceptance**: Project tabs + compact layout accepted — `vox-conjurata-webui-v2` campaign PASS (9/9), smoke regression PASS (6/6), unit tests 5/5 (2026-08-04).
+- [x] **Workhorse UI v3 Acceptance**: Per-repo project tabs (vox-conjurata / LifePacket / AI-devteam) + AI stack info + bulk power controls accepted — `vox-conjurata-webui-v3` PASS (9/9), v2 PASS (9/9), smoke PASS (6/6), unit tests 12/12 (2026-08-04).
