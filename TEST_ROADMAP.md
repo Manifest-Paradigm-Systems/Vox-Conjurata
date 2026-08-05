@@ -11,3 +11,4 @@ This document tracks the execution of unit, integration, and E2E tests across th
 - [x] **Project Holodeck Token Voice Generation**: Documented and saved voice profiles in `settings/token_voice_mappings.json`.
 - [x] **Project Holodeck Voice Hotkey Routing**: Executed `test_hotkey_routing.py` confirming Narrator, Monster, and Player routes.
 - [x] **Project Holodeck Cinematic Narration**: Synthesized atmospheric DM narration to `/var/home/EvokeStudio/vox-conjurata/cinematic_scene_narration.mp3`.
+- [x] **Workhorse UI v2 Acceptance**: Project tabs + compact layout accepted — `vox-conjurata-webui-v2` campaign PASS (9/9), smoke regression PASS (6/6), unit tests 5/5 (2026-08-04).
