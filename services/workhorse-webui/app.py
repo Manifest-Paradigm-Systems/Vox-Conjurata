@@ -89,22 +89,47 @@ SERVICES = {
     "vox-audio-generation-music": "http://127.0.0.1:8000",
 }
 
-# Project classification for container tabs (Workhorse UI v2)
+# Project classification for container tabs (Workhorse UI v3)
 COMPOSE_PROJECT_LABEL = "com.docker.compose.project"
-LIFEPACKET_CONTAINERS = {"cacbox", "cac-setup", "ocr-box"}
+
+def load_project_registry():
+    """Load the per-repo project registry (containers + AI stack) from projects.json."""
+    path = os.path.join(BASE_DIR, "projects.json")
+    if not os.path.exists(path):
+        return {}
+    with open(path, "r") as f:
+        data = json.load(f)
+    registry = {}
+    for name, cfg in (data or {}).items():
+        registry[name] = {
+            "repo": cfg.get("repo", ""),
+            "ai": cfg.get("ai", ""),
+            "containers": list(cfg.get("containers") or []),
+        }
+    return registry
+
+PROJECT_REGISTRY = load_project_registry()
+
+def project_for_container(name: str):
+    """Return the registered project owning a container by name, or None."""
+    for proj, cfg in PROJECT_REGISTRY.items():
+        if name in cfg["containers"]:
+            return proj
+    return None
 
 def assign_project(name: str, labels: dict) -> str:
     """Classify a container into a project tab group.
 
-    Priority: compose project label (vox-conjurata stack), then the
-    LifePacket name table, then the vox-*/foundry name convention,
-    finally "Other" for everything else.
+    Priority: project registry container lists (explicit), then the
+    compose project label (vox-conjurata stack), then the vox-*/foundry
+    name convention, finally "Other" for everything else.
     """
+    reg = project_for_container(name)
+    if reg:
+        return reg
     proj = (labels or {}).get(COMPOSE_PROJECT_LABEL)
     if proj:
         return proj
-    if name in LIFEPACKET_CONTAINERS:
-        return "LifePacket"
     if name.startswith("vox-") or "foundry" in name:
         return "vox-conjurata"
     return "Other"
