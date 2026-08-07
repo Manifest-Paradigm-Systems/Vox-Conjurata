@@ -132,6 +132,7 @@ services:
     restart: unless-stopped
 
   vox-llm-core:
+    image: vox-conjurata-vox-llm-core:latest
     container_name: vox-llm-core
     build:
       context: ./services/vox-llm-core
