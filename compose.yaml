@@ -199,6 +199,7 @@ services:
     restart: unless-stopped
 
   vox-audio-core:
+    image: vox-conjurata-vox-audio-core:latest
     build:
       context: ./services/vox-audio-core
     container_name: vox-audio-core
