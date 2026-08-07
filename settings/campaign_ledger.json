@@ -3,7 +3,7 @@
   "stripe_customer_id": null,
   "personal_wallets": {
     "gm": 979.7102499999966,
-    "G3SJW9rRHe7J3AOH": 204.96800000000005,
+    "G3SJW9rRHe7J3AOH": 204.96500000000006,
     "nXnKU6oZYzdg0xSY": 19.891499999999994,
     "m6nkAzEdfbjIGhdz": 0.8297500000000014
   },
@@ -17,7 +17,7 @@
   },
   "session_spent": {
     "gm": 0.8887499999999984,
-    "G3SJW9rRHe7J3AOH": 0.032,
+    "G3SJW9rRHe7J3AOH": 0.035,
     "nXnKU6oZYzdg0xSY": 0.11075000000000006,
     "m6nkAzEdfbjIGhdz": 0.1702500000000001
   },
@@ -3225,6 +3225,12 @@
       "amount": 0.0035,
       "description": "TTS Generation for Ezren",
       "timestamp": 1785126226.6321433
+    },
+    {
+      "user_id": "G3SJW9rRHe7J3AOH",
+      "amount": 0.003,
+      "description": "AI Orchestration Fee: Ezren",
+      "timestamp": 1786134381.0188797
     }
   ]
 }
