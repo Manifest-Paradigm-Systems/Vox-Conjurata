@@ -5,7 +5,7 @@
     "gm": 979.7102499999966,
     "G3SJW9rRHe7J3AOH": 204.95925000000005,
     "nXnKU6oZYzdg0xSY": 19.891499999999994,
-    "m6nkAzEdfbjIGhdz": 0.8297500000000014
+    "m6nkAzEdfbjIGhdz": 0.8240000000000015
   },
   "session_allowances": {
     "G3SJW9rRHe7J3AOH": 0.0,
@@ -19,7 +19,7 @@
     "gm": 0.8887499999999984,
     "G3SJW9rRHe7J3AOH": 0.04075000000000001,
     "nXnKU6oZYzdg0xSY": 0.11075000000000006,
-    "m6nkAzEdfbjIGhdz": 0.1702500000000001
+    "m6nkAzEdfbjIGhdz": 0.1760000000000001
   },
   "transactions": [
     {
@@ -3243,6 +3243,18 @@
       "amount": 0.0035,
       "description": "TTS Generation for Kyra",
       "timestamp": 1786134394.6587257
+    },
+    {
+      "user_id": "m6nkAzEdfbjIGhdz",
+      "amount": 0.00225,
+      "description": "AI Orchestration Fee: Ezren",
+      "timestamp": 1786134430.1320245
+    },
+    {
+      "user_id": "m6nkAzEdfbjIGhdz",
+      "amount": 0.0035,
+      "description": "TTS Generation for Ezren",
+      "timestamp": 1786134433.2217348
     }
   ]
 }
