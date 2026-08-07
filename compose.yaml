@@ -11,6 +11,7 @@ services:
       - vox-net
 
   orchestrator:
+    image: vox-conjurata-orchestrator:latest
     build:
       context: ./services/orchestrator
     container_name: vox-conjurata-orchestrator
@@ -145,6 +146,7 @@ services:
     restart: unless-stopped
 
   vox-voice:
+    image: vox-conjurata-vox-voice:latest
     build:
       context: ./services/vox-voice
     container_name: vox-voice
@@ -168,6 +170,7 @@ services:
     restart: unless-stopped
 
   vox-audio-generation:
+    image: vox-conjurata-vox-audio-generation:latest
     build:
       context: ./services/vox-audio-generation
     container_name: vox-audio-generation
@@ -234,6 +237,7 @@ services:
     restart: unless-stopped
 
   vox-vision-gen:
+    image: vox-conjurata-vox-vision-gen:latest
     build:
       context: ./services/vox-vision-gen
     container_name: vox-vision-gen
@@ -266,6 +270,7 @@ services:
     restart: unless-stopped
 
   vox-bg-remover:
+    image: vox-conjurata-vox-bg-remover:latest
     build:
       context: ./services/vox-bg-remover
     container_name: vox-bg-remover
