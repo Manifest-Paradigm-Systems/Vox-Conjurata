@@ -78,6 +78,7 @@ services:
     container_name: vox-vision-reader
     ports:
     - 8002:8000
+    - 8007:8000
     devices:
     - /dev/kfd:/dev/kfd
     - /dev/dri:/dev/dri
