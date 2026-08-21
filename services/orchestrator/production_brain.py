@@ -76,7 +76,7 @@ app.add_middleware(
 )
 
 # Internal Service Routing (Container Networking)
-OLLAMA_URL = os.getenv("OLLAMA_URL", "http://vox-llm-core:8081")
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://vox-llm-openrouter:8081")
 STT_URL = os.getenv("STT_URL", "http://vox-voice:5000")
 TTS_ACTOR_URL = os.getenv("TTS_ACTOR_URL", "http://vox-audio-core:8000")
 TTS_MONSTER_URL = os.getenv("TTS_MONSTER_URL", "http://vox-audio-core:8000")

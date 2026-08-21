@@ -1,7 +1,7 @@
 """
 PDF Import Vision — Orchestrator endpoint for vox-pdf-importer.
 Takes a rendered PDF page image, sends it to MiniCPM-V for stat block / text extraction,
-then refines the response into structured JSON using vox-llm-core.
+then refines the response into structured JSON using vox-llm-openrouter.
 """
 
 import asyncio
@@ -20,7 +20,7 @@ logger = logging.getLogger("vox-pdf-import-vision")
 router = APIRouter()
 
 VISION_READER_URL = os.getenv("VISION_READER_URL", "http://vox-vision-reader:8000")
-LLM_CORE_URL = os.getenv("OLLAMA_URL", "http://vox-llm-core:8081")
+LLM_CORE_URL = os.getenv("OLLAMA_URL", "http://vox-llm-openrouter:8081")
 
 
 class PdfImportVisionRequest(BaseModel):
@@ -38,7 +38,7 @@ class PdfImportVisionRequest(BaseModel):
 async def pdf_import_vision(req: PdfImportVisionRequest):
     """
     Receives a rendered PDF page image, extracts structured Pathfinder 2e data
-    via vox-vision-reader, and optionally refines to clean JSON via vox-llm-core.
+    via vox-vision-reader, and optionally refines to clean JSON via vox-llm-openrouter.
 
     Returns:
         { page, raw_extraction, structured_data, has_content }
@@ -109,7 +109,7 @@ async def pdf_import_vision(req: PdfImportVisionRequest):
             logger.error(f"Vision reader failed for page {req.page_number}: {e}")
             raise HTTPException(status_code=502, detail=f"Vision API failed: {str(e)}")
 
-    # Step 4: Refine into structured JSON via vox-llm-core
+    # Step 4: Refine into structured JSON via vox-llm-openrouter
     json_result = None
     if raw_text.strip() and "NO_CONTENT" not in raw_text:
         try:
@@ -245,7 +245,7 @@ def _build_dnd5e_prompt(previous_context: str) -> str:
 
 
 async def _refine_to_json(raw_text: str, page_number: int) -> dict:
-    """Send vision raw output to vox-llm-core for structured JSON refinement."""
+    """Send vision raw output to vox-llm-openrouter for structured JSON refinement."""
     prompt = (
         "Convert the following stat block extraction into a clean JSON object. "
         "Fix any formatting issues. "

@@ -14,7 +14,7 @@ from foundry_client import push_to_foundry, log_to_foundry
 logger = logging.getLogger("vox-chronicle")
 
 class VoxChronicleSystem:
-    def __init__(self, api_url="http://vox-llm-core:8081/v1/chat/completions"):
+    def __init__(self, api_url="http://vox-llm-openrouter:8081/v1/chat/completions"):
         self.api_url = api_url
         self.sliding_window_history = []
 
