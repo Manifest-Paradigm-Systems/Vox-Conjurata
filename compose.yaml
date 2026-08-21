@@ -138,7 +138,7 @@ services:
     build:
       context: ./services/vox-llm-core
     ports:
-    - 11435:8081
+    - 127.0.0.1:11435:8081
     environment:
     - PORT=8081
     - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
