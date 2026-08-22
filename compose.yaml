@@ -101,9 +101,9 @@ services:
     - vox-net
     restart: unless-stopped
 
-  vox-llm-vllm:
+  vox-llm-kunou:
     image: ghcr.io/ggml-org/llama.cpp:server-rocm
-    container_name: vox-llm-llama
+    container_name: vox-llm-kunou
     command: >
       -m /models/14B-Qwen2.5-Kunou-v1.Q4_K_M.gguf
       -ngl 99
@@ -142,7 +142,7 @@ services:
     environment:
     - PORT=8081
     - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-    - LOCAL_SGLANG_URL=http://vox-llm-llama:8000
+    - LOCAL_SGLANG_URL=http://vox-llm-kunou:8000
     networks:
     - vox-net
     restart: unless-stopped

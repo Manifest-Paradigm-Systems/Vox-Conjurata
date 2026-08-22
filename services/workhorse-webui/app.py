@@ -81,7 +81,8 @@ async def get_telemetry():
 
 # Service URLs from Orchestrator config logic
 SERVICES = {
-    "vox-llm-llama": "http://127.0.0.1:11435", # Using the core wrapper
+    "vox-llm-kunou": "http://127.0.0.1:11435", # Using the core wrapper
+    "vox-llm-llama": "http://127.0.0.1:11435", # Legacy alias (pre-rename)
     "vox-llm-core": "http://127.0.0.1:11435", # Legacy alias (pre-rename)
     "vox-llm-openrouter": "http://127.0.0.1:11435", # Direct mapping for the core wrapper
     "vox-vision-gen": "http://127.0.0.1:8003",
@@ -163,7 +164,7 @@ async def get_containers():
             "vox-audio-core": "4.20GB",
             "vox-audio-generation-sfx": "0.80GB",
             "vox-vision-reader": "4.80GB",
-            "vox-llm-llama": "Shared/Auto",
+            "vox-llm-kunou": "Shared/Auto",
         }
         
         enriched = []

@@ -12,7 +12,7 @@
       "vox-vision-gen",
       "cloudflared",
       "caddy",
-      "vox-llm-llama",
+      "vox-llm-kunou",
       "vox-voice",
       "vox-audio-core"
     ]
@@ -34,7 +34,7 @@
   },
   "LifePacket": {
     "repo": "/var/home/EvokeStudio/LifePacket-AI",
-    "ai": "llama.cpp 14B (vox-llm-llama) · vox-llm-core OpenRouter proxy · MiniCPM-V 2.6 OCR (vox-vision-reader)",
-    "containers": ["ocr-box", "vox-llm-llama", "vox-llm-core", "vox-vision-reader"]
+    "ai": "llama.cpp 14B (vox-llm-kunou) · vox-llm-core OpenRouter proxy · MiniCPM-V 2.6 OCR (vox-vision-reader)",
+    "containers": ["ocr-box", "vox-llm-kunou", "vox-llm-core", "vox-vision-reader"]
   }
 }
