@@ -108,7 +108,7 @@ services:
       -m /models/14B-Qwen2.5-Kunou-v1.Q4_K_M.gguf
       -ngl 99
       -c 8192
-      -fa off
+      -fa on
       --host 0.0.0.0
       --port 8000
     devices:
