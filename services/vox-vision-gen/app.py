@@ -46,6 +46,11 @@ except Exception as e:
 class ImageRequest(BaseModel):
     prompt: str
     negative_prompt: str = ""
+    # Owner 2026-09-01: img2img — an optional INIT image (base64 PNG) that
+    # gets colorized/re-imagined per the prompt (watercolor pass on the
+    # book's original plates); strength = how far from the original.
+    image: str = ""
+    strength: float = 0.65
     lora_name: str | None = None
     lora_multiplier: float = 1.0
     width: int = 1024
@@ -70,6 +75,11 @@ async def generate_image(request: ImageRequest):
     logger.info(f"Final Prompt: {final_positive_prompt[:100]}...")
     
     try:
+        init_image = None
+        if request.image:
+            import base64 as _b64, io as _io
+            init_image = Image.open(_io.BytesIO(_b64.b64decode(request.image)))
+            init_image = init_image.convert("RGB")
         images = sd_model.generate_image(
             prompt=final_positive_prompt,
             negative_prompt=final_negative_prompt,
@@ -78,7 +88,9 @@ async def generate_image(request: ImageRequest):
             sample_steps=request.steps,
             cfg_scale=request.cfg_scale,
             sample_method=request.sample_method,
-            scheduler="discrete"
+            scheduler="discrete",
+            init_image=init_image,
+            strength=request.strength,
         )
         
         image = images[0]
