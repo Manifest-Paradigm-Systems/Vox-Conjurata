@@ -82,9 +82,13 @@ async def transcribe_audio(
     try:
         segments, info = model.transcribe(wav_path, beam_size=5, language=language)
         text = " ".join([segment.text for segment in segments]).strip()
+        # Owner 2026-09-02: faster-whisper auto-detects the language when
+        # none was requested — the detected code rides the reply so the
+        # archivist can switch languages with the listener.
+        detected = getattr(info, "language", None) or (language or "")
 
         logger.info(f"Transcription complete: '{text}'")
-        return {"text": text}
+        return {"text": text, "language": detected}
 
     except Exception as e:
         logger.error(f"Transcription failed: {e}")
