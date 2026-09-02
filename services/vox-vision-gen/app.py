@@ -101,12 +101,14 @@ async def generate_image(request: ImageRequest):
             logger.info(f"Upscaling from {image.width}x{image.height} to 1920x1080")
             image = image.resize((1920, 1080), Image.LANCZOS)
 
-        # Owner 2026-09-01: the "Enhanced by CinemaTome" brand line on the
-        # bottom (a slim translucent band + gold text, DieselPunk accent).
+        # Owner 2026-09-01: the "Enhanced by CinemaTome" brand line — a
+        # PROMINENT watermark band on the bottom (phone-sized viewing):
+        # ~10% of the frame height, bold gold text with a dark outline on
+        # a solid dark band.
         _draw = ImageDraw.Draw(image)
         _w, _h = image.size
-        _band_h = int(_h * 0.06)
-        _band = Image.new("RGBA", (_w, _band_h), (20, 16, 12, 170))
+        _band_h = max(int(_h * 0.10), 96)
+        _band = Image.new("RGBA", (_w, _band_h), (20, 16, 12, 235))
         image.paste(_band, (0, _h - _band_h), _band)
         _font = None
         for _fp in (
@@ -115,7 +117,7 @@ async def generate_image(request: ImageRequest):
         ):
             if os.path.exists(_fp):
                 try:
-                    _font = ImageFont.truetype(_fp, int(_band_h * 0.52))
+                    _font = ImageFont.truetype(_fp, int(_band_h * 0.60))
                 except Exception:
                     _font = None
                 if _font is not None:
@@ -126,12 +128,12 @@ async def generate_image(request: ImageRequest):
         _bbox = _draw.textbbox((0, 0), _text, font=_font)
         _tw = _bbox[2] - _bbox[0]
         _th = _bbox[3] - _bbox[1]
-        _draw.text(
-            ((_w - _tw) // 2, _h - _band_h + (_band_h - _th) // 2),
-            _text,
-            font=_font,
-            fill=(201, 162, 39, 255),
-        )
+        _x = (_w - _tw) // 2
+        _y = _h - _band_h + (_band_h - _th) // 2
+        for _dx in (-3, 3):
+            for _dy in (-3, 3):
+                _draw.text((_x + _dx, _y + _dy), _text, font=_font, fill=(10, 8, 6, 255))
+        _draw.text((_x, _y), _text, font=_font, fill=(235, 190, 60, 255))
 
         fd, output_path = tempfile.mkstemp(suffix=".webp")
         os.close(fd)
