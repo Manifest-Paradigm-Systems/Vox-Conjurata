@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from PIL import ImageDraw, ImageFont
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import logging
@@ -99,7 +100,39 @@ async def generate_image(request: ImageRequest):
         if image.width != 1920 or image.height != 1080:
             logger.info(f"Upscaling from {image.width}x{image.height} to 1920x1080")
             image = image.resize((1920, 1080), Image.LANCZOS)
-        
+
+        # Owner 2026-09-01: the "Enhanced by CinemaTome" brand line on the
+        # bottom (a slim translucent band + gold text, DieselPunk accent).
+        _draw = ImageDraw.Draw(image)
+        _w, _h = image.size
+        _band_h = int(_h * 0.06)
+        _band = Image.new("RGBA", (_w, _band_h), (20, 16, 12, 170))
+        image.paste(_band, (0, _h - _band_h), _band)
+        _font = None
+        for _fp in (
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+        ):
+            if os.path.exists(_fp):
+                try:
+                    _font = ImageFont.truetype(_fp, int(_band_h * 0.52))
+                except Exception:
+                    _font = None
+                if _font is not None:
+                    break
+        if _font is None:
+            _font = ImageFont.load_default()
+        _text = "Enhanced by CinemaTome"
+        _bbox = _draw.textbbox((0, 0), _text, font=_font)
+        _tw = _bbox[2] - _bbox[0]
+        _th = _bbox[3] - _bbox[1]
+        _draw.text(
+            ((_w - _tw) // 2, _h - _band_h + (_band_h - _th) // 2),
+            _text,
+            font=_font,
+            fill=(201, 162, 39, 255),
+        )
+
         fd, output_path = tempfile.mkstemp(suffix=".webp")
         os.close(fd)
         
