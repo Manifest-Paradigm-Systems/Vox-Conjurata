@@ -15,10 +15,8 @@ RUN pip3 install --no-cache-dir descript-audio-codec soundfile && \
         --index-url https://download.pytorch.org/whl/rocm6.4 \
         "torchaudio>=2.9.0,<2.10.0"
 
-# Dia package (no-deps: its pyproject pins torch==2.6.0)
-COPY dia/ /app/dia_pkg/dia
-COPY pyproject.toml /app/dia_pkg/pyproject.toml
-RUN pip3 install --no-cache-dir --no-deps /app/dia_pkg
+# Dia package: pure Python — put on path directly (no hatchling build needed)
+COPY dia/ /app/dia
 
 # Service
 COPY app/main.py /app/main.py
