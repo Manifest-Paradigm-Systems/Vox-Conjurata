@@ -10,7 +10,7 @@ WORKDIR /app
 
 # deps first, then re-pin torchaudio from the ROCm index (pip pulls CUDA
 # builds by default, which link libcudart and crash at import on AMD)
-RUN pip3 install --no-cache-dir descript-audio-codec soundfile && \
+RUN pip3 install --no-cache-dir fastapi "uvicorn[standard]" pydantic soundfile descript-audio-codec && \
     pip3 install --no-cache-dir --force-reinstall \
         --index-url https://download.pytorch.org/whl/rocm6.4 \
         "torchaudio>=2.9.0,<2.10.0"
