@@ -16,6 +16,8 @@ RUN pip3 install --no-cache-dir "transformers>=5.3,<6" huggingface-hub soundfile
 # ROCm-build workaround: stub the transformers.loss.loss_utils import chain
 # (vision-loss modules abort this torch build); modeling_utils only needs
 # LOSS_MAPPING from it, unused by Higgs.
+RUN pip3 install --no-cache-dir "numpy==2.2.6" && python3 -c "import numpy, librosa; print('numpy', numpy.__version__, '| librosa ok')"
+
 COPY _higgs_fix.py /opt/conda/envs/py_3.12/lib/python3.12/site-packages/_higgs_fix.py
 COPY _higgs_fix.pth /opt/conda/envs/py_3.12/lib/python3.12/site-packages/_higgs_fix.pth
 
