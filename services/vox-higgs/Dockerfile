@@ -8,7 +8,7 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-RUN pip3 install --no-cache-dir "transformers>=5.3,<6" huggingface-hub soundfile
+RUN pip3 install --no-cache-dir "transformers>=5.3,<6" huggingface-hub soundfile fastapi "uvicorn[standard]" pydantic
 
 # ROCm-build workaround: stub the transformers.loss.loss_utils import chain
 # (vision-loss modules abort this torch build); modeling_utils only needs
