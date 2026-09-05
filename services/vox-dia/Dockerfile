@@ -18,6 +18,11 @@ RUN pip3 install --no-cache-dir fastapi "uvicorn[standard]" pydantic soundfile d
 # Dia package: pure Python — put on path directly (no hatchling build needed)
 COPY dia/ /app/dia
 
+# Weights baked in (container-written file labels; bind-mounted host caches
+# of host-written files are unreadable in rootless containers on this box)
+COPY weights/hub/models--nari-labs--Dia-1.6B-0626 /root/.cache/huggingface/hub/models--nari-labs--Dia-1.6B-0626
+COPY weights/descript/dac /root/.cache/descript/dac
+
 # Service
 COPY app/main.py /app/main.py
 
