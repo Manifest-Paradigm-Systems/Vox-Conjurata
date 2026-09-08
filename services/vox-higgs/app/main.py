@@ -167,9 +167,8 @@ def _patch_seed_load_audio():
 
 @app.on_event("startup")
 def _load():
-    global MODEL, PROC, _gen_lock, QSTATS
+    global MODEL, PROC, QSTATS, RENDER_QUEUE, GPU_WORKER
     import asyncio
-    _gen_lock = asyncio.Lock()
     from transformers import AutoProcessor, HiggsAudioV2ForConditionalGeneration
     _patch_seed_load_audio()
     t0 = time.time()
@@ -177,6 +176,18 @@ def _load():
     MODEL = HiggsAudioV2ForConditionalGeneration.from_pretrained(
         MODEL_ID, torch_dtype=torch.bfloat16, device_map=None)
     MODEL = MODEL.to("cuda").eval()
+    # Codec on GPU (Phase-1 fix 2026-09-08): reference ENCODE and generated
+    # audio DECODE both ran on the CPU side of the processor tokenizer —
+    # every /generate ping-ponged audio across PCIe twice.  Moving the
+    # codec to device 0 keeps encode+decode in VRAM (HIGGS_CODEC_GPU=0 to
+    # opt out; HIGGS_DECODE_CPU=1 keeps only decode on CPU).
+    if os.getenv("HIGGS_CODEC_GPU", "1") != "0":
+        try:
+            PROC.audio_tokenizer = PROC.audio_tokenizer.to("cuda")
+            print("[vox-higgs] audio codec moved to cuda:0 (encode+decode in VRAM)",
+                  flush=True)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[vox-higgs] codec->cuda FAILED, staying CPU: {exc!r}", flush=True)
     print(f"[vox-higgs] model loaded in {time.time()-t0:.0f}s — bf16", flush=True)
     # top-level structure log for quant scope tuning
     print("[vox-higgs] top modules:", [n for n, _ in list(MODEL.named_children())][:12], flush=True)
@@ -188,6 +199,29 @@ def _load():
     if torch.cuda.is_available():
         print(f"[vox-higgs] VRAM used: {torch.cuda.memory_allocated()/2**30:.2f} GiB "
               f"of {torch.cuda.get_device_properties(0).total_memory/2**30:.1f} GiB", flush=True)
+    # Bounded render queue + single GPU worker thread (Phase-1 fix): the
+    # async event loop never executes blocking generation, so health checks
+    # and client drops stay responsive — no more lock wedge.  Queue full ->
+    # HTTP 503 instead of unbounded queueing.
+    RENDER_QUEUE = asyncio.Queue(maxsize=int(os.getenv("HIGGS_QUEUE", "4")))
+
+    async def _gpu_worker():
+        loop = asyncio.get_running_loop()
+        while True:
+            job = await RENDER_QUEUE.get()
+            try:
+                result = await loop.run_in_executor(None, sync_render, job["req"])
+                if not job["future"].done():
+                    job["future"].set_result(result)
+            except Exception as exc:  # noqa: BLE001
+                if not job["future"].done():
+                    job["future"].set_exception(exc)
+            finally:
+                RENDER_QUEUE.task_done()
+
+    GPU_WORKER = asyncio.get_event_loop().create_task(_gpu_worker()) \
+        if False else asyncio.get_event_loop_policy().get_event_loop().create_task(_gpu_worker())
+    print(f"[vox-higgs] render queue active (maxsize {RENDER_QUEUE.maxsize}, worker thread)", flush=True)
 
 
 class GenReq(BaseModel):
