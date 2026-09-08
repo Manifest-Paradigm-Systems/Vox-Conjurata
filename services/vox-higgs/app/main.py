@@ -38,19 +38,21 @@ SEED_CACHE_MAX = 256
 
 
 def _decode_seed_pcm(name: str) -> np.ndarray | None:
-    """Decode a seed wav to 24k mono float32 via ffmpeg (no extra deps)."""
+    """Decode a seed wav to 24k mono float32 (soundfile + librosa)."""
     p = os.path.join(SEED_DIR, os.path.basename(name))
     if not os.path.isfile(p):
         return None
     try:
-        proc = subprocess.run(
-            ["ffmpeg", "-y", "-loglevel", "error", "-i", p,
-             "-ac", "1", "-ar", "24000", "-f", "f32le", "-"],
-            check=True, capture_output=True,
-        )
-        arr = np.frombuffer(proc.stdout, dtype="<f4").astype(np.float32)
-        return arr if arr.size else None
-    except (subprocess.CalledProcessError, OSError):
+        import soundfile as sf
+        import librosa
+        data, sr = sf.read(p, dtype="float32", always_2d=False)
+        if data.ndim > 1:
+            data = data.mean(axis=1)
+        if sr != 24000:
+            data = librosa.resample(data, orig_sr=sr, target_sr=24000,
+                                    res_type="kaiser_best")
+        return np.ascontiguousarray(data)
+    except Exception:
         return None
 
 
