@@ -9,6 +9,7 @@ import io
 import os
 import time
 import re
+import subprocess
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -27,6 +28,81 @@ MODEL = None
 PROC = None
 _gen_lock = None
 QSTATS = None
+
+# ---- RAM seed holder (owner 2026-09-07: hold the working chapter's seeds
+# ---- in RAM so every scene reuses decoded reference audio instead of
+# ---- re-fetching + re-decoding per request).  Seeds decode to 24 kHz mono
+# ---- float32 (the processor's sampling_rate) once, then serve every scene.
+SEED_PCM: dict[str, np.ndarray] = {}
+SEED_CACHE_MAX = 256
+
+
+def _decode_seed_pcm(name: str) -> np.ndarray | None:
+    """Decode a seed wav to 24k mono float32 via ffmpeg (no extra deps)."""
+    p = os.path.join(SEED_DIR, os.path.basename(name))
+    if not os.path.isfile(p):
+        return None
+    try:
+        proc = subprocess.run(
+            ["ffmpeg", "-y", "-loglevel", "error", "-i", p,
+             "-ac", "1", "-ar", "24000", "-f", "f32le", "-"],
+            check=True, capture_output=True,
+        )
+        arr = np.frombuffer(proc.stdout, dtype="<f4").astype(np.float32)
+        return arr if arr.size else None
+    except (subprocess.CalledProcessError, OSError):
+        return None
+
+
+def seed_pcm(name: str) -> np.ndarray | None:
+    """RAM-cached PCM for a seed (lazy decode on first use; bounded)."""
+    base = os.path.basename(name)
+    arr = SEED_PCM.get(base)
+    if arr is None:
+        arr = _decode_seed_pcm(base)
+        if arr is not None:
+            SEED_PCM[base] = arr
+            while len(SEED_PCM) > SEED_CACHE_MAX:  # FIFO bound
+                SEED_PCM.pop(next(iter(SEED_PCM)))
+    return arr
+
+
+class WarmReq(BaseModel):
+    paths: list[str]           # seed file names or full paths (basename used)
+
+
+@app.post("/seeds/warm")
+async def seeds_warm(req: WarmReq):
+    """Preload the working set of seeds into RAM (call once per chapter)."""
+    loaded = missing = 0
+    for p in req.paths:
+        base = os.path.basename(p)
+        if seed_pcm(base) is not None:
+            loaded += 1
+        else:
+            missing += 1
+    return {"warm": loaded, "missing": missing,
+            "ram_seeds": len(SEED_PCM)}
+
+
+@app.get("/seeds/cache")
+def seeds_cache():
+    total = sum(a.nbytes for a in SEED_PCM.values())
+    return {"cached": sorted(SEED_PCM), "count": len(SEED_PCM),
+            "ram_mib": round(total / 2**20, 1)}
+
+
+@app.post("/seeds/evict")
+async def seeds_evict(req: WarmReq):
+    """Drop seeds from RAM (chapter switch). Empty paths = clear all."""
+    if not req.paths:
+        n = len(SEED_PCM)
+        SEED_PCM.clear()
+        return {"evicted": n}
+    n = 0
+    for p in req.paths:
+        n += SEED_PCM.pop(os.path.basename(p), None) is not None
+    return {"evicted": n}
 
 
 class Int8Linear(nn.Module):
@@ -61,12 +137,39 @@ def quantize_engine(model, skip=()):
     return n, skipped
 
 
+def _patch_seed_load_audio():
+    """Route /seeds/<name> reference fetches through the RAM seed holder.
+
+    The Higgs processor resolves scene 'audio' content with
+    transformers.processing_utils.load_audio; when the URL points at our own
+    /seeds endpoint and the seed is cached (warm or lazy), return the PCM
+    array straight from RAM — no HTTP round trip, no per-scene decode.
+    """
+    import transformers.processing_utils as _pu
+    if getattr(_pu, "_cinematome_seed_holder_patched", False):
+        return
+    _orig = _pu.load_audio
+
+    def _load_audio_ram(audio, sampling_rate=16000, timeout=None, backend="auto"):
+        if isinstance(audio, str) and "/seeds/" in audio:
+            arr = seed_pcm(os.path.basename(audio.split("/seeds/", 1)[1]))
+            if arr is not None:
+                return arr
+        return _orig(audio, sampling_rate=sampling_rate, timeout=timeout,
+                     backend=backend)
+
+    _pu.load_audio = _load_audio_ram
+    _pu._cinematome_seed_holder_patched = True
+    print("[vox-higgs] seed RAM holder active (load_audio patched)", flush=True)
+
+
 @app.on_event("startup")
 def _load():
     global MODEL, PROC, _gen_lock, QSTATS
     import asyncio
     _gen_lock = asyncio.Lock()
     from transformers import AutoProcessor, HiggsAudioV2ForConditionalGeneration
+    _patch_seed_load_audio()
     t0 = time.time()
     PROC = AutoProcessor.from_pretrained(MODEL_ID)
     MODEL = HiggsAudioV2ForConditionalGeneration.from_pretrained(
