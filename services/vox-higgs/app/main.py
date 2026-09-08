@@ -202,26 +202,33 @@ def _load():
     # Bounded render queue + single GPU worker thread (Phase-1 fix): the
     # async event loop never executes blocking generation, so health checks
     # and client drops stay responsive — no more lock wedge.  Queue full ->
-    # HTTP 503 instead of unbounded queueing.
+    # HTTP 503 instead of unbounded queueing.  Worker is spawned by the
+    # async _start_worker() startup hook.
     RENDER_QUEUE = asyncio.Queue(maxsize=int(os.getenv("HIGGS_QUEUE", "4")))
+    print(f"[vox-higgs] render queue ready (maxsize {RENDER_QUEUE.maxsize})", flush=True)
 
-    async def _gpu_worker():
-        loop = asyncio.get_running_loop()
-        while True:
-            job = await RENDER_QUEUE.get()
-            try:
-                result = await loop.run_in_executor(None, sync_render, job["req"])
-                if not job["future"].done():
-                    job["future"].set_result(result)
-            except Exception as exc:  # noqa: BLE001
-                if not job["future"].done():
-                    job["future"].set_exception(exc)
-            finally:
-                RENDER_QUEUE.task_done()
 
-    GPU_WORKER = asyncio.get_event_loop().create_task(_gpu_worker()) \
-        if False else asyncio.get_event_loop_policy().get_event_loop().create_task(_gpu_worker())
-    print(f"[vox-higgs] render queue active (maxsize {RENDER_QUEUE.maxsize}, worker thread)", flush=True)
+async def _gpu_worker():
+    """Consume render jobs on a worker thread; the loop only awaits futures."""
+    loop = asyncio.get_running_loop()
+    while True:
+        job = await RENDER_QUEUE.get()
+        try:
+            result = await loop.run_in_executor(None, sync_render, job["req"])
+            if not job["future"].done():
+                job["future"].set_result(result)
+        except Exception as exc:  # noqa: BLE001
+            if not job["future"].done():
+                job["future"].set_exception(exc)
+        finally:
+            RENDER_QUEUE.task_done()
+
+
+@app.on_event("startup")
+async def _start_worker():
+    global GPU_WORKER
+    GPU_WORKER = asyncio.get_running_loop().create_task(_gpu_worker())
+    print("[vox-higgs] GPU worker thread live", flush=True)
 
 
 class GenReq(BaseModel):
@@ -248,50 +255,70 @@ def seed_file(name: str):
     return FileResponse(p, media_type="audio/wav")
 
 
+def sync_render(req: GenReq) -> bytes:
+    """Blocking render pipeline — runs on the GPU worker thread (never on
+    the event loop).  Returns WAV bytes."""
+    t0 = time.time()
+    conv = [
+        {"role": "system", "content": [{"type": "text", "text":
+            "You are an AI assistant designed to convert text into speech. "
+            "If the user's message includes a [SPEAKER*] tag, do not read out the tag and "
+            "generate speech for the following text, using the specified voice. "
+            "If no speaker tag is present, select a suitable voice on your own."}]},
+        {"role": "scene", "content": [{"type": "text", "text": req.scene}]},
+    ]
+    for tag, path in req.refs.items():
+        name = os.path.basename(path)
+        conv[1]["content"].append({"type": "text", "text": f"{tag}:"})
+        conv[1]["content"].append({"type": "audio",
+                                   "url": f"http://127.0.0.1:8024/seeds/{name}"})
+    conv.append({"role": "user", "content": [{"type": "text", "text": req.text}]})
+
+    inputs = PROC.apply_chat_template(
+        conv, add_generation_prompt=True, tokenize=True, return_dict=True,
+        sampling_rate=24000, return_tensors="pt").to(MODEL.device)
+    with torch.no_grad():
+        out = MODEL.generate(**inputs, max_new_tokens=req.max_new_tokens,
+                             do_sample=req.do_sample)
+    # decode: tokenizer lives with the model on cuda (HIGGS_CODEC_GPU);
+    # fall back to CPU ids only when explicitly asked or on mismatch.
+    ids = out
+    if os.getenv("HIGGS_DECODE_CPU", "0") != "0":
+        ids = out.cpu()
+    try:
+        wav = np.asarray(PROC.batch_decode(ids)[0], dtype=np.float32)
+    except RuntimeError:
+        # device mismatch (e.g. codec stayed CPU) — retry on CPU
+        wav = np.asarray(PROC.batch_decode(out.cpu())[0], dtype=np.float32)
+    if wav.ndim > 1:
+        wav = wav[0]
+    dur = wav.shape[-1] / 24000
+    peak = float(np.abs(wav).max())
+    if peak > 0.95:
+        wav = wav / peak * 0.95
+    pcm = (np.clip(wav, -1.0, 1.0) * 32767.0).astype("<i2")
+    import wave as _wave
+    buf = io.BytesIO()
+    with _wave.open(buf, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(24000)
+        wf.writeframes(pcm.tobytes())
+    print(f"[vox-higgs] {dur:.2f}s clip in {time.time()-t0:.1f}s", flush=True)
+    return buf.getvalue()
+
+
 @app.post("/generate")
 async def generate(req: GenReq):
-    async with _gen_lock:
-        t0 = time.time()
-        conv = [
-            {"role": "system", "content": [{"type": "text", "text":
-                "You are an AI assistant designed to convert text into speech. "
-                "If the user's message includes a [SPEAKER*] tag, do not read out the tag and "
-                "generate speech for the following text, using the specified voice. "
-                "If no speaker tag is present, select a suitable voice on your own."}]},
-            {"role": "scene", "content": [{"type": "text", "text": req.scene}]},
-        ]
-        for tag, path in req.refs.items():
-            name = os.path.basename(path)
-            conv[1]["content"].append({"type": "text", "text": f"{tag}:"})
-            conv[1]["content"].append({"type": "audio",
-                                       "url": f"http://127.0.0.1:8024/seeds/{name}"})
-        conv.append({"role": "user", "content": [{"type": "text", "text": req.text}]})
-
-        inputs = PROC.apply_chat_template(
-            conv, add_generation_prompt=True, tokenize=True, return_dict=True,
-            sampling_rate=24000, return_tensors="pt").to(MODEL.device)
-        with torch.no_grad():
-            out = MODEL.generate(**inputs, max_new_tokens=req.max_new_tokens,
-                                 do_sample=req.do_sample)
-        # decode on CPU — the processor's audio tokenizer lives on CPU (the
-        # working higgs_chapter.py pattern); GPU ids mismatch its weights.
-        wav = np.asarray(PROC.batch_decode(out.cpu())[0], dtype=np.float32)
-        if wav.ndim > 1:
-            wav = wav[0]
-        dur = wav.shape[-1] / 24000
-        peak = float(np.abs(wav).max())
-        if peak > 0.95:
-            wav = wav / peak * 0.95
-        pcm = (np.clip(wav, -1.0, 1.0) * 32767.0).astype("<i2")
-        import wave as _wave
-        buf = io.BytesIO()
-        with _wave.open(buf, "wb") as wf:
-            wf.setnchannels(1)
-            wf.setsampwidth(2)
-            wf.setframerate(24000)
-            wf.writeframes(pcm.tobytes())
-        print(f"[vox-higgs] {dur:.2f}s clip in {time.time()-t0:.1f}s", flush=True)
-        return Response(content=buf.getvalue(), media_type="audio/wav")
+    """Submit to the bounded GPU queue; 503 when saturated.  The event loop
+    only waits on the future — no blocking work, no lock wedge."""
+    if RENDER_QUEUE.full():
+        raise HTTPException(503, "render queue full — retry shortly")
+    loop = asyncio.get_running_loop()
+    fut = loop.create_future()
+    await RENDER_QUEUE.put({"req": req, "future": fut})
+    wav_bytes = await asyncio.wait_for(fut, timeout=float(os.getenv("HIGGS_TIMEOUT", "900")))
+    return Response(content=wav_bytes, media_type="audio/wav")
 
 
 if __name__ == "__main__":
