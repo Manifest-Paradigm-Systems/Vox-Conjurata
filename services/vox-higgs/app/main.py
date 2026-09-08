@@ -38,19 +38,19 @@ SEED_CACHE_MAX = 256
 
 
 def _decode_seed_pcm(name: str) -> np.ndarray | None:
-    """Decode a seed wav to 24k mono float32 (soundfile + librosa)."""
+    """Decode a seed wav to 24k mono float32 (soundfile + torchaudio)."""
     p = os.path.join(SEED_DIR, os.path.basename(name))
     if not os.path.isfile(p):
         return None
     try:
         import soundfile as sf
-        import librosa
+        import torchaudio
         data, sr = sf.read(p, dtype="float32", always_2d=False)
         if data.ndim > 1:
             data = data.mean(axis=1)
         if sr != 24000:
-            data = librosa.resample(data, orig_sr=sr, target_sr=24000,
-                                    res_type="kaiser_best")
+            data = torchaudio.functional.resample(
+                torch.from_numpy(data), orig_freq=sr, new_freq=24000).numpy()
         return np.ascontiguousarray(data)
     except Exception:
         return None
@@ -239,13 +239,23 @@ async def generate(req: GenReq):
         with torch.no_grad():
             out = MODEL.generate(**inputs, max_new_tokens=req.max_new_tokens,
                                  do_sample=req.do_sample)
-        wav = PROC.batch_decode(out)[0]
+        # decode on CPU — the processor's audio tokenizer lives on CPU (the
+        # working higgs_chapter.py pattern); GPU ids mismatch its weights.
+        wav = np.asarray(PROC.batch_decode(out.cpu())[0], dtype=np.float32)
+        if wav.ndim > 1:
+            wav = wav[0]
         dur = wav.shape[-1] / 24000
-        peak = float(np.abs(wav).max()) if hasattr(wav, "numpy") else 1.0
+        peak = float(np.abs(wav).max())
         if peak > 0.95:
             wav = wav / peak * 0.95
+        pcm = (np.clip(wav, -1.0, 1.0) * 32767.0).astype("<i2")
+        import wave as _wave
         buf = io.BytesIO()
-        PROC.save_audio(buf, wav)
+        with _wave.open(buf, "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(24000)
+            wf.writeframes(pcm.tobytes())
         print(f"[vox-higgs] {dur:.2f}s clip in {time.time()-t0:.1f}s", flush=True)
         return Response(content=buf.getvalue(), media_type="audio/wav")
 
