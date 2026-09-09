@@ -5,7 +5,9 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y python3 python3-pip git cmake build-essential ninja-build hipblas-dev rocblas-dev libomp-dev && rm -rf /var/lib/apt/lists/*
+# hipblas/rocblas NOT apt-installed: rocm/dev-ubuntu ships them in /opt/rocm
+# (and the ROCm apt repo is frequently unreachable — 2026-09-09 outage).
+RUN apt-get update && apt-get install -y python3 python3-pip git cmake build-essential ninja-build libomp-dev && rm -rf /var/lib/apt/lists/*
 
 # Ensure the render and video groups exist for Podman group_add
 RUN groupadd -r render || true && groupadd -r video || true
