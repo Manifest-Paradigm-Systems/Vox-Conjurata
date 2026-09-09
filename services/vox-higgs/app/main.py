@@ -176,7 +176,11 @@ def _load():
     PROC = AutoProcessor.from_pretrained(MODEL_ID)
     MODEL = HiggsAudioV2ForConditionalGeneration.from_pretrained(
         MODEL_ID, torch_dtype=torch.bfloat16, device_map=None)
-    MODEL = MODEL.to("cuda").eval()
+    # CPU first: when INT8 is on, quantize BEFORE the GPU move. Quantizing
+    # after .to("cuda") peaked at bf16 size and the interleaved allocator
+    # segments never released — reserved VRAM stayed ~15.8 GiB instead of
+    # the int8 ~6.2 GiB (2026-09-09 measurement).
+    MODEL = MODEL.eval()
     # Codec on GPU (Phase-1 fix 2026-09-08): reference ENCODE and generated
     # audio DECODE both ran on the CPU side of the processor tokenizer —
     # every /generate ping-ponged audio across PCIe twice.  Moving the
@@ -197,6 +201,7 @@ def _load():
         QSTATS = (n, skipped, SKIP_SUBSTR)
         print(f"[vox-higgs] INT8: {n} Linear quantized, {skipped} skipped "
               f"(keep-high-precision: {SKIP_SUBSTR})", flush=True)
+    MODEL = MODEL.to("cuda")  # int8 (or bf16) weights only — no bf16 peak-hold
     if torch.cuda.is_available():
         print(f"[vox-higgs] VRAM used: {torch.cuda.memory_allocated()/2**30:.2f} GiB "
               f"of {torch.cuda.get_device_properties(0).total_memory/2**30:.1f} GiB", flush=True)
