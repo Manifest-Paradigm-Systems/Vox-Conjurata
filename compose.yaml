@@ -96,7 +96,7 @@ services:
     - HSA_OVERRIDE_GFX_VERSION=
     command: >
       -m /models/MiniCPM-V-2_6-GGUF/MiniCPM-V-2_6-Q4_K_M.gguf
-      -mmproj /models/MiniCPM-V-2_6-GGUF/mmproj-model-f16.gguf
+      --mmproj /models/MiniCPM-V-2_6-GGUF/mmproj-model-f16.gguf
       -ngl 99
       -c 8192
       --host 0.0.0.0
