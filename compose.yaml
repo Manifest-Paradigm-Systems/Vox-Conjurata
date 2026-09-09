@@ -188,7 +188,8 @@ services:
     security_opt:
     - seccomp=unconfined
     environment:
-    - HSA_OVERRIDE_GFX_VERSION=12.0.1
+    # NOTE: no HSA_OVERRIDE_GFX_VERSION — rocm/pytorch:latest (torch 2.13/ROCm
+    # 7.14) supports gfx1201 natively; the 12.0.1 override breaks torch.cuda.
     - ROCR_VISIBLE_DEVICES=0
     - HIP_VISIBLE_DEVICES=0
     - CUDA_VISIBLE_DEVICES=0
