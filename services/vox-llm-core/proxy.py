@@ -146,6 +146,29 @@ async def _dispatch_openrouter(body: dict[str, Any], path: str, route: dict[str,
     return resp.json()
 
 
+async def _dispatch_direct(body: dict[str, Any], path: str, route: dict[str, str]) -> dict[str, Any]:
+    """POST to a direct first-party OpenAI-compatible API (e.g. DeepSeek)."""
+    if client is None:
+        raise RuntimeError("HTTP client not initialised")
+    key_env = route.get("api_key_env", "DEEPSEEK_API_KEY")
+    api_key = os.getenv(key_env, "")
+    if not api_key:
+        raise HTTPException(status_code=503, detail=f"Direct route needs env var {key_env}.")
+    base = route["base_url"].rstrip("/")
+    target_model = route["model"]
+    payload = {k: v for k, v in body.items() if k != "model"}
+    payload["model"] = target_model
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    url = f"{base}{path}"
+    logger.info("→ direct: %s model=%s", url, target_model)
+    resp = await client.post(url, json=payload, headers=headers, timeout=OR_TIMEOUT)
+    resp.raise_for_status()
+    return resp.json()
+
+
 async def _proxy_request(body: dict[str, Any], path: str) -> dict[str, Any]:
     if client is None:
         raise RuntimeError("HTTP client not initialised")
