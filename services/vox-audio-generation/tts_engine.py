@@ -9,7 +9,7 @@ import torch
 import gc
 import time
 import asyncio
-from diffusers import StableAudioPipeline
+from stable_audio_3 import StableAudioModel
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("vox-audio-generation")
@@ -49,7 +49,10 @@ async def vram_flusher_loop():
                     logger.info(f"🧹 VRAM Flusher: Cleaned PyTorch cache. Freed {(before - after)/1024**2:.2f} MB. Reserved: {after/1024**2:.2f} MB")
 
 ENGINE_TYPE = os.getenv("AUDIO_ENGINE_TYPE", "music")
-MODEL_ID = os.getenv("STABLE_AUDIO_MODEL", "stabilityai/stable-audio-3-small")
+# SA3 model id: "medium" (1.4B, 380s, ~5-6.5 GiB peak) or "small-music"/"small-sfx"
+# (433M, 120s, CPU-capable). Stable Audio 3 native loader (replaces the old
+# diffusers/stable-audio-open-1.0 path + torchsde CPU-wedge; 2026-09-09).
+SA3_MODEL_ID = os.getenv("SA3_MODEL_ID", "medium")
 
 class AudioRequest(BaseModel):
     prompt: str
@@ -64,11 +67,11 @@ async def root():
 
 # Global pre-loaded pipeline to keep the model resident in VRAM for instant triggers
 pipe = None
-device = "cuda" if torch.cuda.is_available() else "cpu"
 
-logger.info(f"Pre-loading Stable Audio model {MODEL_ID} to VRAM...")
-pipe = StableAudioPipeline.from_pretrained(MODEL_ID, torch_dtype=torch.float16).to(device)
-logger.info(f"Stable Audio model loaded and resident in VRAM.")
+logger.info(f"Pre-loading Stable Audio 3 model '{SA3_MODEL_ID}'...")
+pipe = StableAudioModel.from_pretrained(SA3_MODEL_ID)  # auto device (ROCm torch reports cuda)
+SA3_SR = int(getattr(getattr(pipe, "model", None), "sample_rate", 44100))
+logger.info(f"Stable Audio 3 model loaded and resident (sample_rate={SA3_SR}).")
 
 @app.post("/generate")
 async def generate_audio(request: AudioRequest):
@@ -84,20 +87,23 @@ async def generate_audio(request: AudioRequest):
         prompt_prefix = "TrackType: Music, VocalType: Instrumental, " if engine_type == "music" else "TrackType: SFX, "
         formatted_prompt = f"{prompt_prefix}{request.prompt}"
         
-        generate_kwargs = {
-            "prompt": formatted_prompt,
-            "audio_end_in_s": request.duration_seconds,
-            "num_inference_steps": request.num_inference_steps or (25 if engine_type == "sfx" else 50),
-            "guidance_scale": request.guidance_scale or (3.0 if engine_type == "sfx" else 5.0),
-        }
+        # SA3 native params: 8-step pingpong diffusion, CFG 1.0 defaults.
+        # Caller values override when supplied (steps>1 useful for quality).
+        audio = pipe.generate(
+            prompt=formatted_prompt,
+            duration=request.duration_seconds,
+            steps=request.num_inference_steps or 8,
+            cfg_scale=request.guidance_scale or 1.0,
+        )  # torch.Tensor
 
-        with torch.inference_mode():
-            audio = pipe(**generate_kwargs).audios[0]
-            
+        arr = audio.detach().cpu().float().numpy()
+        if arr.ndim == 3:
+            arr = arr[0]  # (batch, channels, samples) -> (channels, samples)
+
         fd, output_path = tempfile.mkstemp(suffix=".wav")
         os.close(fd)
         import scipy.io.wavfile
-        scipy.io.wavfile.write(output_path, pipe.vae.sampling_rate, audio.T.cpu().to(torch.float32).numpy())
+        scipy.io.wavfile.write(output_path, SA3_SR, arr.T)
         return FileResponse(output_path, media_type="audio/wav")
             
     except Exception as e:

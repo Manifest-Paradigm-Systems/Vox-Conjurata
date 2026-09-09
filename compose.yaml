@@ -196,7 +196,7 @@ services:
     - EXECUTION_DEVICE=gpu
     - VRAM_LIMIT=0.80GB
     - HF_TOKEN=${HF_TOKEN}
-    - STABLE_AUDIO_MODEL=stabilityai/stable-audio-open-1.0
+    - SA3_MODEL_ID=medium
     volumes:
     - ./cache/huggingface:/root/.cache/huggingface:z
     # command: uses Dockerfile CMD (python3 tts_engine.py)
