@@ -178,7 +178,7 @@ services:
       context: ./services/vox-audio-generation
     container_name: vox-audio-generation
     ports:
-    - 8000:8000
+    - 127.0.0.1:8006:8000
     devices:
     - /dev/kfd:/dev/kfd
     - /dev/dri:/dev/dri
@@ -196,7 +196,7 @@ services:
     - EXECUTION_DEVICE=gpu
     - VRAM_LIMIT=0.80GB
     - HF_TOKEN=${HF_TOKEN}
-    - STABLE_AUDIO_MODEL=stabilityai/stable-audio-3-small-music
+    - STABLE_AUDIO_MODEL=stabilityai/stable-audio-open-1.0
     volumes:
     - ./cache/huggingface:/root/.cache/huggingface:z
     # command: uses Dockerfile CMD (python3 tts_engine.py)
