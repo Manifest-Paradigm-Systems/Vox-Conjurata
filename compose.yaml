@@ -74,7 +74,10 @@ services:
       - orchestrator
 
   vox-vision-reader:
-    image: ghcr.io/abetlen/llama-cpp-python:latest
+    # llama.cpp server with mmproj (MiniCPM-V 2.6 vision). Replaces the
+    # abetlen llama-cpp-python source image, which recompiled llama.cpp at
+    # every start and died on an AVX-512 gcc bug on this host (2026-09-09).
+    image: ghcr.io/ggml-org/llama.cpp:server-rocm
     container_name: vox-vision-reader
     ports:
     - 8002:8000
@@ -87,14 +90,17 @@ services:
     - "105"
     security_opt:
     - seccomp=unconfined
+    - label=disable
     environment:
-    - HSA_OVERRIDE_GFX_VERSION=12.0.1
-    - CUDA_VISIBLE_DEVICES=""
-    - MODEL=/models/MiniCPM-V-2_6-GGUF/MiniCPM-V-2_6-Q4_K_M.gguf
-    - CLIP_MODEL_PATH=/models/MiniCPM-V-2_6-GGUF/mmproj-model-f16.gguf
-    - N_GPU_LAYERS=28
-    - CHAT_FORMAT=minicpm-v-2.6
-    - VRAM_ALLOCATION=4.80GB
+    # override emptied: ROCm 7.x supports gfx1201 natively
+    - HSA_OVERRIDE_GFX_VERSION=
+    command: >
+      -m /models/MiniCPM-V-2_6-GGUF/MiniCPM-V-2_6-Q4_K_M.gguf
+      -mmproj /models/MiniCPM-V-2_6-GGUF/mmproj-model-f16.gguf
+      -ngl 99
+      -c 8192
+      --host 0.0.0.0
+      --port 8000
     volumes:
     - model_storage:/models:z
     networks:
