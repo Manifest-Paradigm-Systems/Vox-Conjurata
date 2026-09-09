@@ -258,7 +258,9 @@ services:
     security_opt:
     - seccomp=unconfined
     environment:
-    - HSA_OVERRIDE_GFX_VERSION=12.0.1
+    # HSA override emptied: Dockerfile bakes 12.0.1 which breaks sd.cpp GPU
+    # init on ROCm 7.14 native gfx1201 -> silent CPU fallback (2026-09-09).
+    - HSA_OVERRIDE_GFX_VERSION=
     - ROCR_VISIBLE_DEVICES=0
     - HIP_VISIBLE_DEVICES=0
     - CUDA_VISIBLE_DEVICES=0
