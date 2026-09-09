@@ -172,9 +172,7 @@ services:
     - vox-net
     restart: unless-stopped
 
-  vox-audio-generation    environment:
-    - STABLE_AUDIO_MODEL=stabilityai/stable-audio-3-small-music
-:
+  vox-audio-generation:
     image: vox-conjurata-vox-audio-generation:latest
     build:
       context: ./services/vox-audio-generation
@@ -198,7 +196,7 @@ services:
     - EXECUTION_DEVICE=gpu
     - VRAM_LIMIT=0.80GB
     - HF_TOKEN=${HF_TOKEN}
-    - STABLE_AUDIO_MODEL=stabilityai/stable-audio-open-1.0
+    - STABLE_AUDIO_MODEL=stabilityai/stable-audio-3-small-music
     volumes:
     - ./cache/huggingface:/root/.cache/huggingface:z
     # command: uses Dockerfile CMD (python3 tts_engine.py)
