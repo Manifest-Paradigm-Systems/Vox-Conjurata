@@ -32,7 +32,9 @@ try:
         "model_path": MODEL_PATH,
         "clip_l_path": CLIP_L_PATH,
         "clip_g_path": CLIP_G_PATH,
-        "wtype": "q4_0",
+        # WTYPE env: "default" keeps the model file's own type (fp16 safetensors
+        # stay fp16); q4_0/q8_0 quantize at load for GGUF-style savings.
+        "wtype": os.getenv("WTYPE", "default"),
         "n_threads": THREADS
     }
     if VAE_PATH:
