@@ -188,8 +188,10 @@ services:
     security_opt:
     - seccomp=unconfined
     environment:
-    # NOTE: no HSA_OVERRIDE_GFX_VERSION — rocm/pytorch:latest (torch 2.13/ROCm
-    # 7.14) supports gfx1201 natively; the 12.0.1 override breaks torch.cuda.
+    # NOTE: HSA_OVERRIDE emptied — the Dockerfile bakes 11.0.0 and rocm/pytorch
+    # :latest (torch 2.13/ROCm 7.14) supports gfx1201 natively; any non-empty
+    # override breaks torch.cuda (falls back CPU).
+    - HSA_OVERRIDE_GFX_VERSION=
     - ROCR_VISIBLE_DEVICES=0
     - HIP_VISIBLE_DEVICES=0
     - CUDA_VISIBLE_DEVICES=0
