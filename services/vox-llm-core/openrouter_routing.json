@@ -34,6 +34,12 @@
     "coding-local": { "alias": "coder" },
     "architect-local": { "alias": "director" },
 
+    "deepseek-flash": {
+      "type": "direct",
+      "base_url": "https://api.deepseek.com",
+      "model": "deepseek-v4-flash",
+      "api_key_env": "DEEPSEEK_API_KEY"
+    },
     "coding-cheap": {
       "strategy": "cost",
       "model": "deepseek/deepseek-v4-flash"

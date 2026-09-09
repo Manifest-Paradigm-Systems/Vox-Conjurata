@@ -142,6 +142,7 @@ services:
     environment:
     - PORT=8081
     - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+    - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
     - LOCAL_SGLANG_URL=http://vox-llm-kunou:8000
     networks:
     - vox-net

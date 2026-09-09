@@ -7,6 +7,8 @@ The gateway resolves the role to a route:
   - type "local"      → an OpenAI-compatible llama.cpp server (e.g. cerebro),
                         with optional "fallback" to an OpenRouter route when
                         the local brain is down or saturated (5xx/503).
+  - type "direct"     → a first-party OpenAI-compatible API (e.g. DeepSeek):
+                        base_url + model + api_key_env.
   - type "openrouter" → OpenRouter model + strategy (legacy behaviour;
                         strategy maps to provider.sort unless caller sent one).
   - alias entries     → old names resolve to their role's route during
@@ -175,6 +177,14 @@ async def _proxy_request(body: dict[str, Any], path: str) -> dict[str, Any]:
 
     requested = body.get("model", "")
     route = resolve_route(requested)
+
+    if route.get("type") == "direct":
+        try:
+            return await _dispatch_direct(body, path, route)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"Direct route failed: {exc}")
 
     if route.get("type") == "local":
         try:
