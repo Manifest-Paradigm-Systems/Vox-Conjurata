@@ -172,7 +172,9 @@ services:
     - vox-net
     restart: unless-stopped
 
-  vox-audio-generation:
+  vox-audio-generation    environment:
+    - STABLE_AUDIO_MODEL=stabilityai/stable-audio-3-small-music
+:
     image: vox-conjurata-vox-audio-generation:latest
     build:
       context: ./services/vox-audio-generation
