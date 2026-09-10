@@ -206,10 +206,24 @@ services:
     - VRAM_LIMIT=0.80GB
     - HF_TOKEN=${HF_TOKEN}
     - SA3_MODEL_ID=medium
+    # ROCr AsyncEventsLoop busy-polls by default -> ~1 core idle spin
+    # (~76C CCD). Interrupt mode makes it sleep when idle (2026-09-09).
+    - HSA_ENABLE_INTERRUPT=1
     # Persistent torch-inductor cache: /tmp is container-local, so kernels
     # recompiled (and autotuned for minutes) on every restart without this.
     - TORCHINDUCTOR_CACHE_DIR=/root/.cache/torchinductor
     - TRITON_CACHE_DIR=/root/.cache/triton
+    # torch.compile/inductor autotune can spin a core indefinitely on ROCm
+    # (owner case 2026-09-09: 5h). 8-step sampling doesn't need it — eager.
+    - TORCHDYNAMO_DISABLE=1
+    - TORCH_COMPILE_DISABLE=1
+    # torch CPU thread pool spin-waits (~10 cores) on ROCm idle streams;
+    # 'music' spent 5h burning ~1 core before this. Interop threads = 1,
+    # pool threads small (generation is GPU-bound).
+    - OMP_NUM_THREADS=4
+    - MKL_NUM_THREADS=4
+    - TORCH_NUM_THREADS=4
+    - PYTORCH_NO_CUDA_MEMORY_CACHING=0
     volumes:
     - ./cache/huggingface:/root/.cache/huggingface:z
     # command: uses Dockerfile CMD (python3 tts_engine.py)
