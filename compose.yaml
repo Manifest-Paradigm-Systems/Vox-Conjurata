@@ -206,6 +206,10 @@ services:
     - VRAM_LIMIT=0.80GB
     - HF_TOKEN=${HF_TOKEN}
     - SA3_MODEL_ID=medium
+    # Persistent torch-inductor cache: /tmp is container-local, so kernels
+    # recompiled (and autotuned for minutes) on every restart without this.
+    - TORCHINDUCTOR_CACHE_DIR=/root/.cache/torchinductor
+    - TRITON_CACHE_DIR=/root/.cache/triton
     volumes:
     - ./cache/huggingface:/root/.cache/huggingface:z
     # command: uses Dockerfile CMD (python3 tts_engine.py)
