@@ -184,6 +184,21 @@ services:
     restart: unless-stopped
 
   vox-audio-generation:
+    # IDLE-SPIN FIX (2026-09-11, measured)
+    # The pip ROCm SDK (_rocm_sdk_core, ROCm 7.x) busy-polls in userspace:
+    # `rocr::core::Runtime::AsyncEventsLoop` pins a core at 100% forever while
+    # the model sits resident, holding the CCD at 78C. The system torch stack
+    # (2.9.1+rocm6.4) that Higgs uses BLOCKS in the kernel instead
+    # (`hsaKmtWaitOnMultipleEvents_Ext` -> hsakmt_ioctl) and never spins.
+    # Capping the container's CPU quota halves the poller's share:
+    #   uncapped: spin 100% -> Tccd1 78C
+    #   cpus: 0.5: spin  50% -> Tccd1 41C  (near idle)
+    # and generation is unaffected (5.8s for a 10s cue vs 6-7s uncapped —
+    # it is GPU-bound; measured 88% GPU busy, ~200% CPU only in short bursts).
+    # Proper fix if this is ever revisited: build on the rocm6.4 torch wheels
+    # like Higgs. Note that needs HSA_OVERRIDE_GFX_VERSION=12.0.1 for gfx1201.
+    cpus: 0.5
+  vox-audio-generation:
     image: vox-conjurata-vox-audio-generation:latest
     build:
       context: ./services/vox-audio-generation
@@ -233,10 +248,6 @@ services:
     # service that goes idle for hours that is a core burnt continuously —
     # which is what held the CCD at 76C. `passive` makes them sleep instead.
     - OMP_WAIT_POLICY=passive
-    # The real spinner: ROCr's AsyncEventsLoop (libhsa-runtime64) busy-polls.
-    # MWAITX is AMD's "spin in a low-power state" instruction — the runtime
-    # supports it, so let the poller use it instead of burning full power.
-    - HSA_ENABLE_MWAITX=1
     - GOMP_SPINCOUNT=0
     - KMP_BLOCKTIME=0
     - PYTORCH_NO_CUDA_MEMORY_CACHING=0
