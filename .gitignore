@@ -11,6 +11,7 @@ cache/
 models/
 loras/
 voice_seeds/
+services/orchestrator/seed_backups/   # pre-trim voice seed originals (same policy as voice_seeds)
 services/orchestrator/music_library/
 services/orchestrator/session_library/
 services/orchestrator/temp_assets/
