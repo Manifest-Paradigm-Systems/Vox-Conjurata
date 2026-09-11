@@ -233,6 +233,10 @@ services:
     # service that goes idle for hours that is a core burnt continuously —
     # which is what held the CCD at 76C. `passive` makes them sleep instead.
     - OMP_WAIT_POLICY=passive
+    # The real spinner: ROCr's AsyncEventsLoop (libhsa-runtime64) busy-polls.
+    # MWAITX is AMD's "spin in a low-power state" instruction — the runtime
+    # supports it, so let the poller use it instead of burning full power.
+    - HSA_ENABLE_MWAITX=1
     - GOMP_SPINCOUNT=0
     - KMP_BLOCKTIME=0
     - PYTORCH_NO_CUDA_MEMORY_CACHING=0
