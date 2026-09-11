@@ -281,17 +281,17 @@ def check_background_work() -> str:
     return digest or "Nothing in flight."
 
 
-DELEGATE_RE = re.compile(r"^\s*@@DELEGATE\s+(coder|director)\s*:\s*(.+?)\s*$",
+DELEGATE_RE = re.compile(r"^\s*@@\s*DELEGATE\s+(coder|director)\s*:\s*(.+?)\s*$",
                          re.IGNORECASE | re.MULTILINE)
 PLAN_RE = re.compile(r"@@PLAN\s*\n(.*?)\n\s*@@END", re.DOTALL)
-HANDOFF_RE = re.compile(r"^\s*@@HANDOFF\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
+HANDOFF_RE = re.compile(r"^\s*@@\s*HANDOFF\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 
 # AG2 1.0.4 registers tools but never executes them (llama.cpp returns a valid
 # tool_calls block; AG2 answers with the model's raw text and no ToolResult).
 # Delegation therefore rides an explicit text protocol the brain parses — less
 # elegant, but it works with every model here and is trivial to debug.
-VOICE_RE = re.compile(r"^\s*@@VOICE\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
-PLAY_RE = re.compile(r"^\s*@@PLAY\s+(foley|music|sfx)\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
+VOICE_RE = re.compile(r"^\s*@@\s*VOICE\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
+PLAY_RE = re.compile(r"^\s*@@\s*PLAY\s+(foley|music|sfx)\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 # The adapter on the Workhorse owns both libraries (audio stays on that box).
 MEDIA_URL = os.getenv("JARVIS_MEDIA_URL", "http://192.168.0.62:7863")
 VOICES_URL = os.getenv("JARVIS_VOICES_URL", "http://192.168.0.62:7863/v1/audio/voices")
@@ -356,11 +356,36 @@ _STOPWORDS = {"the", "and", "for", "with", "that", "this", "does", "not", "you",
               "its", "he", "she", "they", "some", "any", "one", "new", "now", "from"}
 
 
+def clap_voice(description: str) -> str | None:
+    """Semantic voice search over the seed banks (899 CLAP vectors across the
+    recorded LibriVox/LibriTTS/VCTK/palette banks). This is the good path: the
+    banks are real recorded speakers, where the legacy 900+ seeds are the set
+    the owner is only keeping around. Returns a seed name Higgs can clone."""
+    try:
+        with httpx.Client(timeout=200.0) as c:
+            data = c.get(f"{MEDIA_URL}/media/voice/search",
+                         params={"q": description, "k": 5}).json()
+    except (httpx.HTTPError, ValueError):
+        return None
+    for hit in data.get("results") or []:
+        if hit.get("has_seed") and hit.get("seed_path"):
+            name = os.path.basename(hit["seed_path"])
+            return name[:-4] if name.endswith(".wav") else name
+    return None
+
+
 def resolve_voice(description: str) -> str | None:
     """Best seed for a spoken description ("a scottish dwarf" ->
-    archetype_dwarf_male_scottish). Ranks by how many query words match, then
-    by how *little else* the name says, then gender and name for determinism.
-    Nothing sensible -> None, and the voice stays put."""
+    archetype_dwarf_male_scottish).
+
+    Tries the CLAP seed-bank search first — "a warm elderly british gentleman"
+    is not a filename, and matching words against names cannot answer it. Falls
+    back to ranking by how many query words match, then by how *little else*
+    the name says, then gender and name for determinism. Nothing sensible ->
+    None, and the voice stays put."""
+    semantic = clap_voice(description)
+    if semantic:
+        return semantic
     voices = voice_list()
     query = (description or "").lower().strip()
     tokens = {t for t in re.findall(r"[a-z0-9]+", query)
@@ -486,6 +511,7 @@ def apply_protocol(reply: str, sess: dict, conversational: bool) -> str:
                         f"“{wanted}”]_").strip()
         # If the model replied with nothing but directives, do not fall back to
         # the raw reply — that would show "@@PLAY foley: …" to the human.
+        text = re.sub(r"\s*@@\s*$", "", text, flags=re.MULTILINE).strip()
         if not text:
             text = "Of course, sir — here it is."
         return text
