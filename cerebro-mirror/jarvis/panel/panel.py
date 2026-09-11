@@ -120,7 +120,7 @@ async def transcribe(request: Request):
     body = await request.body()
     headers = {"content-type": request.headers.get("content-type", "multipart/form-data")}
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(600.0, connect=8.0)) as c:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=8.0)) as c:
             r = await c.post(f"{STT_URL}/v1/audio/transcriptions", content=body, headers=headers)
     except httpx.HTTPError as exc:
         return JSONResponse({"error": str(exc)}, status_code=502)
@@ -133,7 +133,7 @@ async def chat(payload: dict):
     body.setdefault("model", "jarvis")
     body["stream"] = False
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(900.0, connect=8.0)) as c:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(180.0, connect=8.0)) as c:
             r = await c.post(f"{BRAIN_URL}/v1/chat/completions", json=body)
     except httpx.HTTPError as exc:
         return JSONResponse({"error": str(exc)}, status_code=502)
@@ -177,7 +177,7 @@ async def speak(payload: dict):
     body = {"input": payload.get("input", ""), "voice": payload.get("voice", VOICE),
             "response_format": "mp3"}
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(600.0, connect=8.0)) as c:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=8.0)) as c:
             r = await c.post(f"{TTS_URL}/v1/audio/speech", json=body)
     except httpx.HTTPError as exc:
         return JSONResponse({"error": str(exc)}, status_code=502)
@@ -527,6 +527,37 @@ let ctx, stream, node, analyser, running = false, speaking = false;
 let micGuardUntil = 0;
 let lastSpoken = '';              // for echo rejection, see looksLikeEcho()
 let lastLevelLog = 0;             // keeps the mic-level trace readable
+let speakingSince = 0;
+
+/** Every client fetch gets a deadline.
+ *
+ * Without one, a hung TTS render means speakReply() never resolves, `speaking`
+ * stays true forever, and because the mic is deliberately ignored while
+ * speaking (half-duplex) Jarvis goes permanently DEAF — the "freeze where he
+ * stops answering" that needed a reload to clear. A deadline turns that into
+ * an error the UI can report. */
+function fetchWithTimeout(url, opts, ms) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), ms);
+  return fetch(url, Object.assign({}, opts || {}, {signal: ctl.signal}))
+    .finally(() => clearTimeout(timer));
+}
+
+// Belt to the deadline's braces: however speaking got stuck, it cannot stay
+// stuck — a deaf assistant is worse than a dropped turn.
+setInterval(() => {
+  if (speaking && Date.now() - speakingSince > 180000) {
+    console.log('jarvis: watchdog cleared a stuck speaking state');
+    speaking = false;
+    micGuardUntil = Date.now() + MIC_GUARD_MS;
+    setState('idle');
+  }
+}, 5000);
+
+function beginSpeaking() {
+  speaking = true;
+  speakingSince = Date.now();
+}
 let VOICE = localStorage.getItem('jarvis.voice') || '';
 let FACE = localStorage.getItem('jarvis.face') || '';
 let buf = [], speechMs = 0, silentMs = 0, bufSpeechMs = 0, recording = false, noiseFloor = 0.004;
@@ -653,7 +684,7 @@ async function finishUtterance() {
   console.log('jarvis: utterance ' + (total / ctx.sampleRate).toFixed(1) + 's -> transcribing');
   let text = '';
   try {
-    const r = await fetch('/api/transcribe', {method:'POST', body: fd});
+    const r = await fetchWithTimeout('/api/transcribe', {method:'POST', body: fd}, 60000);
     text = (await r.json()).text?.trim() || '';
   } catch (err) { console.log('jarvis: transcribe failed ' + err); setState('idle'); return; }
   console.log('jarvis: transcript=' + JSON.stringify(text));
@@ -695,8 +726,9 @@ async function ask(text) {
   history.push({role:'user', content:text});
   let reply = '', voiceChanged = null;
   try {
-    const r = await fetch('/api/chat', {method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({messages: history, model: MODEL, ephemeral: INCOGNITO})});
+    const r = await fetchWithTimeout('/api/chat', {method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({messages: history, model: MODEL, ephemeral: INCOGNITO})}, 120000);
     const d = await r.json();
     reply = d.choices?.[0]?.message?.content || '';
     if (d.voice && d.voice !== VOICE) {
@@ -710,7 +742,7 @@ async function ask(text) {
       say('jarvis', reply);
       history.push({role:'assistant', content:reply});
       lastSpoken = reply;
-      setState('speaking'); speaking = true;
+      setState('speaking'); beginSpeaking();
       console.log('jarvis: playing ' + d.media.kind + ' ' + d.media.name);
       await playMedia(d.media);
       speaking = false;
@@ -718,7 +750,11 @@ async function ask(text) {
       setState('idle');
       return;
     }
-  } catch (err) { console.log('jarvis: chat failed ' + err); setState('idle'); return; }
+  } catch (err) {
+    console.log('jarvis: chat failed ' + err);
+    say('system', 'No answer came back — try that again.');
+    setState('idle'); return;
+  }
   console.log('jarvis: reply chars=' + reply.length);
   if (!reply) { setState('idle'); return; }
   say('jarvis', reply);
@@ -727,7 +763,7 @@ async function ask(text) {
   lastSpoken = reply;          // what the mic must not be allowed to answer
 
   setState('speaking');
-  speaking = true;
+  beginSpeaking();
   try {
     await speakReply(reply);
     console.log('jarvis: spoke ' + reply.length + ' chars');
@@ -792,9 +828,9 @@ async function speakReply(reply) {
   const MAX_AHEAD = 3;
   const render = async (text) => {
     for (let attempt = 0; attempt < 3; attempt++) {
-      const r = await fetch('/api/speak', {method:'POST',
+      const r = await fetchWithTimeout('/api/speak', {method:'POST',
           headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({input: text, voice: VOICE})});
+          body: JSON.stringify({input: text, voice: VOICE})}, 240000);
       if (r.ok) return r.blob();
       if (r.status !== 503) throw new Error('speak ' + r.status);
       await new Promise(res => setTimeout(res, 400));   // queue full: back off
