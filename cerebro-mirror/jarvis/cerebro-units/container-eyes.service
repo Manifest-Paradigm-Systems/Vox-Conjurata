@@ -1,0 +1,43 @@
+# container-eyes.service  (cerebro)
+# MiniCPM-V 2.6 vision reader, port 8084.
+# Moved here from the Workhorse 2026-09-11: bf16 Higgs took card1's headroom
+# from 16 GiB to 12 GiB, and cerebro has ~15 GiB spare in its 96 GiB carve.
+# Same llama.cpp:server-rocm image as the other cerebro lanes.
+# NOTE: --mmproj must be double-dashed (single dash is silently ignored).
+[Unit]
+Description=MiniCPM-V 2.6 eyes (vision reader), port 8084
+Wants=network-online.target
+After=network-online.target
+RequiresMountsFor=%t/containers
+
+[Service]
+Environment=PODMAN_SYSTEMD_UNIT=%n
+Restart=on-failure
+TimeoutStopSec=70
+ExecStart=/usr/bin/podman run \
+    --cidfile=%t/%n.ctr-id \
+    --cgroups=split \
+    --rm \
+    --sdnotify=conmon \
+    -d \
+    --replace \
+    --name eyes \
+    --network vox-net \
+    -p 8084:8084 \
+    --device /dev/kfd:/dev/kfd \
+    --device /dev/dri:/dev/dri \
+    --security-opt label=disable \
+    -e HIP_VISIBLE_DEVICES=0 \
+    -e ROCR_VISIBLE_DEVICES=0 \
+    -v /var/home/admin/models:/models:ro \
+    ghcr.io/ggml-org/llama.cpp:server-rocm \
+    -m /models/MiniCPM-V-2_6-GGUF/MiniCPM-V-2_6-Q4_K_M.gguf \
+    --mmproj /models/MiniCPM-V-2_6-GGUF/mmproj-model-f16.gguf \
+    -a eyes -ngl 99 -c 8192 --host 0.0.0.0 --port 8084
+ExecStop=/usr/bin/podman stop --ignore -t 10 --cidfile=%t/%n.ctr-id
+ExecStopPost=/usr/bin/podman rm -f --ignore -t 10 --cidfile=%t/%n.ctr-id
+Type=notify
+NotifyAccess=all
+
+[Install]
+WantedBy=multi-user.target

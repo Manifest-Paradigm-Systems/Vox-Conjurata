@@ -1,0 +1,41 @@
+# container-tailscale.service  (cerebro)
+# Tailnet access for the Jarvis front-end (Open WebUI :8080, brain :8092,
+# docks panel :8093) — cerebro has no other route off the LAN.
+# Kernel mode (/dev/net/tun exists); state persists on /var/home so a reboot
+# does not re-register the node.
+[Unit]
+Description=Tailscale (tailnet access for Jarvis), host network
+Wants=network-online.target
+After=network-online.target
+RequiresMountsFor=%t/containers
+
+[Service]
+Environment=PODMAN_SYSTEMD_UNIT=%n
+Restart=on-failure
+TimeoutStopSec=70
+ExecStart=/usr/bin/podman run \
+    --cidfile=%t/%n.ctr-id \
+    --cgroups=split \
+    --rm \
+    --sdnotify=conmon \
+    -d \
+    --replace \
+    --name tailscale \
+    --network host \
+    --cap-add NET_ADMIN \
+    --cap-add NET_RAW \
+    --device /dev/net/tun:/dev/net/tun \
+    --security-opt label=disable \
+    -e TS_STATE_DIR=/var/lib/tailscale \
+    -e TS_USERSPACE=false \
+    -e TS_AUTH_ONCE=true \
+    -e TS_EXTRA_ARGS=--hostname=cerebro \
+    -v /var/home/admin/tailscale:/var/lib/tailscale \
+    docker.io/tailscale/tailscale:latest
+ExecStop=/usr/bin/podman stop --ignore -t 10 --cidfile=%t/%n.ctr-id
+ExecStopPost=/usr/bin/podman rm -f --ignore -t 10 --cidfile=%t/%n.ctr-id
+Type=notify
+NotifyAccess=all
+
+[Install]
+WantedBy=multi-user.target
