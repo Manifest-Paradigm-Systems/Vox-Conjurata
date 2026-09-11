@@ -24,7 +24,8 @@ services:
     - 8080:8080
     environment:
     - OLLAMA_URL=http://vox-llm-openrouter:8081
-    - VISION_READER_URL=http://vox-vision-reader:8000
+    # eyes moved to cerebro 2026-09-11 (container-eyes, :8084) to free VRAM here
+    - VISION_READER_URL=http://192.168.0.67:8084
     - STT_URL=http://vox-voice:5000
     # voices-adapter (host service) fronts Higgs voices:8024 with the legacy
     # vox-audio-core API — vox-audio-core itself is retired.
@@ -75,6 +76,8 @@ services:
       - foundry-vtt
       - orchestrator
 
+  # MIGRATED 2026-09-11 -> cerebro container-eyes.service (:8084).
+  # Left here for reference; do not start on the Workhorse (VRAM).
   vox-vision-reader:
     # llama.cpp server with mmproj (MiniCPM-V 2.6 vision). Replaces the
     # abetlen llama-cpp-python source image, which recompiled llama.cpp at
