@@ -184,20 +184,6 @@ services:
     restart: unless-stopped
 
   vox-audio-generation:
-    # IDLE-SPIN FIX (2026-09-11, measured)
-    # The pip ROCm SDK (_rocm_sdk_core, ROCm 7.x) busy-polls in userspace:
-    # `rocr::core::Runtime::AsyncEventsLoop` pins a core at 100% forever while
-    # the model sits resident, holding the CCD at 78C. The system torch stack
-    # (2.9.1+rocm6.4) that Higgs uses BLOCKS in the kernel instead
-    # (`hsaKmtWaitOnMultipleEvents_Ext` -> hsakmt_ioctl) and never spins.
-    # Capping the container's CPU quota halves the poller's share:
-    #   uncapped: spin 100% -> Tccd1 78C
-    #   cpus: 0.5: spin  50% -> Tccd1 41C  (near idle)
-    # and generation is unaffected (5.8s for a 10s cue vs 6-7s uncapped —
-    # it is GPU-bound; measured 88% GPU busy, ~200% CPU only in short bursts).
-    # Proper fix if this is ever revisited: build on the rocm6.4 torch wheels
-    # like Higgs. Note that needs HSA_OVERRIDE_GFX_VERSION=12.0.1 for gfx1201.
-    cpus: 0.5          # half a core: the poller's ceiling
   vox-audio-generation:
     image: vox-conjurata-vox-audio-generation:latest
     build:
