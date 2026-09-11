@@ -228,6 +228,13 @@ services:
     - OMP_NUM_THREADS=4
     - MKL_NUM_THREADS=4
     - TORCH_NUM_THREADS=4
+    # THE idle-spin fix: OpenMP (and its LLVM/Intel cousins) BUSY-WAIT for a
+    # while after a parallel region before parking the worker threads. On a
+    # service that goes idle for hours that is a core burnt continuously —
+    # which is what held the CCD at 76C. `passive` makes them sleep instead.
+    - OMP_WAIT_POLICY=passive
+    - GOMP_SPINCOUNT=0
+    - KMP_BLOCKTIME=0
     - PYTORCH_NO_CUDA_MEMORY_CACHING=0
     volumes:
     - ./cache/huggingface:/root/.cache/huggingface:z
