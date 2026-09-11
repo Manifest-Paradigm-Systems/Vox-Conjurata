@@ -37,6 +37,7 @@ import json
 import os
 import queue
 import re
+import sqlite3
 import threading
 import time
 import uuid
@@ -56,6 +57,15 @@ CONVERSATIONAL_MODEL = os.getenv("AG2_CONVERSATIONAL_MODEL", "actor")
 CODER_FAILURE_LIMIT = int(os.getenv("AG2_CODER_FAILURE_LIMIT", "3"))
 MODEL_NAME = os.getenv("JARVIS_MODEL_NAME", "jarvis")
 DIRECTOR_MODEL_NAME = "jarvis-director"
+# Answers from live sources, but the *model* stays local: SearxNG (self-hosted,
+# no API key) fetches the pages, the conversationalist reads them and answers
+# with citations. Only the search leaves the house.
+WEB_MODEL_NAME = "jarvis-web"
+NEWS_MODEL_NAME = "jarvis-news"
+WIKI_MODEL_NAME = "jarvis-wiki"
+SEARXNG_URL = os.getenv("SEARXNG_URL", "http://127.0.0.1:8888/search")
+WIKI_URL = os.getenv("JARVIS_WIKI_URL", "http://127.0.0.1:8090")
+SEARCH_RESULTS = int(os.getenv("JARVIS_SEARCH_RESULTS", "6"))
 PERSONA_FILE = os.getenv("JARVIS_PERSONA_FILE", os.path.join(os.path.dirname(os.path.abspath(__file__)), "persona.txt"))
 SESSION_TTL = float(os.getenv("JARVIS_SESSION_TTL", "43200"))  # 12 h
 
@@ -88,6 +98,50 @@ JOBS: dict[str, dict] = {}
 EVENT_SINKS: set[queue.Queue] = set()
 
 
+DB_PATH = os.getenv("JARVIS_DB", "/var/home/admin/jarvis/conversations.db")
+
+
+def _db() -> sqlite3.Connection:
+    conn = sqlite3.connect(DB_PATH, timeout=10)
+    conn.execute("""CREATE TABLE IF NOT EXISTS turns (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ts REAL, session TEXT, model TEXT, role TEXT, content TEXT)""")
+    # FTS5 from the start: the point of keeping conversations is being able to
+    # find them again, and a LIKE scan over years of chat is not a plan.
+    conn.execute("""CREATE VIRTUAL TABLE IF NOT EXISTS turns_fts USING fts5(
+        content, session UNINDEXED, ts UNINDEXED, role UNINDEXED)""")
+    return conn
+
+
+def record(session: str, model: str, role: str, content: str, ephemeral: bool = False) -> None:
+    """Persist one turn. Incognito conversations write nothing at all."""
+    if ephemeral or not (content or "").strip():
+        return
+    try:
+        with _db() as c:
+            cur = c.execute("INSERT INTO turns (ts, session, model, role, content) VALUES (?,?,?,?,?)",
+                            (time.time(), session, model, role, content))
+            c.execute("INSERT INTO turns_fts (rowid, content, session, ts, role) VALUES (?,?,?,?,?)",
+                      (cur.lastrowid, content, session, time.time(), role))
+    except sqlite3.Error as exc:      # never lose a reply because the log failed
+        print(f"[jarvis-brain] conversation log failed: {exc}", flush=True)
+
+
+def recall(query: str, limit: int = 8) -> list[dict]:
+    """Search past conversations (FTS5). Used by the recall tool and /recall."""
+    terms = " OR ".join(re.findall(r"[A-Za-z0-9_]{3,}", query or "")) or "''"
+    try:
+        with _db() as c:
+            rows = c.execute(
+                "SELECT t.ts, t.session, t.model, t.role, t.content FROM turns_fts f "
+                "JOIN turns t ON t.id = f.rowid WHERE turns_fts MATCH ? "
+                "ORDER BY rank LIMIT ?", (terms, limit)).fetchall()
+    except sqlite3.Error:
+        return []
+    return [{"ts": r[0], "session": r[1], "model": r[2], "role": r[3], "content": r[4][:1200]}
+            for r in rows]
+
+
 def emit(kind: str, **fields) -> None:
     event = {"ts": time.time(), "kind": kind, **fields}
     with STATE_LOCK:
@@ -110,7 +164,7 @@ def session_for(messages: list[dict]) -> dict:
                 SESSIONS.pop(k, None)
         sess = SESSIONS.get(key)
         if sess is None:
-            sess = {"approved": False, "plan": "", "failures": 0, "log": [],
+            sess = {"approved": False, "plan": "", "failures": 0, "log": [], "key": key,
                     "created": now, "touched": now}
             SESSIONS[key] = sess
     sess["touched"] = now
@@ -237,8 +291,31 @@ HANDOFF_RE = re.compile(r"^\s*@@HANDOFF\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MUL
 # Delegation therefore rides an explicit text protocol the brain parses — less
 # elegant, but it works with every model here and is trivial to debug.
 VOICE_RE = re.compile(r"^\s*@@VOICE\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
+PLAY_RE = re.compile(r"^\s*@@PLAY\s+(foley|music|sfx)\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
+# The adapter on the Workhorse owns both libraries (audio stays on that box).
+MEDIA_URL = os.getenv("JARVIS_MEDIA_URL", "http://192.168.0.62:7863")
 VOICES_URL = os.getenv("JARVIS_VOICES_URL", "http://192.168.0.62:7863/v1/audio/voices")
 _VOICE_CACHE: dict = {"at": 0.0, "voices": []}
+
+
+def find_media(kind: str, description: str) -> dict | None:
+    """One sound or one track for a description. Foley goes through CLAP (prose
+    -> sound); music matches the descriptive filenames of the packs."""
+    endpoint = "foley/search" if kind in ("foley", "sfx") else "music/search"
+    try:
+        with httpx.Client(timeout=180.0) as c:
+            data = c.get(f"{MEDIA_URL}/media/{endpoint}",
+                         params={"q": description, "k": 3}).json()
+    except (httpx.HTTPError, ValueError) as exc:
+        emit("media_error", kind=kind, error=str(exc)[:200])
+        return None
+    results = data.get("results") or []
+    if not results:
+        return None
+    top = results[0]
+    return {"kind": "foley" if endpoint.startswith("foley") else "music",
+            "name": top.get("name"), "url": top.get("url"),
+            "score": top.get("score")}
 
 
 def voice_list() -> list[str]:
@@ -318,7 +395,13 @@ PROTOCOL = (
     "When the human asks you to speak in a different voice, emit:\n"
     "    @@VOICE: <a description of the voice, e.g. a scottish dwarf, a calm narrator>\n"
     "The system picks the closest voice from the library and switches to it. Confirm briefly; the "
-    "line itself is hidden."
+    "line itself is hidden.\n"
+    "When the human asks to HEAR something — a sound effect or some music — emit:\n"
+    "    @@PLAY foley: <what it should sound like, e.g. a sword being drawn, thunder in the distance>\n"
+    "    @@PLAY music: <what it should be like, e.g. a cosy tavern, dark tense combat>\n"
+    "The sound library is searched by description and played straight away. Say one short line "
+    "about it; the directive is hidden. Do not describe the sound at length — they are about to "
+    "hear it."
 )
 
 
@@ -376,6 +459,18 @@ def apply_protocol(reply: str, sess: dict, conversational: bool) -> str:
             if not text:
                 text = (f"Of course, sir — I've put that in front of the "
                         f"{target.lower()} and will report back shortly.")
+        for kind, description in PLAY_RE.findall(text):
+            media = find_media(kind.lower(), description.strip())
+            text = PLAY_RE.sub("", text).strip()
+            if media:
+                sess["media"] = media
+                # emit()'s first parameter is already called kind — do not
+                # splat a dict that carries its own.
+                emit("media", name=media["name"], url=media["url"],
+                     score=media.get("score"), source=media["kind"])
+            else:
+                emit("media_error", kind=kind, query=description[:120])
+                text = f"{text}\n\n_[nothing in the {kind} library matched “{description}”]_".strip()
         voice_match = VOICE_RE.search(text)
         if voice_match:
             wanted = voice_match.group(1).strip()
@@ -389,7 +484,11 @@ def apply_protocol(reply: str, sess: dict, conversational: bool) -> str:
             else:
                 text = (f"{text}\n\n_[no voice in the library matches "
                         f"“{wanted}”]_").strip()
-        return text or reply.strip()
+        # If the model replied with nothing but directives, do not fall back to
+        # the raw reply — that would show "@@PLAY foley: …" to the human.
+        if not text:
+            text = "Of course, sir — here it is."
+        return text
 
     plan_match = PLAN_RE.search(reply)
     if plan_match:
@@ -438,6 +537,20 @@ def to_ag2_messages(messages: list[dict], sess: dict, conversational: bool) -> l
         if digest:
             out.append({"role": "system",
                         "content": f"Background work state (do not read this aloud; use it):\n{digest}"})
+        # Memory, retrieved rather than held: Kunou's window is 8k, so recall
+        # what is relevant to *this* turn instead of carrying the past around.
+        # Terms are picked from the actual question, so quiet turns pull
+        # nothing and noisy turns pull only a few excerpts.
+        question = next((m.get("content") or "" for m in reversed(out)
+                         if m.get("role") == "user"), "")
+        if question and len(question) > 12:
+            hits = recall(question, limit=4)
+            if hits:
+                excerpts = "\n".join(f"- [{time.strftime('%Y-%m-%d', time.localtime(h['ts']))}"
+                                     f" {h['role']}] {h['content'][:400]}" for h in hits)
+                out.append({"role": "system", "content":
+                            "Things said before that may bear on this (your memory; use only what "
+                            f"is genuinely relevant, and do not read this list aloud):\n{excerpts}"})
         return out
     if sess.get("approved") and sess.get("plan"):
         out.append({"role": "system",
@@ -448,6 +561,94 @@ def to_ag2_messages(messages: list[dict], sess: dict, conversational: bool) -> l
                     "content": "A plan is awaiting the human's verdict. If their last message approves "
                                "it, proceed; otherwise treat it as a revision request."})
     return out
+
+
+def searx(query: str, category: str = "general", limit: int = None) -> list[dict]:
+    """Search via the self-hosted SearxNG. Returns [{title, url, snippet}]."""
+    limit = limit or SEARCH_RESULTS
+    try:
+        with httpx.Client(timeout=45.0) as c:
+            r = c.get(SEARXNG_URL, params={"q": query, "format": "json",
+                                           "categories": category, "language": "en"})
+            r.raise_for_status()
+            results = r.json().get("results", [])
+    except (httpx.HTTPError, ValueError) as exc:
+        emit("web_error", query=query[:120], error=str(exc)[:200])
+        return []
+    out = []
+    for item in results[:limit]:
+        if not item.get("url"):
+            continue
+        out.append({"title": (item.get("title") or item["url"])[:140],
+                    "url": item["url"],
+                    "snippet": (item.get("content") or "")[:400]})
+    return out
+
+
+def wiki_lookup(term: str) -> tuple[str, list[dict]]:
+    """The local wiki service on cerebro (7M abstracts) — the house's own
+    encyclopedia tier, consulted before the open web for reference material."""
+    try:
+        with httpx.Client(timeout=20.0) as c:
+            d = c.get(f"{WIKI_URL}/lookup", params={"title": term}).json()
+    except (httpx.HTTPError, ValueError):
+        return "", []
+    text = (d.get("extract") or d.get("abstract") or d.get("text") or "").strip()
+    if not text:
+        return "", []
+    return text, [{"title": f"Wiki: {d.get('title', term)}", "url": f"wiki://{d.get('title', term)}"}]
+
+
+def _local_answer(question: str, context: str, sources: list[dict]) -> str:
+    """Read the fetched material with the LOCAL conversationalist."""
+    system = (f"{load_persona()}\n\nYou are answering from material just fetched for you. "
+              "Use it rather than your memory; say plainly if it is thin or contradictory. "
+              "Cite the sources inline as [1], [2] … matching the numbered list. "
+              "Keep it to a few sentences.")
+    numbered = "\n".join(f"[{i+1}] {s['title']} — {s['url']}" for i, s in enumerate(sources))
+    body = f"Question: {question}\n\nSources:\n{numbered}\n\nFetched content:\n{context[:6000]}"
+    return _strip_think(_chat(CONVERSATIONAL_URL, CONVERSATIONAL_MODEL, system, body, max_tokens=900))
+
+
+def run_web(messages: list[dict], category: str = "general"):
+    """Search, then answer locally. Returns (reply, sources, timings)."""
+    question = next((m.get("content") or "" for m in reversed(messages)
+                     if m.get("role") == "user"), "").strip()
+    if not question:
+        return "I did not catch the question, sir.", [], {}
+    emit("web_start", query=question[:200], where="news" if category == "news" else "web")
+
+    t0 = time.time()
+    hits = searx(question, category=category)
+    search_s = time.time() - t0
+    if not hits:
+        return ("I could not reach the search engines just now, sir — SearxNG returned nothing.",
+                [], {"search": round(search_s, 2)})
+    context = "\n\n".join(f"{h['title']}\n{h['url']}\n{h['snippet']}" for h in hits)
+    t1 = time.time()
+    text = _local_answer(question, context, hits)
+    answer_s = time.time() - t1
+    timings = {"search": round(search_s, 2), "answer": round(answer_s, 2),
+               "total": round(search_s + answer_s, 2), "results": len(hits)}
+    emit("web_done", query=question[:120], sources=hits[:6], timings=timings)
+    return text, hits[:6], timings
+
+
+def run_wiki(messages: list[dict]):
+    """Answer from the local wiki service. Returns (reply, sources, timings)."""
+    question = next((m.get("content") or "" for m in reversed(messages)
+                     if m.get("role") == "user"), "").strip()
+    emit("web_start", query=question[:200], where="wiki")
+    t0 = time.time()
+    text, sources = wiki_lookup(question)
+    wiki_s = time.time() - t0
+    if not text:
+        return run_web(messages)          # fall through to the open web
+    t1 = time.time()
+    answer = _local_answer(question, text, sources)
+    timings = {"wiki": round(wiki_s, 2), "answer": round(time.time() - t1, 2)}
+    emit("web_done", query=question[:120], sources=sources, timings=timings)
+    return answer, sources, timings
 
 
 async def run_agent(messages: list[dict], sess: dict, conversational: bool) -> str:
@@ -481,7 +682,18 @@ async def models():
     return {"object": "list", "data": [
         {"id": MODEL_NAME, "object": "model", "created": now, "owned_by": "jarvis"},
         {"id": DIRECTOR_MODEL_NAME, "object": "model", "created": now, "owned_by": "jarvis"},
+        {"id": WEB_MODEL_NAME, "object": "model", "created": now, "owned_by": "jarvis"},
+        {"id": NEWS_MODEL_NAME, "object": "model", "created": now, "owned_by": "jarvis"},
+        {"id": WIKI_MODEL_NAME, "object": "model", "created": now, "owned_by": "jarvis"},
     ]}
+
+
+@app.get("/recall")
+async def recall_endpoint(q: str, limit: int = 8):
+    """Search everything ever said here. The seed of Jarvis's memory: rather
+    than holding the past in the window, the past is looked up on demand."""
+    hits = recall(q, limit)
+    return {"query": q, "hits": len(hits), "results": hits}
 
 
 @app.get("/events")
@@ -539,27 +751,57 @@ async def chat_completions(request: Request):
     messages = body.get("messages") or []
     stream = bool(body.get("stream"))
     requested = (body.get("model") or MODEL_NAME).lower()
-    conversational = DIRECTOR_MODEL_NAME not in requested
+    web = WEB_MODEL_NAME in requested
+    news = NEWS_MODEL_NAME in requested
+    wiki = WIKI_MODEL_NAME in requested
+    fetching = web or news or wiki
+    conversational = (DIRECTOR_MODEL_NAME not in requested) and not fetching
     sess = session_for(messages)
+    # epub = "keep nothing". Set by the panel's incognito toggle; OWUI callers
+    # simply never send it, so their conversations are kept by default.
+    ephemeral = bool(body.get("ephemeral"))
 
     last_user = next((m.get("content") or "" for m in reversed(messages) if m.get("role") == "user"), "")
-    if not conversational and sess.get("plan") and not sess.get("approved") and looks_like_approval(last_user):
+    if not conversational and not fetching and sess.get("plan") and not sess.get("approved") \
+            and looks_like_approval(last_user):
         sess["approved"] = True
         emit("approval", approved=True, plan=sess["plan"][:400])
 
+    def fetch_kind():
+        if news:
+            return run_web(messages, category="news")
+        if wiki:
+            return run_wiki(messages)
+        return run_web(messages)
+
     if not stream:
-        text = await run_agent(messages, sess, conversational)
+        sources: list[dict] = []
+        timings: dict = {}
+        if fetching:
+            text, sources, timings = await asyncio.to_thread(fetch_kind)
+        else:
+            text = await run_agent(messages, sess, conversational)
         body_out = {
             "id": f"chatcmpl-{uuid.uuid4().hex[:24]}", "object": "chat.completion",
             "created": int(time.time()), "model": requested,
             "choices": [{"index": 0, "finish_reason": "stop",
                          "message": {"role": "assistant", "content": text}}],
         }
-        # Non-standard field: clients that know about it (the docks/live pages)
-        # follow a voice change; everyone else ignores it.
+        # Non-standard fields: clients that know about them (the docks/live
+        # pages) follow a voice change and show sources; everyone else ignores.
         voice = sess.pop("voice", None)
         if voice:
             body_out["voice"] = voice
+        media = sess.pop("media", None)
+        if media:
+            body_out["media"] = media
+        if sources:
+            body_out["sources"] = sources
+        if timings:
+            body_out["timings"] = timings
+        # Keep the exchange unless this conversation is incognito.
+        record(sess.get("key", ""), requested, "user", last_user, ephemeral)
+        record(sess.get("key", ""), requested, "assistant", text, ephemeral)
         return JSONResponse(body_out)
 
     async def gen():
@@ -569,7 +811,15 @@ async def chat_completions(request: Request):
 
         def worker():
             try:
-                out.put(("final", asyncio.run(run_agent(messages, sess, conversational))))
+                if fetching:
+                    text, srcs, tm = fetch_kind()
+                    if srcs:                      # sources first: the stream ends at "final"
+                        out.put(("sources", srcs))
+                    if tm:
+                        out.put(("timings", tm))
+                    out.put(("final", text))
+                else:
+                    out.put(("final", asyncio.run(run_agent(messages, sess, conversational))))
             except Exception as exc:  # noqa: BLE001
                 out.put(("error", f"{type(exc).__name__}: {exc}"))
 
@@ -583,6 +833,8 @@ async def chat_completions(request: Request):
             return f"data: {json.dumps(payload)}\n\n"
 
         yield frame({"role": "assistant", "content": ""})
+        if sess.get("media"):
+            yield "data: " + json.dumps({"media": sess.pop("media")}) + "\n\n"
         started = time.time()
         while True:
             try:
@@ -596,10 +848,18 @@ async def chat_completions(request: Request):
                     yield ": keepalive\n\n"
                 continue
             if kind == "final":
+                record(sess.get("key", ""), requested, "user", last_user, ephemeral)
+                record(sess.get("key", ""), requested, "assistant", payload, ephemeral)
                 for word in re.findall(r"\S+\s*", payload):
                     yield frame({"content": word})
                     await asyncio.sleep(0.012)
                 break
+            if kind == "sources":
+                yield "data: " + json.dumps({"model": requested, "sources": payload}) + "\n\n"
+                continue
+            if kind == "timings":
+                yield "data: " + json.dumps({"model": requested, "timings": payload}) + "\n\n"
+                continue
             yield frame({"content": f"\n\n_[{payload}]_\n\n"})
         yield frame({}, finish="stop")
         yield "data: [DONE]\n\n"
