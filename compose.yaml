@@ -197,7 +197,7 @@ services:
     # it is GPU-bound; measured 88% GPU busy, ~200% CPU only in short bursts).
     # Proper fix if this is ever revisited: build on the rocm6.4 torch wheels
     # like Higgs. Note that needs HSA_OVERRIDE_GFX_VERSION=12.0.1 for gfx1201.
-    cpus: 0.5
+    cpus: 0.5          # half a core: the poller's ceiling
   vox-audio-generation:
     image: vox-conjurata-vox-audio-generation:latest
     build:
