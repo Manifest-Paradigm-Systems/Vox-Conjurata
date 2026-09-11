@@ -26,8 +26,10 @@ services:
     - OLLAMA_URL=http://vox-llm-openrouter:8081
     - VISION_READER_URL=http://vox-vision-reader:8000
     - STT_URL=http://vox-voice:5000
-    - TTS_ACTOR_URL=http://vox-audio-core:8000
-    - TTS_MONSTER_URL=http://vox-audio-core:8000
+    # voices-adapter (host service) fronts Higgs voices:8024 with the legacy
+    # vox-audio-core API — vox-audio-core itself is retired.
+    - TTS_ACTOR_URL=http://192.168.0.62:7863
+    - TTS_MONSTER_URL=http://192.168.0.62:7863
     - TTS_MUSIC_URL=http://vox-audio-generation:8000
     - TTS_SFX_URL=http://vox-audio-generation:8000
     - IMAGE_GEN_URL=http://vox-vision-gen:8003
