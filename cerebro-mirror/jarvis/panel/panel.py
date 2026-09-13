@@ -129,15 +129,35 @@ async def transcribe(request: Request):
 
 @app.post("/api/chat")
 async def chat(payload: dict):
+    """Chat, streaming when the caller asks for it.
+
+    The live page streams so it can start SPEAKING the first sentence while the
+    rest is still being written — so SSE is relayed straight through rather
+    than buffered into a single JSON reply."""
     body = dict(payload)
     body.setdefault("model", "jarvis")
-    body["stream"] = False
-    try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(180.0, connect=8.0)) as c:
-            r = await c.post(f"{BRAIN_URL}/v1/chat/completions", json=body)
-    except httpx.HTTPError as exc:
-        return JSONResponse({"error": str(exc)}, status_code=502)
-    return Response(content=r.content, status_code=r.status_code, media_type="application/json")
+    if not body.get("stream"):
+        body["stream"] = False
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(180.0, connect=8.0)) as c:
+                r = await c.post(f"{BRAIN_URL}/v1/chat/completions", json=body)
+        except httpx.HTTPError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=502)
+        return Response(content=r.content, status_code=r.status_code,
+                        media_type="application/json")
+
+    async def relay():
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=8.0)) as c:
+                async with c.stream("POST", f"{BRAIN_URL}/v1/chat/completions", json=body) as r:
+                    async for line in r.aiter_lines():
+                        yield line + "\n"
+        except httpx.HTTPError as exc:
+            yield "data: " + json.dumps({"choices": [{"delta": {
+                "content": "_[connection lost] %s_" % exc}}]}) + "\n\n"
+
+    return StreamingResponse(relay(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 FEATURED_VOICES = [v.strip() for v in
@@ -255,7 +275,7 @@ async def viz_proxy(path: str, request: Request):
     return Response(content=r.content, status_code=r.status_code, headers=headers)
 
 
-PAGE = """<!doctype html>
+PAGE = r"""<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -405,7 +425,7 @@ function decide(yes) {
 """
 
 
-LIVE_PAGE = """<!doctype html>
+LIVE_PAGE = r"""<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -553,6 +573,85 @@ setInterval(() => {
     setState('idle');
   }
 }, 5000);
+
+/** Render one piece of text to audio. 503 = Higgs's queue is full: back off. */
+async function renderSpeech(text) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const r = await fetchWithTimeout('/api/speak', {method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({input: text, voice: VOICE})}, 240000);
+    if (r.ok) return r.blob();
+    if (r.status !== 503) throw new Error('speak ' + r.status);
+    await new Promise(res => setTimeout(res, 400));
+  }
+  return null;
+}
+
+/** Play one rendered clip; resolves when it ends (or fails). */
+function playBlob(blob) {
+  const url = URL.createObjectURL(blob);
+  return new Promise((resolve) => {
+    const audio = new Audio(url);
+    audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
+    audio.onerror = () => { URL.revokeObjectURL(url); resolve(); };
+    audio.play().catch(() => resolve());
+  });
+}
+
+/** Speaks text AS IT ARRIVES.
+ *
+ * The old path waited for the whole reply, then rendered, then played — so a
+ * long answer was seconds of silence followed by a wall of speech. Here each
+ * completed sentence is rendered and queued the moment the model finishes it,
+ * so he starts talking while the rest is still being written. Rendering runs
+ * ahead of playback, but playback is strictly sequential: overlapping speech
+ * would be gibberish. */
+class Speaker {
+  constructor() { this.buf = ''; this.queue = []; this.busy = false; this.failed = false; }
+  push(piece) {
+    this.buf += piece;
+    // Break at a real sentence end only (terminator + space + capital), or at
+    // the end of a completed line — the same rule the chunker uses.
+    let m;
+    while ((m = this.buf.match(/^([\s\S]*?[.!?]+)\s+(?=["'(\[]?[A-Z0-9])/))) {
+      const sentence = m[1].trim();
+      this.buf = this.buf.slice(m[0].length);
+      if (sentence) this.enqueue(sentence);
+    }
+  }
+  enqueue(s) {
+    this.queue.push(s);
+    if (!this.busy && !this.failed) this.pump();
+  }
+  async pump() {
+    if (this.busy || this.failed) return;
+    this.busy = true;
+    while (this.queue.length) {
+      const s = this.queue.shift();
+      try {
+        beginSpeaking();
+        setState('speaking');
+        const blob = await renderSpeech(s);
+        if (!blob) continue;
+        await playBlob(blob);
+      } catch (err) {
+        console.log('jarvis: speak failed ' + err);
+        this.failed = true;               // one failure, not a queue of them
+        break;
+      }
+    }
+    this.busy = false;
+  }
+  /** Flush whatever is left and wait for the queue to drain. */
+  async finish() {
+    const rest = this.buf.trim();
+    this.buf = '';
+    if (rest) this.enqueue(rest);
+    while (this.busy || this.queue.length) {
+      await new Promise(r => setTimeout(r, 50));
+    }
+  }
+}
 
 function beginSpeaking() {
   speaking = true;
@@ -724,143 +823,77 @@ function looksLikeEcho(text) {
 async function ask(text) {
   setState('thinking…');
   history.push({role:'user', content:text});
-  let reply = '', voiceChanged = null;
+  let reply = '';
+  const speaker = new Speaker();
+  let voiceChanged = null, media = null;
+
   try {
     const r = await fetchWithTimeout('/api/chat', {method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({messages: history, model: MODEL, ephemeral: INCOGNITO})}, 120000);
-    const d = await r.json();
-    reply = d.choices?.[0]?.message?.content || '';
-    if (d.voice && d.voice !== VOICE) {
-      VOICE = d.voice; voiceChanged = d.voice;
-      localStorage.setItem('jarvis.voice', VOICE);
-      applyVoice(VOICE);
-    }
-    // A sound or a piece of music was asked for: play it instead of narrating
-    // it. Saying the line as well would talk over what they asked to hear.
-    if (d.media && d.media.url) {
-      say('jarvis', reply);
-      history.push({role:'assistant', content:reply});
-      lastSpoken = reply;
-      setState('speaking'); beginSpeaking();
-      console.log('jarvis: playing ' + d.media.kind + ' ' + d.media.name);
-      await playMedia(d.media);
-      speaking = false;
-      micGuardUntil = Date.now() + MIC_GUARD_MS;
-      setState('idle');
-      return;
+      body: JSON.stringify({messages: history, model: MODEL,
+                            ephemeral: INCOGNITO, stream: true})}, 120000);
+    if (!r.ok) throw new Error('chat ' + r.status);
+
+    const reader = r.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, {stream: true});
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const payload = line.slice(6).trim();
+        if (!payload || payload === '[DONE]') continue;
+        let d;
+        try { d = JSON.parse(payload); } catch (err) { continue; }
+        if (d.media) { media = d.media; continue; }
+        if (d.voice) { voiceChanged = d.voice; continue; }
+        const piece = d.choices && d.choices[0] && d.choices[0].delta
+                      ? (d.choices[0].delta.content || '') : '';
+        if (!piece) continue;
+        reply += piece;
+        // Speak it as it lands — but only once we know it is not a directive
+        // line, which the brain holds back before sending.
+        speaker.push(piece);
+      }
     }
   } catch (err) {
     console.log('jarvis: chat failed ' + err);
     say('system', 'No answer came back — try that again.');
-    setState('idle'); return;
+    setState('idle');
+    return;
   }
+
+  reply = reply.trim();
   console.log('jarvis: reply chars=' + reply.length);
   if (!reply) { setState('idle'); return; }
   say('jarvis', reply);
   history.push({role:'assistant', content:reply});
   if (history.length > 24) history = history.slice(-24);
-  lastSpoken = reply;          // what the mic must not be allowed to answer
+  lastSpoken = reply;
 
-  setState('speaking');
-  beginSpeaking();
-  try {
-    await speakReply(reply);
-    console.log('jarvis: spoke ' + reply.length + ' chars');
-  } catch (err) {
-    console.log('jarvis: playback blocked ' + err);
+  if (voiceChanged && voiceChanged !== VOICE) {
+    VOICE = voiceChanged;
+    localStorage.setItem('jarvis.voice', VOICE);
+    applyVoice(VOICE);
+  }
+  if (media) {
+    // He was asked to play something: play that, and stop the narration that
+    // was already streaming — talking over it would be rude.
+    speaker.failed = true;
+    speaker.queue = [];
+    setState('speaking'); beginSpeaking();
+    console.log('jarvis: playing ' + media.kind + ' ' + media.name);
+    await playMedia(media);
+  } else {
+    await speaker.finish();
   }
   speaking = false;
   micGuardUntil = Date.now() + MIC_GUARD_MS;
   setState('idle');
-}
-
-/** Play a foley hit or a music track the brain resolved for us. The URL is
-    same-origin (/media/... proxied to the Workhorse), so it just plays. */
-function playMedia(media) {
-  return new Promise((resolve) => {
-    const audio = new Audio(media.url);
-    audio.onended = () => resolve();
-    audio.onerror = () => { console.log('jarvis: media failed ' + media.url); resolve(); };
-    audio.play().catch((err) => { console.log('jarvis: media blocked ' + err); resolve(); });
-  });
-}
-
-/** Split into speakable chunks — sentence-sized, so the first can play early. */
-function chunks(text) {
-  // Break only at a real sentence end: terminator + space + capital. A plain
-  // "split on periods" mangled "llama.cpp" into "llama." + "cpp…", and an
-  // earlier regex attempt silently DROPPED text — hence the preserved-text
-  // check when this was written.
-  // Mask abbreviation periods first so "Dr. Smith" and "3 p.m. It" stay whole.
-  const MASK = '\uE000';   // private-use sentinel (invisible control chars did not survive editing)
-  const ABBREV = /\b(Dr|Mr|Mrs|Ms|Prof|St|vs|etc|e\.g|i\.e|p\.m|a\.m|Jr|Sr|No|Inc|Ltd)\./gi;
-  const masked = (text || '').replace(ABBREV, '$1' + MASK);
-  const parts = masked.replace(/\s+/g, ' ')
-      .split(/(?<=[.!?])\s+(?=["'(\[]?[A-Z0-9])/);
-  const out = [];
-  for (const p of parts) {
-    const s = p.trim();
-    if (!s) continue;
-    // A monster sentence is still worth splitting at a clause.
-    if (s.length > 220) {
-      out.push(...s.split(/[,;:]\s+/).reduce((acc, bit) => {
-        if (acc.length && (acc[acc.length - 1] + ' ' + bit).length <= 220) {
-          acc[acc.length - 1] += ' ' + bit;
-        } else acc.push(bit);
-        return acc;
-      }, []));
-    } else out.push(s);
-  }
-  // Put the masked abbreviation periods back before speaking.
-  const restored = out.map(s => s.split(MASK).join('.'));
-  return restored.length ? restored : [text];
-}
-
-/** Higgs renders at ~1.5x realtime, so synthesising a whole reply before
-    playing it means ~14 s of silence on a two-sentence answer. Render chunk 1,
-    play it, and render the rest WHILE it plays. */
-async function speakReply(reply) {
-  const parts = chunks(reply);
-  // Higgs renders on one GPU worker behind a queue of 4 (a full queue answers
-  // 503), so render ahead — but never more than the queue can hold, and always
-  // PLAY in order: overlapping speech would be gibberish.
-  const MAX_AHEAD = 3;
-  const render = async (text) => {
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const r = await fetchWithTimeout('/api/speak', {method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({input: text, voice: VOICE})}, 240000);
-      if (r.ok) return r.blob();
-      if (r.status !== 503) throw new Error('speak ' + r.status);
-      await new Promise(res => setTimeout(res, 400));   // queue full: back off
-    }
-    return null;
-  };
-
-  // A few workers pull chunks in order; results land in their own slot, then
-  // playback walks the list — so rendering overlaps and speech never does.
-  const rendered = new Array(parts.length).fill(null);
-  let cursor = 0;
-  const worker = async () => {
-    while (cursor < parts.length) {
-      const i = cursor++;
-      try { rendered[i] = await render(parts[i]); }
-      catch (err) { console.log('jarvis: chunk ' + i + ' failed ' + err); }
-    }
-  };
-  await Promise.all(Array.from({length: Math.min(MAX_AHEAD, parts.length)}, worker));
-
-  for (const blob of rendered) {
-    if (!blob) continue;
-    const url = URL.createObjectURL(blob);
-    await new Promise((resolve) => {
-      const audio = new Audio(url);
-      audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
-      audio.onerror = () => { URL.revokeObjectURL(url); resolve(); };
-      audio.play().catch(() => resolve());
-    });
-  }
 }
 
 function resample(input, inRate, outRate) {

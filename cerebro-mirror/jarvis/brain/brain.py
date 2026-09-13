@@ -431,19 +431,113 @@ PROTOCOL = (
 
 
 def build_conversationalist(sess: dict) -> Agent:
-    prompt = (
-        f"{load_persona()}\n\n"
-        "You are the VOICE — the one the human actually talks to. You are quick, and you stay "
-        "quick: you never sit in silence while heavy work happens. Keep replies short — this is "
-        "speech, not an essay: one to three sentences unless asked for detail."
-        f"{PROTOCOL}"
-    )
     return Agent(
         name="jarvis",
-        prompt=prompt,
+        prompt=conversational_prompt(),
         config=OpenAIConfig(model=CONVERSATIONAL_MODEL, api_key="local",
                             base_url=f"{CONVERSATIONAL_URL}/v1"),
     )
+
+
+def conversational_prompt() -> str:
+    return (
+        f"{load_persona()}\n\n"
+        "You are the VOICE — the one the human actually talks to. You are quick, and you stay "
+        "quick: you never sit in silence while heavy work happens. Give as much detail as the "
+        "question deserves — several paragraphs when that genuinely helps, a sentence when it "
+        "does not. This is speech, so keep the STRUCTURE of speech: no headings, no bullet "
+        "lists, no markdown; just well-organised prose that a person would say aloud."
+        f"{PROTOCOL}"
+    )
+
+
+def stream_conversational(messages: list[dict], sess: dict):
+    """Yield the reply as it is written, straight from the actor lane.
+
+    This exists to overlap thinking with speaking: the caller can start talking
+    about sentence one while sentence three is still being generated. AG2 is not
+    in this path — its tools never executed (see apply_directives), so all it
+    contributed here was assembling a prompt, and it cannot stream anyway.
+
+    @@ directive lines are held back rather than spoken: they are instructions
+    to the house, not things to say. They are applied once the reply finishes.
+    """
+    convo = [{"role": "system", "content": conversational_prompt()}]
+    convo += to_ag2_messages(messages, sess, conversational=True)
+    payload = {"model": CONVERSATIONAL_MODEL, "messages": convo, "stream": True,
+               "max_tokens": int(os.getenv("JARVIS_MAX_REPLY_TOKENS", "1200")),
+               "temperature": 0.7}
+    held: list[str] = []
+    buf = ""
+    with httpx.Client(timeout=httpx.Timeout(900.0, connect=8.0)) as c:
+        with c.stream("POST", f"{CONVERSATIONAL_URL}/v1/chat/completions", json=payload) as r:
+            r.raise_for_status()
+            for line in r.iter_lines():
+                if not line.startswith("data:"):
+                    continue
+                data = line[5:].strip()
+                if data == "[DONE]":
+                    break
+                try:
+                    delta = json.loads(data)["choices"][0].get("delta", {})
+                except (ValueError, KeyError, IndexError):
+                    continue
+                piece = delta.get("content") or delta.get("reasoning_content") or ""
+                if not piece:
+                    continue
+                buf += piece
+                # Emit whole lines only, so a directive can never be half-spoken.
+                while "\n" in buf:
+                    ln, buf = buf.split("\n", 1)
+                    if ln.strip().startswith("@@"):
+                        held.append(ln)
+                    else:
+                        yield ln + "\n"
+    tail = buf.rstrip()
+    if tail:
+        if tail.lstrip().startswith("@@"):
+            held.append(tail)
+        else:
+            yield tail
+    if held:
+        apply_directives("\n".join(held), sess)
+
+
+_STREAM_DONE = object()
+
+
+async def _aiter_stream(messages: list[dict], sess: dict):
+    """Run the blocking stream_conversational generator off the event loop and
+    yield its pieces as they arrive.
+
+    httpx's sync streaming API is a plain generator, so a worker thread feeds a
+    queue and this drains it. Polling every 30 ms is deliberate: it is far below
+    the granularity of speech, and it avoids holding a thread-pool slot per open
+    stream the way `await asyncio.to_thread(q.get)` would.
+    """
+    q: queue.Queue = queue.Queue()
+
+    def run():
+        try:
+            for piece in stream_conversational(messages, sess):
+                q.put(piece)
+        except Exception as exc:  # noqa: BLE001
+            q.put(("__error__", exc))
+        finally:
+            q.put(_STREAM_DONE)
+
+    threading.Thread(target=run, daemon=True).start()
+    while True:
+        try:
+            item = q.get_nowait()
+        except queue.Empty:
+            await asyncio.sleep(0.03)
+            continue
+        if item is _STREAM_DONE:
+            return
+        if isinstance(item, tuple) and item and item[0] == "__error__":
+            raise item[1]
+        yield item
 
 
 DIRECTOR_PROTOCOL = (
@@ -473,49 +567,47 @@ def build_director(sess: dict) -> Agent:
     )
 
 
+def apply_directives(text: str, sess: dict) -> str:
+    """Act on the conversational @@ directives in a finished reply.
+
+    Separate from apply_protocol because the streaming path collects directive
+    lines while the reply is still being written (it must not speak them) and
+    only gets to act on them at the end."""
+    delegations = DELEGATE_RE.findall(text)
+    text = DELEGATE_RE.sub("", text).strip()
+    for target, task in delegations:
+        start_job(target.lower(), task.strip())
+        if not text:
+            text = (f"Of course, sir — I've put that in front of the "
+                    f"{target.lower()} and will report back shortly.")
+    for kind, description in PLAY_RE.findall(text):
+        media = find_media(kind.lower(), description.strip())
+        text = PLAY_RE.sub("", text).strip()
+        if media:
+            sess["media"] = media
+            emit("media", name=media["name"], url=media["url"],
+                 score=media.get("score"), source=media["kind"])
+        else:
+            emit("media_error", kind=kind, query=description[:120])
+            text = f"{text}\n\n_[nothing in the {kind} library matched “{description}”]_".strip()
+    voice_match = VOICE_RE.search(text)
+    if voice_match:
+        wanted = voice_match.group(1).strip()
+        chosen = resolve_voice(wanted)
+        text = VOICE_RE.sub("", text).strip()
+        if chosen:
+            sess["voice"] = chosen
+            text = f"{text}\n\n_[voice → {chosen}]_".strip()
+        else:
+            text = f"{text}\n\n_[no voice matches “{wanted}”]_".strip()
+    return re.sub(r"\s*@@\s*$", "", text, flags=re.MULTILINE).strip()
+
+
 def apply_protocol(reply: str, sess: dict, conversational: bool) -> str:
     """Turn the model's @@ directives into real work, and return what the human
     sees (directives stripped, handoff results inlined)."""
     if conversational:
-        delegations = DELEGATE_RE.findall(reply)
-        text = DELEGATE_RE.sub("", reply).strip()
-        for target, task in delegations:
-            job = start_job(target.lower(), task.strip())
-            if not text:
-                text = (f"Of course, sir — I've put that in front of the "
-                        f"{target.lower()} and will report back shortly.")
-        for kind, description in PLAY_RE.findall(text):
-            media = find_media(kind.lower(), description.strip())
-            text = PLAY_RE.sub("", text).strip()
-            if media:
-                sess["media"] = media
-                # emit()'s first parameter is already called kind — do not
-                # splat a dict that carries its own.
-                emit("media", name=media["name"], url=media["url"],
-                     score=media.get("score"), source=media["kind"])
-            else:
-                emit("media_error", kind=kind, query=description[:120])
-                text = f"{text}\n\n_[nothing in the {kind} library matched “{description}”]_".strip()
-        voice_match = VOICE_RE.search(text)
-        if voice_match:
-            wanted = voice_match.group(1).strip()
-            chosen = resolve_voice(wanted)
-            text = VOICE_RE.sub("", text).strip()
-            if chosen:
-                sess["voice"] = chosen
-                # Say what it became — otherwise the model's "as you wish" is
-                # all the human gets, with no idea which voice was picked.
-                text = f"{text}\n\n_[voice → {chosen}]_".strip()
-            else:
-                text = (f"{text}\n\n_[no voice in the library matches "
-                        f"“{wanted}”]_").strip()
-        # If the model replied with nothing but directives, do not fall back to
-        # the raw reply — that would show "@@PLAY foley: …" to the human.
-        text = re.sub(r"\s*@@\s*$", "", text, flags=re.MULTILINE).strip()
-        if not text:
-            text = "Of course, sir — here it is."
-        return text
-
+        return apply_directives(reply, sess) or "Of course, sir — here it is."
     plan_match = PLAN_RE.search(reply)
     if plan_match:
         plan = plan_match.group(1).strip()
@@ -570,10 +662,15 @@ def to_ag2_messages(messages: list[dict], sess: dict, conversational: bool) -> l
         question = next((m.get("content") or "" for m in reversed(out)
                          if m.get("role") == "user"), "")
         if question and len(question) > 12:
-            hits = recall(question, limit=4)
+            # Kept small on purpose: every token here is prompt the model must
+            # read before it can say a word, and it is read BEFORE the reply
+            # starts. Measured: a 4x400-char memory block cost ~2.3s of
+            # time-to-first-token — far more than it was worth. Three short
+            # excerpts still carry the gist.
+            hits = recall(question, limit=3)
             if hits:
                 excerpts = "\n".join(f"- [{time.strftime('%Y-%m-%d', time.localtime(h['ts']))}"
-                                     f" {h['role']}] {h['content'][:400]}" for h in hits)
+                                     f" {h['role']}] {h['content'][:200]}" for h in hits)
                 out.append({"role": "system", "content":
                             "Things said before that may bear on this (your memory; use only what "
                             f"is genuinely relevant, and do not read this list aloud):\n{excerpts}"})
@@ -833,6 +930,42 @@ async def chat_completions(request: Request):
     async def gen():
         cid = f"chatcmpl-{uuid.uuid4().hex[:24]}"
         created = int(time.time())
+
+        def frame_of(delta: dict, finish=None) -> str:
+            payload = {"id": cid, "object": "chat.completion.chunk", "created": created,
+                       "model": requested,
+                       "choices": [{"index": 0, "delta": delta, "finish_reason": finish}]}
+            return f"data: {json.dumps(payload)}\n\n"
+
+        # The conversationalist streams for real: the client hears the first
+        # sentence while the rest is still being written. This is the whole
+        # point of the split — speech overlaps generation instead of waiting
+        # for it.
+        if conversational and not fetching:
+            yield frame_of({"role": "assistant", "content": ""})
+            said = []
+            try:
+                async for piece in _aiter_stream(messages, sess):
+                    said.append(piece)
+                    yield frame_of({"content": piece})
+            except Exception as exc:  # noqa: BLE001
+                yield frame_of({"content": f"\n\n_[trouble: {type(exc).__name__}: {exc}]_"})
+            text = "".join(said).strip()
+            if not text:
+                text = "Of course, sir — here it is."
+                yield frame_of({"content": text})
+            record(sess.get("key", ""), requested, "user", last_user, ephemeral)
+            record(sess.get("key", ""), requested, "assistant", text, ephemeral)
+            media = sess.pop("media", None)
+            if media:
+                yield "data: " + json.dumps({"media": media}) + "\n\n"
+            voice = sess.pop("voice", None)
+            if voice:
+                yield "data: " + json.dumps({"voice": voice}) + "\n\n"
+            yield frame_of({}, finish="stop")
+            yield "data: [DONE]\n\n"
+            return
+
         out: queue.Queue = queue.Queue()
 
         def worker():
