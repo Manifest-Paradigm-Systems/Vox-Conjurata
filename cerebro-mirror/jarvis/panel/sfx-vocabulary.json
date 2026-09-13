@@ -33,14 +33,14 @@
       "trim": 0.35,
       "means": "reaching outside the house",
       "when": "brain emits web_start (search or news)",
-      "gain": 0.20
+      "gain": 0.2
     },
     "found": {
       "sound": "Computer Device Power Up Activation Conformation Lo-Fi 06.opus",
       "trim": 0.8,
       "means": "I have what I need",
       "when": "brain emits web_done",
-      "gain": 0.20
+      "gain": 0.2
     },
     "verify": {
       "sound": "UIAlert_Collect Scifi Futuristic Electronic Bass Burst Sweep Heavy 04_ESM_FG2.opus",
@@ -60,7 +60,7 @@
       "trim": 0.6,
       "means": "here is the thing you asked to hear",
       "when": "brain emits media (about to play sound or music)",
-      "gain": 0.20
+      "gain": 0.2
     },
     "shift": {
       "sound": "UIMisc_Xylophone Ringtone 2_CB Sounddesign_APPlicable Sounds.opus",
@@ -68,7 +68,30 @@
       "means": "I am changing something about myself",
       "when": "brain emits a voice change (session voice field)",
       "gain": 0.22
+    },
+    "bed": {
+      "sound": "DRONE Server Room Loop.opus",
+      "trim": 8,
+      "means": "he is in the room, working",
+      "when": "loops under the whole time he is thinking; never on a turn of its own",
+      "gain": 0.1,
+      "loop": true
+    },
+    "rise": {
+      "sound": "Digital-Horror - RISE - Crushed time 02.opus",
+      "trim": 3,
+      "means": "something significant is starting",
+      "when": "a delegation begins (job_start)",
+      "gain": 0.18
+    },
+    "impact": {
+      "sound": "EffectiveTrailer_Booms_Vol2_075.opus",
+      "trim": 2.2,
+      "means": "this one matters",
+      "when": "a plan arrives for approval — the reference clip's sub-bass hit",
+      "gain": 0.28
     }
   },
-  "_silence": "Deliberately absent: a sound for every turn of conversation, a sound over the top of his own speech, and anything on the phone line. A vocabulary only works because it is not used constantly."
+  "_silence": "Deliberately absent: a sound for every turn of conversation, a sound over the top of his own speech, and anything on the phone line. A vocabulary only works because it is not used constantly.",
+  "_layers": "Three layers, after the reference clip: a BED (a server-room hum that loops while he works — the reference's buzzing texture), IMPACTS (sub-bass thuds that land a significant moment — 57-140 Hz in the reference), and STINGS (short discrete punctuation for quick state changes). The reference has no beeps at all: its language is texture and weight."
 }
