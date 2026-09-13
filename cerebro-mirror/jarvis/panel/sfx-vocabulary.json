@@ -168,11 +168,20 @@
       "means": "he has finished speaking",
       "when": "the last sentence of a turn finishes playing — the bookend to `ack`",
       "gain": 0.22
+    },
+    "chatter": {
+      "sound": "built from 27 library UI sounds, timed to the reference clip's first 10s",
+      "trim": 10.4,
+      "means": "the machine is working out loud",
+      "when": "loops UNDER his speech, at about a tenth of the voice's level",
+      "gain": 0.11,
+      "loop": true
     }
   },
   "_silence": "Deliberately absent: a sound for every turn of conversation, a sound over the top of his own speech, and anything on the phone line. A vocabulary only works because it is not used constantly.",
   "_layers": "Three layers, after the reference clip: a BED (a server-room hum that loops while he works — the reference's buzzing texture), IMPACTS (sub-bass thuds that land a significant moment — 57-140 Hz in the reference), and STINGS (short discrete punctuation for quick state changes). The reference has no beeps at all: its language is texture and weight.",
   "_cue_layer": "Cues fire DURING speech, matched to the SHAPE of a sentence rather than to an event: agreement, refusal, a reveal, a hedge, a warning, a list item, a conclusion. This is the 'almost another language' layer — the words carry meaning, the cues carry tone of voice. At most one cue per sentence, and never over the first sentence (that one gets the ack).",
   "_emphasis": "Accents land UNDER key words while he speaks. Higgs returns no word timings, so a word's moment is estimated from its character position within the sentence and scheduled against the clip's real duration — good enough to land near the word, not on the syllable. At most three per sentence, and only on numbers or on words an emphasis marker ('especially', 'precisely', 'most importantly') points at.",
-  "_bookends": "`ack` opens a turn and `close` ends it: the same kalimba, the second one time-reversed, so the pair reads as one instrument being switched on and off rather than two unrelated chimes."
+  "_bookends": "`ack` opens a turn and `close` ends it: the same kalimba, the second one time-reversed, so the pair reads as one instrument being switched on and off rather than two unrelated chimes.",
+  "_chatter": "The chatter bed is deliberately dense — 34 small sounds in 10s, one every ~0.29s, using the reference clip's measured rhythm as its timing template. Its sounds are drawn from the owner's own library (UI/beep/click/readout/glitch families). It sits at rms 0.034 against speech at 0.1-0.3, so it reads as the room he works in rather than as another voice competing with him."
 }
