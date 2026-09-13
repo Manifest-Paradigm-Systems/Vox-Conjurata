@@ -1,0 +1,74 @@
+{
+  "_about": "Jarvis's sonic vocabulary. Each entry maps a conversational EVENT (which the brain already emits on /events) to a sound from the foley library. The design intent: the words carry the content, these carry the STATE — like a console, not a soundtrack. Rare enough that each one means something.",
+  "_timing": "Sounds fire at SENTENCE BOUNDARIES, never mid-word — the client already chunks speech by sentence, so an event that arrives mid-sentence queues its sound for the next boundary. This is the rule that makes it read as language rather than as noise.",
+  "_trim": "Sources marked with `trim` are longer than the punctuation they are doing; the panel serves the first N seconds.",
+  "events": {
+    "ack": {
+      "sound": "CB_Sounddesign - Applicable Sounds - Organic UI and Building Games SFX/UIMisc_Kalimba 3 Up_CB Sounddesign_APPlicable Sounds.opus",
+      "means": "I am speaking now",
+      "when": "start of every spoken turn",
+      "gain": 0.25
+    },
+    "think": {
+      "sound": "Computer Processing Electronic Long 06.opus",
+      "trim": 0.9,
+      "means": "working on it",
+      "when": "the model is generating; delegated work is running",
+      "gain": 0.18
+    },
+    "handoff": {
+      "sound": "Glitch Transition (21).opus",
+      "means": "passing this to someone else",
+      "when": "brain emits job_start (coder or director)",
+      "gain": 0.22
+    },
+    "done": {
+      "sound": "Interface Accept Glassy Snap.opus",
+      "means": "that came back",
+      "when": "brain emits job_done",
+      "gain": 0.25
+    },
+    "search": {
+      "sound": "Beep.opus",
+      "trim": 0.35,
+      "means": "reaching outside the house",
+      "when": "brain emits web_start (search or news)",
+      "gain": 0.20
+    },
+    "found": {
+      "sound": "Computer Device Power Up Activation Conformation Lo-Fi 06.opus",
+      "trim": 0.8,
+      "means": "I have what I need",
+      "when": "brain emits web_done",
+      "gain": 0.20
+    },
+    "verify": {
+      "sound": "UIAlert_Collect Scifi Futuristic Electronic Bass Burst Sweep Heavy 04_ESM_FG2.opus",
+      "trim": 0.7,
+      "means": "this needs you, not me",
+      "when": "brain emits plan (awaiting approval)",
+      "gain": 0.22
+    },
+    "fault": {
+      "sound": "Broken_Robot_Morphing_Short_Static_Pitch_Confused_Glitch_02.opus",
+      "means": "that did not work",
+      "when": "brain emits job_failed, media_error, or a refused tool call",
+      "gain": 0.22
+    },
+    "present": {
+      "sound": "Digital-Horror - WHOOSH - Decked.opus",
+      "trim": 0.6,
+      "means": "here is the thing you asked to hear",
+      "when": "brain emits media (about to play sound or music)",
+      "gain": 0.20
+    },
+    "shift": {
+      "sound": "UIMisc_Xylophone Ringtone 2_CB Sounddesign_APPlicable Sounds.opus",
+      "trim": 0.5,
+      "means": "I am changing something about myself",
+      "when": "brain emits a voice change (session voice field)",
+      "gain": 0.22
+    }
+  },
+  "_silence": "Deliberately absent: a sound for every turn of conversation, a sound over the top of his own speech, and anything on the phone line. A vocabulary only works because it is not used constantly."
+}

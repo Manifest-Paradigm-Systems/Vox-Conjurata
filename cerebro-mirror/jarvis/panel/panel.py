@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import json
 import os
+import pathlib
+import subprocess
 import time
 
 import httpx
@@ -37,12 +39,64 @@ VALID_STATES = {"idle", "listening", "thinking", "speaking"}
 # (UCS category UI). Played client-side at low volume when Jarvis starts
 # speaking — it is a UI sound, so it exists only where there is a screen, which
 # is also why nothing needs to suppress it on a phone line.
+# ---- the sonic vocabulary -------------------------------------------------
+# A map of conversational EVENT -> sound from the foley library. The words
+# carry content; these carry STATE, which is why they are rare and why they
+# fire at sentence boundaries rather than over his speech.
+VOCAB_PATH = os.getenv("JARVIS_SFX_VOCAB",
+                       "/var/home/admin/jarvis/panel/sfx-vocabulary.json")
+FOLEY_ROOT = os.getenv(
+    "JARVIS_FOLEY_ROOT",
+    "/var/home/EvokeStudio/manifest-paradigm/cinematome/data/foley/pack")
+
+
+def load_vocabulary() -> dict:
+    """The vocabulary is DATA here, not files.
+
+    The panel runs on cerebro and the foley library lives on the Workhorse, so
+    checking each entry against a local path would drop all of them (it did).
+    Whether a sting can actually be produced is the adapter's business; this
+    only needs each event's meaning and mix level.
+    """
+    try:
+        raw = json.loads(pathlib.Path(VOCAB_PATH).read_text())
+    except (OSError, ValueError) as exc:
+        print(f"[panel] no sfx vocabulary ({exc})", flush=True)
+        return {}
+    events = raw.get("events") or {}
+    print(f"[panel] sfx vocabulary: {len(events)} events", flush=True)
+    return events
+
+
+VOCABULARY = load_vocabulary()
+
+
 CHIRP_PATH = os.getenv(
     "JARVIS_CHIRP_PATH",
     "CB_Sounddesign - Applicable Sounds - Organic UI and Building Games SFX/"
     "UIMisc_Kalimba 3 Up_CB Sounddesign_APPlicable Sounds.opus")
 
 app = FastAPI(title="jarvis docks")
+
+
+@app.get("/api/sfx/{event}")
+async def sfx(event: str):
+    """One sting, proxied from the adapter (the audio lives on the Workhorse)."""
+    if event not in VOCABULARY:
+        return JSONResponse({"error": f"no sting for {event!r}"}, status_code=404)
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=8.0)) as c:
+            r = await c.get(f"{TTS_URL}/stings/{event}")
+    except httpx.HTTPError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=502)
+    return Response(content=r.content, status_code=r.status_code, media_type="audio/ogg")
+
+
+@app.get("/api/sfx")
+async def sfx_catalogue():
+    """What the vocabulary contains — the client fetches this once."""
+    return {e: {"means": s.get("means"), "when": s.get("when"), "gain": s.get("gain", 0.2)}
+            for e, s in VOCABULARY.items()}
 
 
 def _write_bus(name: str, payload: str) -> None:
@@ -433,6 +487,15 @@ es.onmessage = ev => {
     line('coder_done bad', 'brain: ' + esc(e.error));
   }
 };
+// The brain's event stream is the trigger source: delegation, completion,
+// searches, faults and approvals all arrive here already.
+const sfxSource = new EventSource('/events');
+sfxSource.onmessage = ev => {
+  let e; try { e = JSON.parse(ev.data); } catch (err) { return; }
+  const sting = EVENT_STING[e.kind];
+  if (sting) queueSting(sting);
+};
+
 function decide(yes) {
   fetch('/approve', {method:'POST', headers:{'Content-Type':'application/json'},
                      body: JSON.stringify({approved: yes})})
@@ -649,6 +712,7 @@ class Speaker {
     while (this.queue.length) {
       const s = this.queue.shift();
       try {
+        flushSting();                     // the sting lands in the gap
         beginSpeaking();
         setState('speaking');
         const blob = await renderSpeech(s);
@@ -672,6 +736,51 @@ class Speaker {
     }
   }
 }
+
+// ---- sonic vocabulary -----------------------------------------------------
+// Sounds that carry STATE, not content. They are queued when an event arrives
+// and fired at the next SENTENCE BOUNDARY — landing a sting mid-word is the
+// difference between a language and a nuisance.
+const STINGS = {};          // name -> {url, gain}
+let pendingStings = [];
+
+/** Which conversational event maps to which sting. Mirrors the vocabulary the
+ *  panel serves at /api/sfx. */
+const EVENT_STING = {
+  job_start: 'handoff', coder_start: 'handoff',
+  job_done: 'done', coder_done: 'done',
+  web_start: 'search', web_done: 'found',
+  plan: 'verify',
+  job_failed: 'fault', media_error: 'fault',
+  media: 'present',
+  voice: 'shift',
+};
+
+function queueSting(name) {
+  const s = STINGS[name];
+  if (!s || pendingStings.length >= 2) return;   // never stack up a queue of noise
+  pendingStings.push(name);
+}
+
+/** Called as each sentence starts — stings land in the gaps, not over words. */
+function flushSting() {
+  const name = pendingStings.shift();
+  if (!name || !STINGS[name]) return;
+  try {
+    const a = new Audio(STINGS[name].url);
+    a.volume = STINGS[name].gain;
+    a.play().catch(() => {});
+  } catch (err) { /* a sting is never worth an error */ }
+}
+
+fetch('/api/sfx').then(r => r.json()).then(cat => {
+  Object.keys(cat).forEach(name => {
+    fetch('/api/sfx/' + name)
+      .then(r => r.ok ? r.blob() : null)
+      .then(b => { if (b) STINGS[name] = {url: URL.createObjectURL(b), gain: cat[name].gain || 0.2}; })
+      .catch(() => {});
+  });
+}).catch(() => {});
 
 let chirpBlob = null;
 fetch('/api/chirp').then(r => r.ok ? r.blob() : null).then(b => { chirpBlob = b; }).catch(() => {});
@@ -1044,6 +1153,15 @@ es.onmessage = ev => {
   openSheet(true);
   say('system', 'A plan is waiting for your approval.');
 };
+// The brain's event stream is the trigger source: delegation, completion,
+// searches, faults and approvals all arrive here already.
+const sfxSource = new EventSource('/events');
+sfxSource.onmessage = ev => {
+  let e; try { e = JSON.parse(ev.data); } catch (err) { return; }
+  const sting = EVENT_STING[e.kind];
+  if (sting) queueSting(sting);
+};
+
 function decide(yes) {
   // No session key: the brain approves the newest pending plan, which is the
   // one this sheet is showing.
