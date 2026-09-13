@@ -97,8 +97,65 @@
       "means": "I heard you",
       "when": "the moment your words come back from the ears, before he starts thinking",
       "gain": 0.24
+    },
+    "cue_yes": {
+      "sound": "Interface Pop High Short.opus",
+      "trim": 0.45,
+      "means": "he is agreeing",
+      "when": "a sentence that affirms",
+      "gain": 0.2,
+      "cue": true
+    },
+    "cue_no": {
+      "sound": "Interface Deny Low Fat Dark.opus",
+      "trim": 0.7,
+      "means": "he cannot do that",
+      "when": "a sentence that refuses or rules out",
+      "gain": 0.2,
+      "cue": true
+    },
+    "cue_reveal": {
+      "sound": "DSGNStngr_Power Up Bright Positive Successful Light Saturation Crash Shimmer 05_ESM_AG.opus",
+      "trim": 1.4,
+      "means": "he has found it",
+      "when": "a sentence that presents a result",
+      "gain": 0.2,
+      "cue": true
+    },
+    "cue_unsure": {
+      "sound": "Deny Muted.opus",
+      "trim": 0.6,
+      "means": "he is not certain",
+      "when": "a sentence that hedges",
+      "gain": 0.2,
+      "cue": true
+    },
+    "cue_weight": {
+      "sound": "EffectiveTrailer_Booms_Vol2_011.opus",
+      "trim": 2.0,
+      "means": "this matters",
+      "when": "a sentence carrying a warning",
+      "gain": 0.2,
+      "cue": true
+    },
+    "cue_tick": {
+      "sound": "UIClick_UI Button Analog Vintage Double Click Neutral Dry Press 11_ESM_BG.opus",
+      "trim": 0.3,
+      "means": "one item of a list",
+      "when": "each item as he enumerates",
+      "gain": 0.2,
+      "cue": true
+    },
+    "cue_resolve": {
+      "sound": "MAGShim_Shimmer Loop Small Bell Metal Taps_ESM_SGA3.opus",
+      "trim": 1.2,
+      "means": "he is drawing a conclusion",
+      "when": "the sentence that sums up",
+      "gain": 0.2,
+      "cue": true
     }
   },
   "_silence": "Deliberately absent: a sound for every turn of conversation, a sound over the top of his own speech, and anything on the phone line. A vocabulary only works because it is not used constantly.",
-  "_layers": "Three layers, after the reference clip: a BED (a server-room hum that loops while he works — the reference's buzzing texture), IMPACTS (sub-bass thuds that land a significant moment — 57-140 Hz in the reference), and STINGS (short discrete punctuation for quick state changes). The reference has no beeps at all: its language is texture and weight."
+  "_layers": "Three layers, after the reference clip: a BED (a server-room hum that loops while he works — the reference's buzzing texture), IMPACTS (sub-bass thuds that land a significant moment — 57-140 Hz in the reference), and STINGS (short discrete punctuation for quick state changes). The reference has no beeps at all: its language is texture and weight.",
+  "_cue_layer": "Cues fire DURING speech, matched to the SHAPE of a sentence rather than to an event: agreement, refusal, a reveal, a hedge, a warning, a list item, a conclusion. This is the 'almost another language' layer — the words carry meaning, the cues carry tone of voice. At most one cue per sentence, and never over the first sentence (that one gets the ack)."
 }

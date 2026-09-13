@@ -690,7 +690,10 @@ function playBlob(blob) {
  * ahead of playback, but playback is strictly sequential: overlapping speech
  * would be gibberish. */
 class Speaker {
-  constructor() { this.buf = ''; this.queue = []; this.busy = false; this.failed = false; }
+  constructor() {
+    this.buf = ''; this.queue = []; this.busy = false; this.failed = false;
+    this.spoke = false;      // has this turn produced a sentence yet?
+  }
   push(piece) {
     this.buf += piece;
     // Break at a real sentence end only (terminator + space + capital), or at
@@ -703,16 +706,23 @@ class Speaker {
     }
   }
   enqueue(s) {
-    this.queue.push(s);
+    // The first sentence of a turn already gets the ack; a cue there would be
+    // two sounds in the same instant, so it waits for the next one.
+    this.queue.push({text: s, cue: this.spoke ? detectCue(s) : null, ack: !this.spoke});
+    this.spoke = true;
     if (!this.busy && !this.failed) this.pump();
   }
   async pump() {
     if (this.busy || this.failed) return;
     this.busy = true;
     while (this.queue.length) {
-      const s = this.queue.shift();
+      const item = this.queue.shift();
+      const s = item.text;
       try {
-        flushSting();                     // the sting lands in the gap
+        // One sound per sentence boundary, never two: a cue if the sentence
+        // has one, otherwise a pending event sting.
+        if (item.cue) playSting(item.cue);   // the sentence's own cue wins
+        else flushSting();                   // otherwise a pending event sting
         beginSpeaking();
         setState('speaking');
         const blob = await renderSpeech(s);
@@ -747,14 +757,32 @@ let pendingStings = [];
 /** Which conversational event maps to which sting. Mirrors the vocabulary the
  *  panel serves at /api/sfx. */
 const EVENT_STING = {
-  job_start: 'handoff', coder_start: 'handoff',
-  job_done: 'done', coder_done: 'done',
+  job_start: 'rise', coder_start: 'rise',      // something significant is starting
+  job_done: 'done', coder_done: 'done',        // the snap: it came back
   web_start: 'search', web_done: 'found',
-  plan: 'verify',
+  plan: 'impact',                              // weight: this one needs YOU
   job_failed: 'fault', media_error: 'fault',
   media: 'present',
   voice: 'shift',
 };
+
+// Cues fire DURING speech, matched to the SHAPE of a sentence rather than to an
+// event: agreement, refusal, a reveal, a hedge, a warning, a conclusion. The
+// words carry meaning; these carry tone of voice. Order matters — a warning
+// beats a hedge, and a reveal beats agreement.
+const CUES = [
+  ['cue_weight',  /\b(importantly|critical|crucial|be careful|caution|warning|urgent|dangerous|must not|do not touch)\b/i],
+  ['cue_no',      /\b(cannot|can't|won't|unable|impossible|refus\w*|denied|no longer|afraid not)\b/i],
+  ['cue_reveal',  /\b(I (?:have )?found|I've found|here (?:it|they) (?:is|are)|I (?:have )?located|it (?:appears|seems) that|turns out|I have it)\b/i],
+  ['cue_unsure',  /\b(perhaps|maybe|possibly|uncertain|unclear|not sure|not certain|might be|could be)\b/i],
+  ['cue_resolve', /\b(in short|in summary|to summari[sz]e|therefore|which means|all told|on balance)\b/i],
+  ['cue_yes',     /\b(certainly|of course|indeed|absolutely|agreed|quite right|exactly so)\b/i],
+];
+
+function detectCue(sentence) {
+  for (const [name, re] of CUES) if (re.test(sentence)) return name;
+  return null;
+}
 
 function queueSting(name) {
   const s = STINGS[name];
@@ -762,7 +790,35 @@ function queueSting(name) {
   pendingStings.push(name);
 }
 
+// The bed is not a sting: it is the room he is in. It loops, very quietly,
+// for as long as he is working — the reference clip's sustained electronic
+// texture rather than another punctuation mark.
+let bedAudio = null;
+function bed(on) {
+  if (on) {
+    if (bedAudio || !STINGS.bed) return;
+    try {
+      bedAudio = new Audio(STINGS.bed.url);
+      bedAudio.loop = true;
+      bedAudio.volume = STINGS.bed.gain;
+      bedAudio.play().catch(() => { bedAudio = null; });
+    } catch (err) { bedAudio = null; }
+  } else if (bedAudio) {
+    try { bedAudio.pause(); bedAudio = null; } catch (err) { bedAudio = null; }
+  }
+}
+
 /** Called as each sentence starts — stings land in the gaps, not over words. */
+function playSting(name) {
+  const s = STINGS[name];
+  if (!s) return;
+  try {
+    const a = new Audio(s.url);
+    a.volume = s.gain;
+    a.play().catch(() => {});
+  } catch (err) { /* never worth an error */ }
+}
+
 function flushSting() {
   const name = pendingStings.shift();
   if (!name || !STINGS[name]) return;
@@ -820,6 +876,7 @@ function setState(s) {
   $('stateChip').textContent = label;
   $('stateChip').style.borderColor = (s === 'speaking' ? 'var(--ok)' :
                                       s === 'listening…' ? 'var(--warn)' : 'var(--line)');
+  bed(s.startsWith('think') || s.startsWith('transcri') || s === 'listening…');
   const btn = $('liveBtn');
   btn.classList.toggle('speaking', s === 'speaking');
   btn.classList.toggle('thinking', s.startsWith('think') || s.startsWith('transcri'));
@@ -947,6 +1004,7 @@ async function finishUtterance() {
     return;
   }
   say('you', text);
+  queueSting('heard');       // "I heard you" — before the thinking beat
   ask(text);
 }
 
@@ -1196,6 +1254,7 @@ $('typeBox').addEventListener('keydown', e => {
   if (!text) return;
   e.target.value = '';
   say('you', text);
+  queueSting('heard');       // "I heard you" — before the thinking beat
   ask(text);
 });
 setState('idle');
