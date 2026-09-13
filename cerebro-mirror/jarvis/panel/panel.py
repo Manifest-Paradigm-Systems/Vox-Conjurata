@@ -1152,6 +1152,7 @@ async function ask(text) {
     await playMedia(media);
   } else {
     await speaker.finish();
+    if (!speaker.failed) playSting('close');   // the bookend to `ack`
   }
   speaking = false;
   micGuardUntil = Date.now() + MIC_GUARD_MS;
