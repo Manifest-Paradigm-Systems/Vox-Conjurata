@@ -153,9 +153,18 @@
       "when": "the sentence that sums up",
       "gain": 0.2,
       "cue": true
+    },
+    "accent": {
+      "sound": "CLOCKTick_Crooked Antique Clock_344 Audio_Antique Clocks.opus",
+      "trim": 0.15,
+      "means": "this word is the point",
+      "when": "under a number or a word an emphasis marker points at, during speech",
+      "gain": 0.13,
+      "accent": true
     }
   },
   "_silence": "Deliberately absent: a sound for every turn of conversation, a sound over the top of his own speech, and anything on the phone line. A vocabulary only works because it is not used constantly.",
   "_layers": "Three layers, after the reference clip: a BED (a server-room hum that loops while he works — the reference's buzzing texture), IMPACTS (sub-bass thuds that land a significant moment — 57-140 Hz in the reference), and STINGS (short discrete punctuation for quick state changes). The reference has no beeps at all: its language is texture and weight.",
-  "_cue_layer": "Cues fire DURING speech, matched to the SHAPE of a sentence rather than to an event: agreement, refusal, a reveal, a hedge, a warning, a list item, a conclusion. This is the 'almost another language' layer — the words carry meaning, the cues carry tone of voice. At most one cue per sentence, and never over the first sentence (that one gets the ack)."
+  "_cue_layer": "Cues fire DURING speech, matched to the SHAPE of a sentence rather than to an event: agreement, refusal, a reveal, a hedge, a warning, a list item, a conclusion. This is the 'almost another language' layer — the words carry meaning, the cues carry tone of voice. At most one cue per sentence, and never over the first sentence (that one gets the ack).",
+  "_emphasis": "Accents land UNDER key words while he speaks. Higgs returns no word timings, so a word's moment is estimated from its character position within the sentence and scheduled against the clip's real duration — good enough to land near the word, not on the syllable. At most three per sentence, and only on numbers or on words an emphasis marker ('especially', 'precisely', 'most importantly') points at."
 }
