@@ -90,6 +90,13 @@
       "means": "this one matters",
       "when": "a plan arrives for approval — the reference clip's sub-bass hit",
       "gain": 0.28
+    },
+    "heard": {
+      "sound": "Micro UI Readout Sound Mechanical 10.opus",
+      "trim": 0.7,
+      "means": "I heard you",
+      "when": "the moment your words come back from the ears, before he starts thinking",
+      "gain": 0.24
     }
   },
   "_silence": "Deliberately absent: a sound for every turn of conversation, a sound over the top of his own speech, and anything on the phone line. A vocabulary only works because it is not used constantly.",
