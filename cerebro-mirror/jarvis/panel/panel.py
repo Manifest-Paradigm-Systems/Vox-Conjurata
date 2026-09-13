@@ -671,10 +671,17 @@ async function renderSpeech(text) {
 }
 
 /** Play one rendered clip; resolves when it ends (or fails). */
-function playBlob(blob) {
+function playBlob(blob, sentence) {
   const url = URL.createObjectURL(blob);
   return new Promise((resolve) => {
     const audio = new Audio(url);
+    if (sentence) {
+      audio.addEventListener('loadedmetadata', () => {
+        if (isFinite(audio.duration) && audio.duration > 0.4) {
+          scheduleAccents(audio, keyWordTimes(sentence, audio.duration));
+        }
+      });
+    }
     audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
     audio.onerror = () => { URL.revokeObjectURL(url); resolve(); };
     audio.play().catch(() => resolve());
@@ -727,7 +734,7 @@ class Speaker {
         setState('speaking');
         const blob = await renderSpeech(s);
         if (!blob) continue;
-        await playBlob(blob);
+        await playBlob(blob, s);
       } catch (err) {
         console.log('jarvis: speak failed ' + err);
         this.failed = true;               // one failure, not a queue of them
@@ -793,19 +800,71 @@ function queueSting(name) {
 // The bed is not a sting: it is the room he is in. It loops, very quietly,
 // for as long as he is working — the reference clip's sustained electronic
 // texture rather than another punctuation mark.
-let bedAudio = null;
-function bed(on) {
-  if (on) {
-    if (bedAudio || !STINGS.bed) return;
+// One continuous floor under the whole conversation, not just under the
+// thinking: he should sound like he exists between sentences too. The work
+// lift raises it while he is actually busy rather than starting and stopping.
+const FLOOR_GAIN = 0.05;      // present, never noticed
+function bed(working) {
+  const target = working ? (STINGS.bed ? STINGS.bed.gain : 0.10) : FLOOR_GAIN;
+  if (!STINGS.bed) return;
+  if (!bedAudio) {
     try {
       bedAudio = new Audio(STINGS.bed.url);
       bedAudio.loop = true;
-      bedAudio.volume = STINGS.bed.gain;
+      bedAudio.volume = FLOOR_GAIN;
       bedAudio.play().catch(() => { bedAudio = null; });
-    } catch (err) { bedAudio = null; }
-  } else if (bedAudio) {
-    try { bedAudio.pause(); bedAudio = null; } catch (err) { bedAudio = null; }
+    } catch (err) { bedAudio = null; return; }
   }
+  // glide to the new level so the lift is felt rather than heard as a step
+  const from = bedAudio.volume, steps = 12;
+  let k = 0;
+  const glide = setInterval(() => {
+    k += 1;
+    if (!bedAudio) { clearInterval(glide); return; }
+    bedAudio.volume = from + (target - from) * (k / steps);
+    if (k >= steps) clearInterval(glide);
+  }, 60);
+}
+
+/** The floor starts when the mic arms and stops when it stops — it belongs to
+ *  the conversation, not to the page. */
+function floorFollow() {
+  if (running) bed(false);
+  else if (bedAudio) { try { bedAudio.pause(); } catch (err) {} bedAudio = null; }
+}
+
+// ---- emphasis ------------------------------------------------------------
+// Higgs returns no word timings, so a key word's moment is ESTIMATED by
+// character position within the sentence and scheduled against the audio's
+// real duration. That is approximate by nature — good enough to land an accent
+// near the word, not good enough to promise it on the syllable.
+const EMPHASIS_MARKER = /^(especially|particularly|notably|crucially|precisely|exactly|above all|most importantly)$/i;
+
+function keyWordTimes(sentence, duration) {
+  const words = sentence.split(/\s+/).filter(Boolean);
+  const total = words.reduce((n, w) => n + w.length + 1, 0) || 1;
+  const times = [];
+  let acc = 0;
+  for (let i = 0; i < words.length; i++) {
+    const bare = words[i].replace(/[^\w'\-]/g, '');
+    const isNumber = /^\d[\d,.%]*$/.test(bare);
+    const marked = i > 0 && EMPHASIS_MARKER.test(words[i - 1]);
+    // A number is worth accenting however short it is ("42"), but a marked
+    // word needs body — "especially a" should not tick.
+    if (isNumber || (marked && bare.length > 2)) times.push((acc / total) * duration);
+    acc += words[i].length + 1;
+  }
+  return times.slice(0, 3);          // at most three accents in one sentence
+}
+
+/** Fire accents under the words as the clip plays. */
+function scheduleAccents(audio, times) {
+  times.forEach(offset => {
+    setTimeout(() => {
+      if (audio.paused || audio.ended) return;
+      playSting('accent');
+    }, Math.max(0, offset * 1000));
+  });
 }
 
 /** Called as each sentence starts — stings land in the gaps, not over words. */
@@ -1242,6 +1301,7 @@ $('liveBtn').onclick = async () => {
     if (stream) stream.getTracks().forEach(t => t.stop());
     if (ctx) ctx.close();
     $('liveBtn').classList.remove('on', 'speaking', 'thinking');
+    floorFollow();
     setState('idle');
   } else {
     try { await start(); }
