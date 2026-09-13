@@ -33,6 +33,14 @@ BUS_DIR = os.getenv("JARVIS_BUS_DIR", "/var/home/admin/jarvis/viz-bus")
 # straight from the panel — no adb, no cable. Source: ~/jarvis-android.
 APK_PATH = os.getenv("JARVIS_APK_PATH", "/var/home/admin/jarvis/jarvis.apk")
 VALID_STATES = {"idle", "listening", "thinking", "speaking"}
+# The conversational sting: a sub-second rising kalimba from the Sonniss pack
+# (UCS category UI). Played client-side at low volume when Jarvis starts
+# speaking — it is a UI sound, so it exists only where there is a screen, which
+# is also why nothing needs to suppress it on a phone line.
+CHIRP_PATH = os.getenv(
+    "JARVIS_CHIRP_PATH",
+    "CB_Sounddesign - Applicable Sounds - Organic UI and Building Games SFX/"
+    "UIMisc_Kalimba 3 Up_CB Sounddesign_APPlicable Sounds.opus")
 
 app = FastAPI(title="jarvis docks")
 
@@ -234,6 +242,17 @@ async def viz_state():
 @app.get("/config")
 async def viz_config():
     return await _viz_get("config")
+
+
+@app.get("/api/chirp")
+async def chirp():
+    """The sting itself, same-origin so the page can just play it."""
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=8.0)) as c:
+            r = await c.get(f"{TTS_URL}/media/foley/audio", params={"path": CHIRP_PATH})
+    except httpx.HTTPError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=502)
+    return Response(content=r.content, status_code=r.status_code, media_type="audio/ogg")
 
 
 @app.get("/media/{path:path}")
@@ -548,6 +567,7 @@ let micGuardUntil = 0;
 let lastSpoken = '';              // for echo rejection, see looksLikeEcho()
 let lastLevelLog = 0;             // keeps the mic-level trace readable
 let speakingSince = 0;
+let chirpedThisTurn = false;     // one sting per turn, not one per sentence
 
 /** Every client fetch gets a deadline.
  *
@@ -653,9 +673,24 @@ class Speaker {
   }
 }
 
+let chirpBlob = null;
+fetch('/api/chirp').then(r => r.ok ? r.blob() : null).then(b => { chirpBlob = b; }).catch(() => {});
+
+/** The little UI sting that says "the machine is talking now". Quiet, and
+ *  never allowed to delay or break speech — if it fails, he just talks. */
+function chirp() {
+  if (!chirpBlob) return;
+  try {
+    const a = new Audio(URL.createObjectURL(chirpBlob));
+    a.volume = 0.25;
+    a.play().catch(() => {});
+  } catch (err) { /* a sting is never worth an error */ }
+}
+
 function beginSpeaking() {
   speaking = true;
   speakingSince = Date.now();
+  if (!chirpedThisTurn) { chirpedThisTurn = true; chirp(); }
 }
 let VOICE = localStorage.getItem('jarvis.voice') || '';
 let FACE = localStorage.getItem('jarvis.face') || '';
@@ -821,6 +856,7 @@ function looksLikeEcho(text) {
 
 /* ---- one path for typed and spoken turns ------------------------------ */
 async function ask(text) {
+  chirpedThisTurn = false;
   setState('thinking…');
   history.push({role:'user', content:text});
   let reply = '';
