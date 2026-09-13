@@ -804,6 +804,7 @@ function queueSting(name) {
 // thinking: he should sound like he exists between sentences too. The work
 // lift raises it while he is actually busy rather than starting and stopping.
 const FLOOR_GAIN = 0.05;      // present, never noticed
+let bedAudio = null;         // the floor's audio element, if it is up
 function bed(working) {
   const target = working ? (STINGS.bed ? STINGS.bed.gain : 0.10) : FLOOR_GAIN;
   if (!STINGS.bed) return;
