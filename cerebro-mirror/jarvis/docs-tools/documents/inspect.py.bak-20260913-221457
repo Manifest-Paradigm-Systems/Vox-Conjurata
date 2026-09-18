@@ -1,0 +1,28 @@
+import pdfplumber
+from PyPDF2 import PdfReader
+
+def inspect_pdf(pdf_path):
+    form_fields = {}
+    blank_regions = []
+
+    # Extract form fields using PyPDF2
+    reader = PdfReader(pdf_path)
+    if '/AcroForm' in reader.trailer.get('/Root', {}):
+        fields = reader.get_fields()
+        for field_name, field in fields.items():
+            form_fields[field_name] = field.get('/V')
+
+    # Detect blank regions using pdfplumber
+    with pdfplumber.open(pdf_path) as pdf:
+        for page in pdf.pages:
+            text = page.extract_text()
+            if not text:
+                blank_regions.append({
+                    'page_number': page.page_number + 1,
+                    'dimensions': page.cropbox
+                })
+
+    return {
+        'form_fields': form_fields,
+        'blank_regions': blank_regions
+    }

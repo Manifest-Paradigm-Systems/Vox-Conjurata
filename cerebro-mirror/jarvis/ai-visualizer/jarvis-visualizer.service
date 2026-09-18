@@ -1,0 +1,19 @@
+# jarvis-visualizer (cerebro, USER unit — linger already enabled)
+# Upstream ai-visualizer, UNMODIFIED (AGPL-3.0-or-later, © 2026 Jared
+# Rhodenizer). It binds 127.0.0.1 by design; the docks panel proxies it so a
+# browser elsewhere can reach the faces.
+# Bus files (.voice_state / .voice_waveform) are written by the docks panel.
+[Unit]
+Description=Jarvis visualizer faces (ai-visualizer, upstream)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/var/home/admin/jarvis/ai-visualizer
+ExecStart=/usr/bin/python3 server.py --no-open
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,7 @@
+pypdf
+pdfplumber
+PyMuPDF
+reportlab
+Pillow
+pytest
+click

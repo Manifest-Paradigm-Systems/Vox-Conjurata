@@ -1,0 +1,19 @@
+# jarvis-docks (cerebro, USER unit — linger already enabled)
+# The architect panel: agent activity + approval gate + the proxied face.
+[Unit]
+Description=Jarvis architect docks (panel), port 8093
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/var/home/admin/jarvis/panel
+Environment=JARVIS_BRAIN_URL=http://127.0.0.1:8092
+Environment=JARVIS_VIZ_URL=http://127.0.0.1:8790
+Environment=JARVIS_BUS_DIR=/var/home/admin/jarvis/viz-bus
+ExecStart=/var/home/admin/jarvis/.venv/bin/uvicorn panel:app --host 0.0.0.0 --port 8093
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

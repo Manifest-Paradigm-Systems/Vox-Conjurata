@@ -739,12 +739,8 @@ LIVE_PAGE = r"""<!doctype html>
 
 <script>
 const SR = 16000;
-// Quiet long enough to end a turn. Was 2000/3200, which after the Kokoro move was
-// the single largest cost in a turn — well over the 400 ms STT and 500 ms TTS it
-// was waiting on. Shortened now that a truncated transcript is REVIEWABLE before
-// it is sent (tap mode), so an early cut costs a glance, not a wrong answer.
-const SILENCE_MS = 1100;          // end a turn after this much quiet
-const SILENCE_LONG_MS = 2000;     // ...more, if they have barely started talking
+const SILENCE_MS = 2000;          // end a turn after this much quiet
+const SILENCE_LONG_MS = 3200;     // ...more, if they have barely started talking
 const MIN_SPEECH_MS = 300;
 const MAX_UTTERANCE_MS = 40000;
 const MIC_GUARD_MS = 900;         // let the speaker (and its tail) die

@@ -1,0 +1,25 @@
+import os
+from pyhanko.pdf_utils.writer import PdfFileWriter
+from pyhanko.sign.fields import SigFieldSpec, SigSeedSubFilter
+from pyhanko.pdf_utils.reader import PdfFileReader
+
+def add_signature_widget(pdf_path, out_path, field_name="Signature1", position=(100, 100), size=(200, 100)):
+    # Open the existing PDF
+    reader = PdfFileReader(pdf_path)
+    writer = PdfFileWriter()
+
+    # Add a signature field to the first page
+    sig_field = SigFieldSpec(
+        sig_field_name=field_name,
+        box=(position[0], position[1], position[0] + size[0], position[1] + size[1]),
+        seed_value_dict={
+            'filter': SigSeedSubFilter.ADOBE_PKCS7_DETACHED
+        }
+    )
+    writer.add_sig_field(writer.pages[0], sig_field)
+
+    # Write the updated PDF to a new file
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    with open(out_path, "wb") as fh:
+        writer.write(fh, reader)
+    return out_path

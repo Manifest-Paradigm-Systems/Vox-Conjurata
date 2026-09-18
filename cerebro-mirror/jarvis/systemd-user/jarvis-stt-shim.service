@@ -1,0 +1,19 @@
+# jarvis-stt-shim (cerebro, USER unit — needs linger: `loginctl enable-linger admin`)
+# OpenAI /v1/audio/transcriptions -> whisper.cpp ears on 127.0.0.1:8085.
+# User unit on purpose: SELinux forbids a system (init_t) unit from executing
+# the venv under /var/home (user_home_t). Linger keeps it up across reboots.
+[Unit]
+Description=Jarvis STT shim (OpenAI -> whisper.cpp :8085)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/var/home/admin/jarvis/stt-shim
+Environment=WHISPER_URL=http://127.0.0.1:8085
+ExecStart=/var/home/admin/jarvis/.venv/bin/uvicorn app:app --host 0.0.0.0 --port 8091
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

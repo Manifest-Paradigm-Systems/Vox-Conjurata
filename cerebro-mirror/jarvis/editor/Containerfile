@@ -1,0 +1,30 @@
+# The editor container — Aider, isolated, on a Python it actually supports.
+#
+# Why a container rather than a venv on cerebro: cerebro runs on Python 3.14, the panel
+# and board services live in ~/jarvis/.venv, and installing a large dependency tree
+# alongside them risks the services for no benefit. The house already uses containers for
+# everything else; this is one more, and it is disposable.
+#
+# Note the deliberate asymmetry with the verify sandbox:
+#
+#   editor  --network=host  (it MUST reach the model lane to do anything)
+#   verify  --network=none  (it must reach nothing at all)
+#
+# The editor is the component that talks to a model; the verifier is the component that
+# decides whether the result is real. Only one of those needs a network, and it is not
+# the one holding the verdict.
+FROM docker.io/library/python:3.12-slim
+
+RUN pip install --no-cache-dir aider-chat==0.86.2
+
+# Runs as root INSIDE, on purpose. Under rootless podman container-root maps back to the
+# invoking host user (~/jarvis/.aider under subuid rules: container uid 1000 becomes an
+# unprivileged subuid that does not own the mounted workspace, so the editor can read the
+# files but never write them). Container-root is host-`admin` and nothing more — verified
+# by the same ownership probe the verify sandbox uses.
+WORKDIR /work
+ENV AIDER_CHECK_UPDATE=false \
+    PYTHONUNBUFFERED=1 \
+    HOME=/root
+
+ENTRYPOINT ["aider"]

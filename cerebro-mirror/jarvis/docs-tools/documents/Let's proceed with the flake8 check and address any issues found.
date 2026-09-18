@@ -1,0 +1,1 @@
+/usr/local/bin/python3.12 -m flake8 --select=E9,F821,F823,F831,F406,F407,F701,F702,F704,F706 --show-source --isolated signature.py

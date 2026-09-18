@@ -11,7 +11,6 @@ Endpoints mirror what the OpenAI SDK sends; `model` is accepted and ignored.
 """
 
 import os
-import re
 
 import httpx
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -23,39 +22,6 @@ TIMEOUT = float(os.getenv("WHISPER_TIMEOUT", "600"))
 
 # whisper.cpp understands these; anything else is normalised to json.
 _PASSTHROUGH_FORMATS = {"json", "verbose_json", "srt", "vtt", "text"}
-
-# Whisper hallucinates a small, famous set of phrases when it is handed silence or
-# non-speech. "Subtitles by the Amara.org community" is the best known -- it is a
-# subtitle credit in the training data, so it is what the model reaches for when there
-# is nothing to transcribe. Passing one of these to the brain invents a question the
-# owner never asked and gets a confident answer to it.
-_HALLUCINATIONS = re.compile(
-    r"^[\s\W]*(?:"
-    r"subtitles?\s+by\s+(?:the\s+)?amara(?:\.org)?(?:\s+community)?"
-    r"|amara(?:\.org)?(?:\s+community)?"
-    r"|www\.amara\.org"
-    r"|transcri(?:pt|bed|ption)\s+by\s+\S+"
-    r"|thanks?\s+(?:you\s+)?for\s+watching"
-    r"|thank\s+you\s+for\s+watching"
-    r"|please\s+(?:like\s+and\s+)?subscribe(?:\s+to\s+my\s+channel)?"
-    r"|subscribe\s+to\s+my\s+channel"
-    r"|you"
-    r")[\s\W]*$",
-    re.IGNORECASE,
-)
-_HALLUCINATION_MAX_CHARS = 120
-
-
-def is_hallucination(text: str) -> bool:
-    """True when this transcript is an artefact of silence rather than speech.
-
-    Length-guarded on purpose: the phrases above are short, and a real sentence that
-    merely contains one of them ("thanks for watching the door while I was out") must
-    still reach the brain."""
-    t = (text or "").strip()
-    if not t or len(t) > _HALLUCINATION_MAX_CHARS:
-        return False
-    return bool(_HALLUCINATIONS.match(t))
 
 app = FastAPI(title="jarvis stt-shim (OpenAI -> whisper.cpp)")
 
@@ -116,7 +82,7 @@ async def transcriptions(
         raise HTTPException(status_code=502, detail=f"whisper failed ({r.status_code}): {r.text[:200]}")
 
     if params["response_format"] == "text":
-        return PlainTextResponse("" if is_hallucination(r.text) else r.text)
+        return PlainTextResponse(r.text)
     if params["response_format"] == "srt":
         return PlainTextResponse(r.text, media_type="text/plain")
     if params["response_format"] == "vtt":
@@ -125,12 +91,6 @@ async def transcriptions(
         data = r.json()
     except ValueError:
         raise HTTPException(status_code=502, detail=f"whisper returned non-JSON: {r.text[:200]}")
-    text = (data.get("text") or "").strip()
-    if is_hallucination(text):
-        # Empty rather than dropped: the caller asked, and "we heard nothing" is the
-        # truthful answer. Jarvis stays quiet instead of answering a subtitle credit.
-        text = ""
     if params["response_format"] == "verbose_json":
-        data["text"] = text
         return data
-    return {"text": text}
+    return {"text": (data.get("text") or "").strip()}

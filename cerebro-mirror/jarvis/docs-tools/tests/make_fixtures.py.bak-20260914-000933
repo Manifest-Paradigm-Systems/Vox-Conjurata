@@ -1,0 +1,71 @@
+import os
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+from PyPDF2 import PdfWriter, PdfReader
+from PyPDF2.pagerange import PageRange
+
+def create_sample_form(output_path):
+    # Create a PDF with a form field using ReportLab
+    c = canvas.Canvas(output_path, pagesize=letter)
+    width, height = letter
+
+    # Add content to the PDF
+    c.drawString(100, height - 100, "Sample Form with Field")
+
+    # Save the PDF
+    c.showPage()
+    c.save()
+
+    # Add a form field using PyPDF2
+    writer = PdfWriter()
+    reader = PdfReader(output_path)
+    writer.add_page(reader.pages[0])
+
+    # Add a text field
+    writer.add_annotation(
+        0,
+        {
+            "/Type": "/Annot",
+            "/Subtype": "/Widget",
+            "/Rect": [100, height - 150, 200, height - 130],
+            "/FT": "/Tx",
+            "/T": "SampleField",
+        }
+    )
+
+    # Write the updated PDF
+    with open(output_path, "wb") as output_file:
+        writer.write(output_file)
+
+def create_sample_flat(output_path):
+    # Create a PDF with no form fields using ReportLab
+    c = canvas.Canvas(output_path, pagesize=letter)
+    width, height = letter
+
+    # Add content to the PDF
+    c.drawString(100, height - 100, "Sample Flat PDF")
+    c.drawString(100, height - 120, "Signature:")
+
+    # Save the PDF
+    c.showPage()
+    c.save()
+
+def main():
+    # Ensure the fixtures directory exists
+    fixtures_dir = "tests/fixtures"
+    os.makedirs(fixtures_dir, exist_ok=True)
+
+    # Ensure the output directory exists
+    output_dir = "tests/output"
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Create the sample form PDF
+    sample_form_path = os.path.join(fixtures_dir, "sample_form.pdf")
+    create_sample_form(sample_form_path)
+
+    # Create the sample flat PDF
+    sample_flat_path = os.path.join(fixtures_dir, "sample_flat.pdf")
+    create_sample_flat(sample_flat_path)
+
+if __name__ == "__main__":
+    main()

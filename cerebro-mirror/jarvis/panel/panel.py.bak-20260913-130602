@@ -18,7 +18,6 @@ Layout: the face is the centrepiece, the docks are the running commentary.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 import pathlib
@@ -87,7 +86,7 @@ async def sfx(event: str):
         return JSONResponse({"error": f"no sting for {event!r}"}, status_code=404)
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=8.0)) as c:
-            r = await c.get(f"{TTS_MEDIA_URL}/stings/{event}")
+            r = await c.get(f"{TTS_URL}/stings/{event}")
     except httpx.HTTPError as exc:
         return JSONResponse({"error": str(exc)}, status_code=502)
     return Response(content=r.content, status_code=r.status_code, media_type="audio/ogg")
@@ -173,12 +172,6 @@ async def approve(payload: dict):
 
 STT_URL = os.getenv("JARVIS_STT_URL", "http://127.0.0.1:8091")
 TTS_URL = os.getenv("JARVIS_TTS_URL", "http://192.168.0.62:7863")
-# Speech and media were one host and are not any more: Jarvis's voice moved to Kokoro
-# (:8025, CPU) so it stops competing with the GPU, while the stings, the chirp and the
-# foley library still live on the voices-adapter on the Workhorse. Keeping them apart is
-# what lets the voice move without taking the sonic vocabulary with it. Defaults to
-# TTS_URL so an unset environment behaves exactly as before.
-TTS_MEDIA_URL = os.getenv("JARVIS_TTS_MEDIA_URL", TTS_URL)
 VOICE = os.getenv("JARVIS_VOICE", "jarvis")
 
 
@@ -191,27 +184,6 @@ async def transcribe(request: Request):
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=8.0)) as c:
             r = await c.post(f"{STT_URL}/v1/audio/transcriptions", content=body, headers=headers)
-    except httpx.HTTPError as exc:
-        return JSONResponse({"error": str(exc)}, status_code=502)
-    return Response(content=r.content, status_code=r.status_code, media_type="application/json")
-
-
-@app.post("/api/vision")
-async def vision(request: Request):
-    """Identify a photo the human attached.
-
-    The same shape as /api/transcribe: the browser posts the image here and the
-    panel forwards it on, so the page stays free of CORS and the brain is never
-    exposed to the network. Raw bytes rather than multipart, for the same
-    reason — neither side then needs a multipart parser.
-    """
-    body = await request.body()
-    if not body:
-        return JSONResponse({"error": "empty image"}, status_code=400)
-    headers = {"content-type": request.headers.get("content-type", "image/jpeg")}
-    try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(240.0, connect=8.0)) as c:
-            r = await c.post(f"{BRAIN_URL}/vision", content=body, headers=headers)
     except httpx.HTTPError as exc:
         return JSONResponse({"error": str(exc)}, status_code=502)
     return Response(content=r.content, status_code=r.status_code, media_type="application/json")
@@ -286,25 +258,14 @@ async def voices():
 async def speak(payload: dict):
     body = {"input": payload.get("input", ""), "voice": payload.get("voice", VOICE),
             "response_format": "mp3"}
-    # Higgs renders a handful of clips at a time and answers 502 for the overflow, so a
-    # reply rendered sentence by sentence loses whichever sentences did not fit. Keeping
-    # the upstream's own status matters: flattening every failure to 502 is what made
-    # the page's "queue is full, back off" retry unreachable.
-    detail, status = "tts unavailable", 502
-    for attempt in range(5):
-        try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=8.0)) as c:
-                r = await c.post(f"{TTS_URL}/v1/audio/speech", json=body)
-        except httpx.HTTPError as exc:
-            detail, status = f"tts unreachable: {exc}", 502
-        else:
-            if r.status_code == 200:
-                return Response(content=r.content, media_type="audio/mpeg")
-            detail, status = f"tts {r.status_code}", r.status_code
-            if r.status_code not in (429, 500, 502, 503):
-                break                    # a real refusal, not a busy queue
-        await asyncio.sleep(0.4 * (attempt + 1))
-    return JSONResponse({"error": detail}, status_code=status)
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=8.0)) as c:
+            r = await c.post(f"{TTS_URL}/v1/audio/speech", json=body)
+    except httpx.HTTPError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=502)
+    if r.status_code != 200:
+        return JSONResponse({"error": f"tts {r.status_code}"}, status_code=502)
+    return Response(content=r.content, media_type="audio/mpeg")
 
 
 @app.post("/api/state")
@@ -342,7 +303,7 @@ async def chirp():
     """The sting itself, same-origin so the page can just play it."""
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=8.0)) as c:
-            r = await c.get(f"{TTS_MEDIA_URL}/media/foley/audio", params={"path": CHIRP_PATH})
+            r = await c.get(f"{TTS_URL}/media/foley/audio", params={"path": CHIRP_PATH})
     except httpx.HTTPError as exc:
         return JSONResponse({"error": str(exc)}, status_code=502)
     return Response(content=r.content, status_code=r.status_code, media_type="audio/ogg")
@@ -353,7 +314,7 @@ async def media_proxy(path: str, request: Request):
     """Foley and music live on the Workhorse (audio stays there); the panel
     re-serves them same-origin so the browser can just play the URL."""
     # The adapter's media routes live under /media — keep the prefix.
-    url = f"{TTS_MEDIA_URL}/media/{path}"
+    url = f"{TTS_URL}/media/{path}"
     if request.url.query:
         url = f"{url}?{request.url.query}"
     try:
@@ -466,7 +427,7 @@ PAGE = r"""<!doctype html>
          placeholder="voice…" style="width:130px">
   <datalist id="voiceList"></datalist>
   <a href="/live"><button>● Live voice</button></a>
-  <a href="/team/"><button>Dev team</button></a>
+  <a href="/team/" target="_blank"><button>Dev team ↗</button></a>
   <a href="http://192.168.0.67:8080" target="_blank"><button>Open WebUI ↗</button></a>
 </header>
 <main>
@@ -601,34 +562,6 @@ LIVE_PAGE = r"""<!doctype html>
            border-radius:10px; padding:10px 12px; font:inherit; cursor:pointer; }
   button:hover { border-color:var(--accent); }
 
-  /* Attaching: the button, the little menu it opens, and the pending photo. */
-  #attachBtn { width:44px; height:44px; flex:0 0 auto; padding:0; border-radius:50%;
-               font-size:22px; line-height:1; color:var(--dim); }
-  #attachBtn.on { border-color:var(--accent); color:var(--accent); }
-  #attachMenu { display:none; position:fixed; z-index:6; padding:6px; border-radius:12px;
-                background:var(--panel); border:1px solid var(--line); }
-  #attachMenu.open { display:block; }
-  #attachMenu button { display:block; width:100%; text-align:left; border:0; background:none;
-                       padding:10px 16px; border-radius:8px; white-space:nowrap; }
-  #attachMenu button:hover { background:rgba(57,208,255,.10); color:var(--accent); }
-
-  /* The photo waiting to be sent. Sits above the bar, tap it to identify. */
-  #pending { display:none; position:fixed; left:14px; right:14px; z-index:5; cursor:pointer;
-             bottom:calc(84px + env(safe-area-inset-bottom));
-             padding:8px; border-radius:12px; background:var(--panel);
-             border:1px solid var(--line); align-items:center; gap:10px; }
-  #pending.open { display:flex; }
-  #pending:hover { border-color:var(--accent); }
-  #pending img { width:44px; height:44px; border-radius:8px; object-fit:cover; flex:0 0 auto; }
-  #pendingLabel { flex:1; min-width:0; font-size:12px; color:var(--dim); }
-  #pendingX { flex:0 0 auto; padding:6px 11px; }
-
-  /* Send appears only when there is something to send — a transcript that just
-     landed, or something you typed. Hidden otherwise, so the bar stays short. */
-  #sendBtn { display:none; width:44px; height:44px; flex:0 0 auto; padding:0;
-             border-radius:50%; font-size:18px; line-height:1;
-             color:var(--accent); border-color:var(--accent); }
-
   #liveBtn { width:56px; height:56px; border-radius:50%; flex:0 0 auto; padding:0;
              display:flex; align-items:center; justify-content:center; gap:3px;
              border:2px solid var(--line); transition:border-color .2s, box-shadow .2s; }
@@ -636,10 +569,6 @@ LIVE_PAGE = r"""<!doctype html>
                   transition:height .09s linear, background .2s; }
   #liveBtn.on { border-color:var(--accent); box-shadow:0 0 18px rgba(57,208,255,.4); }
   #liveBtn.on .bar { background:var(--accent); }
-  /* Tap and hold share one button, so the colour carries the difference: blue is
-     a single question, green is an open session. No label to read, no room taken. */
-  #liveBtn.session { border-color:var(--ok); box-shadow:0 0 18px rgba(74,222,128,.4); }
-  #liveBtn.session .bar { background:var(--ok); }
   #liveBtn.speaking { border-color:var(--ok); box-shadow:0 0 18px rgba(74,222,128,.4); }
   #liveBtn.speaking .bar { background:var(--ok); }
   #liveBtn.thinking { border-color:var(--warn); }
@@ -666,7 +595,6 @@ LIVE_PAGE = r"""<!doctype html>
   #incognitoLbl { display:flex; align-items:center; gap:6px; color:var(--dim); font-size:12px;
                   padding:7px 10px; border:1px solid var(--line); border-radius:8px; cursor:pointer; }
   #incognitoLbl.on { color:var(--ok); border-color:var(--ok); }
-  #micHint { padding:0 16px 8px; color:var(--dim); font-size:11px; flex:0 0 auto; }
   #log { flex:1; overflow-y:auto; padding:4px 16px 16px; }
   .m { margin-bottom:10px; }
   .m .who { color:var(--dim); font-size:11px; letter-spacing:.1em; }
@@ -688,7 +616,6 @@ LIVE_PAGE = r"""<!doctype html>
 <body>
 <iframe id="face" allow="autoplay; microphone"></iframe>
 <div id="stateChip">idle</div>
-<a id="teamLink" href="/team/" title="What the dev team is working on" style="position:fixed;top:10px;right:12px;z-index:60;font:11px ui-monospace,SFMono-Regular,Menlo,monospace;color:#6b8497;text-decoration:none;border:1px solid #16202b;border-radius:6px;padding:4px 9px;background:#0b1016">dev team</a>
 
 <div id="sheet">
   <div id="handle" title="Close"><span></span></div>
@@ -700,9 +627,6 @@ LIVE_PAGE = r"""<!doctype html>
       <input type="checkbox" id="incognito"> incognito
     </label>
   </div>
-  <!-- The mic carries two gestures and a gesture has no affordance of its own,
-       so it is written down once, where the other controls are explained. -->
-  <div id="micHint">Mic: tap for one question · hold for a live session</div>
   <div id="approval">
     <h3>Plan awaiting your approval</h3>
     <div id="planText"></div>
@@ -714,46 +638,23 @@ LIVE_PAGE = r"""<!doctype html>
   <div id="log"></div>
 </div>
 
-<div id="pending">
-  <img id="pendingThumb" alt="">
-  <span id="pendingLabel">Tap to identify this — or type a question and press enter</span>
-  <button id="pendingX" title="Remove">×</button>
-</div>
-
 <div id="bar">
-  <button id="attachBtn" title="Attach an image">+</button>
   <input id="typeBox" placeholder="Ask Jarvis…" autocomplete="off">
-  <button id="sendBtn" title="Send">▸</button>
-  <button id="liveBtn" title="Tap for one question · hold for a live session">
+  <button id="liveBtn" title="Live voice — tap once to arm, again to stop">
     <span class="bar"></span><span class="bar"></span><span class="bar"></span>
   </button>
   <button id="chatBtn" title="Show the conversation">⌃</button>
 </div>
 
-<div id="attachMenu">
-  <button data-mode="camera">Take photo</button>
-  <button data-mode="library">Choose image</button>
-</div>
-<input type="file" id="filePicker" accept="image/*" style="display:none">
-
-
 <script>
 const SR = 16000;
-// Quiet long enough to end a turn. Was 2000/3200, which after the Kokoro move was
-// the single largest cost in a turn — well over the 400 ms STT and 500 ms TTS it
-// was waiting on. Shortened now that a truncated transcript is REVIEWABLE before
-// it is sent (tap mode), so an early cut costs a glance, not a wrong answer.
-const SILENCE_MS = 1100;          // end a turn after this much quiet
-const SILENCE_LONG_MS = 2000;     // ...more, if they have barely started talking
+const SILENCE_MS = 2000;          // end a turn after this much quiet
+const SILENCE_LONG_MS = 3200;     // ...more, if they have barely started talking
 const MIN_SPEECH_MS = 300;
 const MAX_UTTERANCE_MS = 40000;
 const MIC_GUARD_MS = 900;         // let the speaker (and its tail) die
-const HOLD_MS = 400;              // past this, the press is a session, not a question
 
 let ctx, stream, node, analyser, running = false, speaking = false;
-let mode = 'tap';                 // 'tap' = one question, 'async' = live session
-let want = false;                 // does the human still want the mic open?
-let arming = false;               // a start() is in flight, waiting on the device
 let micGuardUntil = 0;
 let lastSpoken = '';              // for echo rejection, see looksLikeEcho()
 let lastLevelLog = 0;             // keeps the mic-level trace readable
@@ -787,18 +688,15 @@ setInterval(() => {
 
 /** Render one piece of text to audio. 503 = Higgs's queue is full: back off. */
 async function renderSpeech(text) {
-  // Back off on ANY server-side failure, not just 503: Higgs answers 502 when it is
-  // full, so `if (r.status !== 503) throw` threw on precisely the case the retry was
-  // written for.
-  for (let attempt = 0; attempt < 4; attempt++) {
+  for (let attempt = 0; attempt < 3; attempt++) {
     const r = await fetchWithTimeout('/api/speak', {method:'POST',
         headers:{'Content-Type':'application/json'},
         body: JSON.stringify({input: text, voice: VOICE})}, 240000);
     if (r.ok) return r.blob();
-    if (r.status < 500 && r.status !== 429) throw new Error('speak ' + r.status);
-    await new Promise(res => setTimeout(res, 500 * (attempt + 1)));
+    if (r.status !== 503) throw new Error('speak ' + r.status);
+    await new Promise(res => setTimeout(res, 400));
   }
-  return null;      // this sentence gave up; the reply continues
+  return null;
 }
 
 /** Play one rendered clip; resolves when it ends (or fails). */
@@ -853,7 +751,6 @@ class Speaker {
   async pump() {
     if (this.busy || this.failed) return;
     this.busy = true;
-    let misses = 0;                       // consecutive, not lifetime
     while (this.queue.length) {
       const item = this.queue.shift();
       const s = item.text;
@@ -867,13 +764,10 @@ class Speaker {
         const blob = await renderSpeech(s);
         if (!blob) continue;
         await playBlob(blob, s);
-        misses = 0;
       } catch (err) {
-        // A failed sentence is a gap, not a reason to abandon the rest. The old
-        // `this.failed = true; break` is what made him go silent mid-reply.
         console.log('jarvis: speak failed ' + err);
-        if (++misses >= 3) { this.failed = true; break; }
-        continue;
+        this.failed = true;               // one failure, not a queue of them
+        break;
       }
     }
     this.busy = false;
@@ -1096,9 +990,7 @@ $('handle').onclick = () => openSheet(false);
 $('chatBtn').onclick = () => openSheet();
 
 /* ---- live audio ------------------------------------------------------- */
-async function start(which) {
-  mode = (which === 'async') ? 'async' : 'tap';
-  want = true;
+async function start() {
   // Deliberately NOT asking for echoCancellation/noiseSuppression: on Android
   // those select the VOICE_COMMUNICATION source, whose AEC can cancel the mic
   // outright — the capture reads digital silence (measured rms 0.0000) while
@@ -1106,13 +998,6 @@ async function start(which) {
   // app instead, by half-duplex playback and looksLikeEcho().
   stream = await navigator.mediaDevices.getUserMedia({audio: {
     echoCancellation: false, noiseSuppression: false, autoGainControl: true}});
-  if (!want) {
-    // They cancelled while the device was still opening. Hand it straight back
-    // rather than coming up armed a moment after they asked for it closed.
-    try { stream.getTracks().forEach(t => t.stop()); } catch (err) {}
-    stream = null;
-    return;
-  }
   ctx = new (window.AudioContext || window.webkitAudioContext)();
   const src = ctx.createMediaStreamSource(stream);
   analyser = ctx.createAnalyser(); analyser.fftSize = 2048; src.connect(analyser);
@@ -1125,28 +1010,8 @@ async function start(which) {
   sink.gain.value = 0;
   src.connect(node); node.connect(sink); sink.connect(ctx.destination);
   running = true;
-  console.log('jarvis: mic open, mode=' + mode + ' rate=' + ctx.sampleRate
-              + ' state=' + ctx.state);
+  console.log('jarvis: mic open, rate=' + ctx.sampleRate + ' state=' + ctx.state);
   $('liveBtn').classList.add('on');
-  $('liveBtn').classList.toggle('session', mode === 'async');
-  setState('idle');
-}
-
-/** Close the mic. Shared by the button and finishUtterance().
- *
- * In tap mode an arm buys exactly ONE utterance, so this fires as soon as they
- * stop talking and there is no window where he is still capturing a room he is
- * no longer being spoken to in — which is how ambient noise got transcribed as a
- * turn in the first place. A session calls this only when you end it.
- */
-function stop() {
-  want = false;                    // authoritative: a start() in flight will bail
-  running = false; recording = false;
-  if (stream) stream.getTracks().forEach(t => t.stop());
-  if (ctx) ctx.close();
-  stream = null; ctx = null;
-  $('liveBtn').classList.remove('on', 'speaking', 'thinking', 'session');
-  floorFollow();
   setState('idle');
 }
 
@@ -1194,25 +1059,18 @@ function onAudio(e) {
 }
 
 async function finishUtterance() {
-  // Read the rate BEFORE stop(): it nulls ctx, and the resample below needs it.
-  const rate = ctx ? ctx.sampleRate : SR;
-  const oneShot = (mode === 'tap');
   recording = false; speechMs = 0; silentMs = 0; bufSpeechMs = 0;
   const total = buf.reduce((n, b) => n + b.length, 0);
   const flat = new Float32Array(total);
   let o = 0; for (const b of buf) { flat.set(b, o); o += b.length; }
   buf = [];
-  // A single question ends here, so the mic goes off the instant they stop and
-  // everything below runs without it. A session is still waiting for the next
-  // turn and leaves the microphone where it is.
-  if (oneShot) stop();
-  if (total / rate < 0.3) { setState('idle'); return; }
-  const wav = encodeWAV(resample(flat, rate, SR), SR);
+  if (total / ctx.sampleRate < 0.3) { setState('idle'); return; }
+  const wav = encodeWAV(resample(flat, ctx.sampleRate, SR), SR);
   setState('transcribing…');
   const fd = new FormData();
   fd.append('file', wav, 'utterance.wav');
   fd.append('model', 'whisper-1');
-  console.log('jarvis: utterance ' + (total / rate).toFixed(1) + 's -> transcribing');
+  console.log('jarvis: utterance ' + (total / ctx.sampleRate).toFixed(1) + 's -> transcribing');
   let text = '';
   try {
     const r = await fetchWithTimeout('/api/transcribe', {method:'POST', body: fd}, 60000);
@@ -1234,44 +1092,9 @@ async function finishUtterance() {
     setState('idle');
     return;
   }
-  if (oneShot) {
-    // Offer it; do not send it. Nothing reaches the brain that the human has not
-    // seen — STT mishears, and it mishears more in a noisy room, so a wrong word
-    // used to become a wrong answer with no chance to catch it.
-    offerTranscript(text);
-  } else {
-    // A session is hands-free by definition: the point of it is never touching
-    // the screen between turns, so a session sends what it hears.
-    submit(text);
-  }
-}
-
-/** Park a transcript in the text box and wait for Send.
- *
- * The box is the existing one, so the transcript is editable in place — fixing
- * one word costs a tap, not a re-record — and Enter still sends, so the
- * keyboard path and the button path end in the same submit().
- */
-function offerTranscript(text) {
-  const box = $('typeBox');
-  box.value = text;
-  $('sendBtn').style.display = 'block';
-  setState('idle');
-  try { box.focus(); } catch (err) {}
-}
-
-/** Send a turn. The one path for typed, corrected and spoken input. */
-function submit(text) {
-  const t = (text || '').trim();
-  if (!t) return;
-  // Clear the box only if it still holds what we are sending — a session must
-  // not wipe something you typed while it was listening.
-  const box = $('typeBox');
-  if (box.value.trim() === t) box.value = '';
-  $('sendBtn').style.display = box.value.trim() ? 'block' : 'none';
-  say('you', t);
+  say('you', text);
   queueSting('heard');       // "I heard you" — before the thinking beat
-  ask(t);
+  ask(text);
 }
 
 /** True when a transcript is mostly words Jarvis just spoke. */
@@ -1288,7 +1111,7 @@ function looksLikeEcho(text) {
 }
 
 /* ---- one path for typed and spoken turns ------------------------------ */
-async function ask(text, vision) {
+async function ask(text) {
   chirpedThisTurn = false;
   setState('thinking…');
   history.push({role:'user', content:text});
@@ -1300,8 +1123,7 @@ async function ask(text, vision) {
     const r = await fetchWithTimeout('/api/chat', {method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({messages: history, model: MODEL,
-                            ephemeral: INCOGNITO, stream: true,
-                            ...(vision ? {vision: vision} : {})})}, 120000);
+                            ephemeral: INCOGNITO, stream: true})}, 120000);
     if (!r.ok) throw new Error('chat ' + r.status);
 
     const reader = r.body.getReader();
@@ -1503,190 +1325,28 @@ function decide(yes) {
 $('approveBtn').onclick = () => decide(true);
 $('rejectBtn').onclick = () => decide(false);
 
-/* ---- showing him a thing ---------------------------------------------- */
-// A photo goes to the brain, which runs the visual_lookup pipeline the VISUAL2
-// work verified (eyes → wiki tiers → image search) and hands back a block of
-// fact about what it read. He then speaks about it in his own voice — the model
-// is told what the eyes saw rather than being shown the picture, because the
-// conversationalist is Kunou and Kunou has no eyes.
-let pendingShot = null;          // {blob, url} — attached, not yet sent
-
-function menuOpen(open) {
-  $('attachMenu').classList.toggle('open', open);
-  $('attachBtn').classList.toggle('on', open);
-}
-
-$('attachBtn').onclick = e => {
-  e.stopPropagation();
-  const r = $('attachBtn').getBoundingClientRect();
-  const m = $('attachMenu');
-  m.style.left = Math.max(8, r.left - 8) + 'px';
-  m.style.bottom = (window.innerHeight - r.top + 8) + 'px';
-  menuOpen(!m.classList.contains('open'));
-};
-document.addEventListener('click', () => menuOpen(false));
-
-for (const b of $('attachMenu').querySelectorAll('button')) {
-  b.onclick = () => {
-    menuOpen(false);
-    const picker = $('filePicker');
-    // `capture` must be set BEFORE the click — it is the browser's only signal
-    // that this is the camera rather than the gallery. On the phone the system
-    // picker offers both anyway; this just chooses which one leads.
-    if (b.dataset.mode === 'camera') picker.setAttribute('capture', 'environment');
-    else picker.removeAttribute('capture');
-    picker.click();
-  };
-}
-
-function setPending(shot) {
-  pendingShot = shot;
-  $('pending').classList.toggle('open', !!shot);
-  if (shot) $('pendingThumb').src = shot.url;
-}
-
-$('pendingX').onclick = e => {
-  e.stopPropagation();
-  if (pendingShot) URL.revokeObjectURL(pendingShot.url);
-  setPending(null);
-};
-$('pending').onclick = () => sendShot();
-
-$('filePicker').onchange = async e => {
-  const file = e.target.files && e.target.files[0];
-  e.target.value = '';                 // so picking the same file twice still fires
-  if (!file) return;
-  try {
-    const shot = await shrink(file);
-    if (pendingShot) URL.revokeObjectURL(pendingShot.url);
-    setPending(shot);
-  } catch (err) {
-    say('system', 'That image could not be read (' + err + ').');
-  }
-};
-
-/** Downscale before sending.
- *
- * A phone photo is several megabytes and the eyes downsample it anyway, so the
- * original is pure upload latency. 1600px on the long edge keeps small markings
- * legible, which is the entire point of the part-number case.
- */
-function shrink(file, maxEdge = 1600, quality = 0.85) {
-  return new Promise((resolve, reject) => {
-    const src = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      try {
-        const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
-        const w = Math.max(1, Math.round(img.width * scale));
-        const h = Math.max(1, Math.round(img.height * scale));
-        const cv = document.createElement('canvas');
-        cv.width = w; cv.height = h;
-        cv.getContext('2d').drawImage(img, 0, 0, w, h);
-        cv.toBlob(blob => {
-          URL.revokeObjectURL(src);
-          if (!blob) return reject(new Error('could not encode it'));
-          resolve({blob, url: URL.createObjectURL(blob), w, h});
-        }, 'image/jpeg', quality);
-      } catch (err) { URL.revokeObjectURL(src); reject(err); }
-    };
-    img.onerror = () => { URL.revokeObjectURL(src); reject(new Error('not an image')); };
-    img.src = src;
-  });
-}
-
-/** Identify the attached photo, then let him talk about it. */
-async function sendShot() {
-  const shot = pendingShot;
-  if (!shot) return;
-  setPending(null);
-  const question = $('typeBox').value.trim();
-  $('typeBox').value = '';
-  say('you', (question ? question + ' ' : '') + '[photo]');
-  queueSting('heard');
-  queueSting('search');       // "reaching outside the house" — the eyes and the wiki
-  setState('thinking…');
-  let view;
-  try {
-    const r = await fetchWithTimeout('/api/vision', {method:'POST',
-      headers:{'Content-Type':'image/jpeg'}, body: shot.blob}, 180000);
-    view = await r.json();
-    if (!r.ok || view.error) throw new Error(view.error || ('vision ' + r.status));
-  } catch (err) {
-    URL.revokeObjectURL(shot.url);
-    say('system', 'The eyes did not answer — ' + err);
-    setState('idle');
-    return;
-  }
-  URL.revokeObjectURL(shot.url);
-  // Show what was read, with the encyclopedia link, so the guess can be checked
-  // rather than taken on faith.
-  const best = (view.candidates || [])[0];
-  say('system', (view.identification ? 'Looks like: ' + view.identification
-                                     : 'I could not name this one.')
-                + (best ? '  ·  ' + best.title + '  ' + best.url : ''));
-  ask(question || 'What is this?', view.context);
-}
-
 /* ---- controls --------------------------------------------------------- */
-/* One button, two gestures.
- *
- * Tap and hold were competing for the same control, and the bar has no room for
- * a second circle without crushing the text box. A press that ends inside
- * HOLD_MS opens the mic for ONE question and then waits for Send; a press that
- * outlives it opens a session that stays armed and sends each turn as it comes.
- * Pressing at all while something is armed ends it.
- */
-const micDenied = () => say('system',
-  'Microphone blocked — use the text box, or allow mic access.');
-let holdTimer = null, holdFired = false, pressStops = false;
-
-function micDown() {
-  holdFired = false;
-  pressStops = running || arming;    // anything already armed or opening ends here
-  if (pressStops) return;
-  holdTimer = setTimeout(() => {
-    holdTimer = null; holdFired = true; arming = true;
-    // the session opens under the finger
-    start('async').catch(micDenied).then(() => { arming = false; });
-  }, HOLD_MS);
-}
-
-function micUp() {
-  if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
-  if (pressStops) { pressStops = false; stop(); return; }
-  // `arming` matters: start() waits on the device, so without it a second tap
-  // arrives while the first is still opening and we get two live captures.
-  if (holdFired || running || arming) return;
-  arming = true;
-  start('tap').catch(micDenied).then(() => { arming = false; });
-}
-
-if (window.PointerEvent) {
-  $('liveBtn').addEventListener('pointerdown', e => { e.preventDefault(); micDown(); });
-  $('liveBtn').addEventListener('pointerup', e => { e.preventDefault(); micUp(); });
-  $('liveBtn').addEventListener('pointercancel', () => {
-    if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
-    holdFired = false;
-    if (pressStops) { pressStops = false; stop(); }
-  });
-} else {
-  // No pointer events: fall back to the old toggle rather than a dead button.
-  $('liveBtn').onclick = async () => {
-    if (running) stop();
-    else { try { await start('tap'); } catch (err) { micDenied(); } }
-  };
-}
-$('sendBtn').onclick = () => submit($('typeBox').value);
-$('typeBox').addEventListener('input', () => {
-  // Keep the button honest about whether there is anything to send.
-  $('sendBtn').style.display = $('typeBox').value.trim() ? 'block' : 'none';
-});
+$('liveBtn').onclick = async () => {
+  if (running) {
+    running = false;
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    if (ctx) ctx.close();
+    $('liveBtn').classList.remove('on', 'speaking', 'thinking');
+    floorFollow();
+    setState('idle');
+  } else {
+    try { await start(); }
+    catch (err) { say('system', 'Microphone blocked — use the text box, or allow mic access.'); }
+  }
+};
 $('typeBox').addEventListener('keydown', e => {
   if (e.key !== 'Enter') return;
-  // An attached photo goes with whatever is in the box — including nothing.
-  if (pendingShot) { sendShot(); return; }
-  submit(e.target.value);
+  const text = e.target.value.trim();
+  if (!text) return;
+  e.target.value = '';
+  say('you', text);
+  queueSting('heard');       // "I heard you" — before the thinking beat
+  ask(text);
 });
 setState('idle');
 </script>

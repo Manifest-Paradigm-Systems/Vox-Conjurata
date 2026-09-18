@@ -31,16 +31,16 @@ _PASSTHROUGH_FORMATS = {"json", "verbose_json", "srt", "vtt", "text"}
 # owner never asked and gets a confident answer to it.
 _HALLUCINATIONS = re.compile(
     r"^[\s\W]*(?:"
-    r"subtitles?\s+by\s+(?:the\s+)?amara(?:\.org)?(?:\s+community)?"
-    r"|amara(?:\.org)?(?:\s+community)?"
-    r"|www\.amara\.org"
-    r"|transcri(?:pt|bed|ption)\s+by\s+\S+"
-    r"|thanks?\s+(?:you\s+)?for\s+watching"
-    r"|thank\s+you\s+for\s+watching"
-    r"|please\s+(?:like\s+and\s+)?subscribe(?:\s+to\s+my\s+channel)?"
-    r"|subscribe\s+to\s+my\s+channel"
-    r"|you"
-    r")[\s\W]*$",
+    r"subtitles?\s+by\b.*"
+    r"|amara\s*\.\s*org.*"
+    r"|www\s*\.\s*amara.*"
+    r"|transcri(?:pt|bed|ption)\s+by\b.*"
+    r"|thanks?\s+(?:you\s+)?for\s+watching.*"
+    r"|thank\s+you\s+for\s+watching.*"
+    r"|please\s+(?:like\s+and\s+)?subscribe.*"
+    r"|subscribe\s+to\s+my\s+channel.*"
+    r"|you\s*"
+    r")\s*$",
     re.IGNORECASE,
 )
 _HALLUCINATION_MAX_CHARS = 120

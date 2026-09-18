@@ -38,7 +38,6 @@ import os
 import queue
 import re
 import sqlite3
-import sys
 import threading
 import time
 import uuid
@@ -776,12 +775,6 @@ def memory_block(question: str, max_facts: int = 4) -> str:
 
 def to_ag2_messages(messages: list[dict], sess: dict, conversational: bool) -> list[dict]:
     out = [m for m in messages if m.get("role") in ("user", "assistant", "system") and m.get("content")]
-    # A photo the human attached this turn. Carried on the session rather than
-    # sent as a client-side system message: session_for() keys the session on the
-    # first system + first user message, so a page composing its own would move
-    # the key — and orphan any plan waiting on approval. Popped, so it colours
-    # exactly the turn that attached it.
-    vision = sess.pop("vision", None)
     if conversational:
         digest = job_digest()
         if digest:
@@ -805,8 +798,6 @@ def to_ag2_messages(messages: list[dict], sess: dict, conversational: bool) -> l
         team = team_digest(question)
         if team:
             out.append({"role": "system", "content": team})
-        if vision:
-            out.append({"role": "system", "content": vision})
         return out
     if sess.get("approved") and sess.get("plan"):
         out.append({"role": "system",
@@ -816,8 +807,6 @@ def to_ag2_messages(messages: list[dict], sess: dict, conversational: bool) -> l
         out.append({"role": "system",
                     "content": "A plan is awaiting the human's verdict. If their last message approves "
                                "it, proceed; otherwise treat it as a revision request."})
-    if vision:
-        out.append({"role": "system", "content": vision})
     return out
 
 
@@ -907,84 +896,6 @@ def run_wiki(messages: list[dict]):
     timings = {"wiki": round(wiki_s, 2), "answer": round(time.time() - t1, 2)}
     emit("web_done", query=question[:120], sources=sources, timings=timings)
     return answer, sources, timings
-
-
-# ------------------------------------------------------------------ vision
-
-TOOLS_DIR = os.getenv("JARVIS_TOOLS_DIR", os.path.expanduser("~/jarvis/tools"))
-UPLOAD_DIR = os.getenv("JARVIS_UPLOAD_DIR", os.path.expanduser("~/jarvis/uploads"))
-
-
-def _visual_lookup():
-    """The VISUAL2 pipeline, imported from where it lives.
-
-    `tools/` is its package root — its own CLI imports `visual_lookup.read` — so
-    it goes on the path rather than being copied here. The tool is the tool.
-    """
-    if TOOLS_DIR not in sys.path:
-        sys.path.insert(0, TOOLS_DIR)
-    from visual_lookup.read import parse_vision_response, query_vision
-    from visual_lookup.resolve import resolve_candidate
-    return query_vision, parse_vision_response, resolve_candidate
-
-
-def identify(image_bytes: bytes) -> dict:
-    """Look at a photo and say what it is. Blocking — run it off the event loop.
-
-    The image is written to a file because that is the shape the pipeline takes
-    (its own CLI reads a path), and it is removed again afterwards: the answer is
-    the text, and these are the owner's own photographs.
-    """
-    query_vision, parse_vision_response, resolve_candidate = _visual_lookup()
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
-    path = os.path.join(UPLOAD_DIR, f"shot-{uuid.uuid4().hex[:12]}.jpg")
-    with open(path, "wb") as fh:
-        fh.write(image_bytes)
-    try:
-        seen = parse_vision_response(query_vision(path))
-        found = resolve_candidate(seen)
-    finally:
-        try:
-            os.unlink(path)
-        except OSError:
-            pass
-    return {**seen, **found}
-
-
-def vision_context(result: dict) -> str:
-    """What the conversationalist is told about the photo it cannot see.
-
-    The eyes and the encyclopedias are the source of fact here; the model's job
-    is to say it in his own voice. So the block carries what was actually read,
-    and an explicit stop on inventing the rest — a 14B model handed a picture
-    description will happily elaborate on it.
-    """
-    lines = ["The human has just shown you a photograph. This is what the eyes read from it:"]
-    if result.get("identification"):
-        lines.append(f"- Identification: {result['identification']}")
-    if result.get("description"):
-        lines.append(f"- Appearance: {result['description']}")
-    markings = result.get("markings") or []
-    if markings:
-        lines.append(f"- Markings: {', '.join(markings)}")
-    candidates = result.get("candidates") or []
-    if candidates:
-        best = candidates[0]
-        lines.append(f"- Encyclopedia: {best.get('title', '')} — {(best.get('extract') or '')[:300]}")
-        if best.get("url"):
-            lines.append(f"  {best['url']}")
-        if len(candidates) > 1:
-            lines.append("- Other matches: "
-                         + "; ".join(c.get("title", "") for c in candidates[1:4]))
-    elif result.get("sources"):
-        lines.append("- No encyclopedia entry matched. Pictures of it: "
-                     + "; ".join(s.get("title", "") for s in result["sources"][:3]))
-    if result.get("unavailable"):
-        lines.append(f"- (Could not be reached: {', '.join(result['unavailable'])})")
-    lines.append("Tell them what it is, in your own voice, in a sentence or two — no lists, and "
-                 "do not read this back. Use only what is here; do not invent detail beyond it. "
-                 "If it is not something you can name, say what you can see.")
-    return "\n".join(lines)
 
 
 async def run_agent(messages: list[dict], sess: dict, conversational: bool) -> str:
@@ -1081,31 +992,6 @@ async def approve(payload: dict):
     return {"status": "approved" if approved else "rejected", "plan": plan[:400]}
 
 
-@app.post("/vision")
-async def vision(request: Request):
-    """Identify a photo the human attached in the panel.
-
-    Raw bytes rather than multipart, for the same reason the panel's
-    /api/transcribe reads a raw body and forwards it: neither side then needs a
-    multipart parser, and the image is passed along exactly as it arrived.
-
-    Returns the pipeline's reading plus `context` — the block the panel hands
-    back to /v1/chat/completions so the conversationalist can talk about it.
-    """
-    image = await request.body()
-    if not image:
-        return JSONResponse({"error": "empty body"}, status_code=400)
-    emit("vision_start", bytes=len(image))
-    try:
-        result = await asyncio.to_thread(identify, image)
-    except Exception as exc:  # noqa: BLE001
-        # A dead eyes service must not look like an object nobody can name.
-        emit("vision_failed", error=f"{type(exc).__name__}: {exc}")
-        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=502)
-    emit("vision_done", identification=result.get("identification", ""))
-    return {**result, "context": vision_context(result)}
-
-
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request):
     body = await request.json()
@@ -1118,10 +1004,6 @@ async def chat_completions(request: Request):
     fetching = web or news or wiki
     conversational = (DIRECTOR_MODEL_NAME not in requested) and not fetching
     sess = session_for(messages)
-    # A photo the panel attached to this turn: the context block /vision composed
-    # from what the eyes read. See to_ag2_messages for why it rides the session.
-    if body.get("vision"):
-        sess["vision"] = str(body["vision"])[:4000]
     # epub = "keep nothing". Set by the panel's incognito toggle; OWUI callers
     # simply never send it, so their conversations are kept by default.
     ephemeral = bool(body.get("ephemeral"))

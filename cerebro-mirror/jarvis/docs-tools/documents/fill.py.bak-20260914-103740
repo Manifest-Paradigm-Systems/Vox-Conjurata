@@ -1,0 +1,32 @@
+import os
+from pypdf import PdfReader, PdfWriter
+
+
+def fill_form(pdf_path, values, out_path="tests/output/filled.pdf"):
+    # Open the existing PDF
+    reader = PdfReader(pdf_path)
+    writer = PdfWriter()
+
+    # Copy pages from the original PDF to the writer
+    for page in reader.pages:
+        writer.add_page(page)
+
+    # Ensure the PDF has an AcroForm dictionary
+    if '/AcroForm' not in writer._root_object:
+        writer._root_object.update({
+            '/AcroForm': writer._root_object.get('/AcroForm', writer._add_object({}))
+        })
+
+    # Update form field values
+    if writer.pages:
+        writer.update_page_form_field_values(writer.pages[0], values)
+
+    # Create the output directory if it doesn't exist
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+
+    # Write the updated PDF to the specified output path
+    with open(out_path, "wb") as output_file:
+        writer.write(output_file)
+
+    # Return the output path
+    return out_path
