@@ -155,6 +155,32 @@ STAMP=$(date +%Y%m%d-%H%M%S)
 scp -q "$HOST:/tmp/conv-snapshot.db" "$DB_DEST/conversations-$STAMP.db"
 ssh "$HOST" 'rm -f /tmp/conv-snapshot.db'
 gzip -f "$DB_DEST/conversations-$STAMP.db"
+chmod 600 "$DB_DEST/conversations-$STAMP.db.gz"
+
+# Scrub anything the panel has deleted out of the OLDER snapshots.
+#
+# Deleting a chat removes it from the live database, but every snapshot taken
+# before the delete still holds the whole conversation — and they rotate out only
+# slowly (DB_KEEP x the cadence, so hours). Without this step, "delete" would
+# quietly mean "delete in a few hours", which is not what someone asking for a
+# conversation to be forgotten has in mind.
+#
+# Tombstones are the brain's record of what was deleted; they are tiny and kept
+# forever, because a tombstone has to outlive every snapshot that could still
+# contain the data it names.
+TOMBFILE=$(mktemp)
+ssh "$HOST" python3 - > "$TOMBFILE" <<'PY'
+import sqlite3
+try:
+    c = sqlite3.connect("file:/var/home/admin/jarvis/conversations.db?mode=ro", uri=True)
+    for (k,) in c.execute("SELECT key FROM deleted_conversations"):
+        print(k)
+except sqlite3.Error:
+    pass
+PY
+python3 "$(dirname "$0")/purge-deleted-snapshots.py" "$DB_DEST" "$TOMBFILE" || true
+rm -f "$TOMBFILE"
+
 # keep the newest N snapshots
 ls -1t "$DB_DEST"/conversations-*.db.gz 2>/dev/null | tail -n +$((DB_KEEP + 1)) | xargs -r rm -f
 echo "[$(date -Is)] conversation snapshot ${SNAP_BYTES:-?}B -> conversations-$STAMP.db.gz"
