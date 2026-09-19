@@ -38,8 +38,25 @@ mkdir -p "$DEST" "$UNIT_DEST"
 # The conversation DB is deliberately NOT here; it is data, not code, and putting
 # a 33M binary in a repo that auto-commits would bloat history. Back it up
 # separately (sqlite3 .backup) if it matters.
+# tar exits 1 for "file changed as we read it", which on a live tree is NORMAL —
+# Jarvis is writing to this directory the whole time we read it. Under `set -e`
+# that benign status aborted the run, intermittently and only when a write
+# happened to land mid-read, which is the worst way for a backup to fail: it
+# looked like it worked. Exit 1 is therefore accepted; only >=2 is fatal.
+pull_tree() {   # pull_tree <remote-cmd> <dest>
+    local rc=0
+    ssh "$HOST" "$1" 2>/dev/null | tar xzf - -C "$2" --warning=no-file-changed || rc=$?
+    if [ "$rc" -gt 1 ]; then
+        echo "[$(date -Is)] ERROR: tar failed with status $rc" >&2
+        return "$rc"
+    fi
+    [ "$rc" = 1 ] && echo "[$(date -Is)]   (tar noted a file changed mid-read; benign)"
+    return 0
+}
+
 echo "[$(date -Is)] pulling $HOST:$REMOTE -> $DEST"
-ssh "$HOST" "tar czf - -C '$REMOTE' \
+pull_tree "tar czf - -C '$REMOTE' \
+    --warning=no-file-changed \
     --exclude=.venv --exclude=.aider-venv \
     --exclude='conversations.db*' \
     --exclude=viz-bus \
@@ -47,7 +64,7 @@ ssh "$HOST" "tar czf - -C '$REMOTE' \
     --exclude=node_modules \
     --exclude='*.log' --exclude='*.tgz' \
     --exclude='*.bak' --exclude='*.bak-*' \
-    ." | tar xzf - -C "$DEST"
+    ." "$DEST"
 
 # The systemd USER units and their drop-ins — the half that was never backed up.
 # The drop-ins are where Jarvis's voice, TTS routing and devteam environment
@@ -56,8 +73,8 @@ ssh "$HOST" "tar czf - -C '$REMOTE' \
 # defaults in panel.py. `find -print0 | tar --null -T -` rather than shell
 # globs, so a missing drop-in cannot make tar fail the whole run.
 echo "[$(date -Is)] pulling systemd user units -> $UNIT_DEST"
-ssh "$HOST" "cd '$UNIT_SRC' && find . -maxdepth 2 -name 'jarvis-*' -print0 \
-    | tar czf - --null -T -" | tar xzf - -C "$UNIT_DEST"
+pull_tree "cd '$UNIT_SRC' && find . -maxdepth 2 -name 'jarvis-*' -print0 \
+    | tar czf - --warning=no-file-changed --null -T -" "$UNIT_DEST"
 
 # --- the conversation database ---------------------------------------------
 # Deliberately NOT in the git mirror above: the DB is ~33M (mostly the `runs`

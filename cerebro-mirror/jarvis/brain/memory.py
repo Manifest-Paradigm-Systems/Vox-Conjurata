@@ -58,12 +58,15 @@ IGNORE AND FLUSH — never report these:
 - transient status checks and immediate one-off intents ("what time is it", "call the dentist now")
 - speculation, brainstorming that reached no conclusion, and questions with no answer
 - anything you are inferring rather than reading
-- ANYTHING JARVIS SAID ABOUT HIMSELF. His turns are labelled [JARVIS] and they are not
-  testimony. His status reports and action narration — "the music generator is experiencing
-  difficulties", "development is progressing smoothly", "voice reverted to the regular
-  voice", "has applied DSP" — describe a moment, not the world. Recording them fills memory
-  with things that are true for an hour and quietly false forever. Only the OWNER's turns
-  establish facts.
+- ANYTHING JARVIS SAID ABOUT HIMSELF. His turns are labelled [JARVIS]. What he says about
+  his OWN state, actions and progress — "the music generator is experiencing difficulties",
+  "development is progressing smoothly", "voice reverted to the regular voice", "has applied
+  DSP" — describes a moment, not the world, and is noise the moment it lands.
+- BUT DO RECORD what he says about the WORLD. A place, a date, a name, a commitment, a
+  reading he took from the calendar, mail or a tool — "the flight to Denver departs
+  Tuesday", "the property inspection is on the 14th" — is a fact about the world no matter
+  which of you said it, and losing it would be worse than keeping it. The test is the
+  SUBJECT, not the speaker: Jarvis as a SOURCE is fine, Jarvis as the SUBJECT is not.
 - an owner's momentary want. "I want X checked" is a TASK, not a preference and not a fact.
   A preference is durable and stated as one ("I prefer to be called Michael").
 
@@ -108,14 +111,14 @@ def window_is_trivial(rows) -> bool:
     Saves a model call on the overwhelmingly common case, and keeps the
     extractor from having to be trusted on input it should never have seen.
 
-    Only the OWNER's turns count as substance, and that role check is the
-    provenance gate. A window of Jarvis narrating himself has nothing to
-    remember in it, and mining it is how "the music generator is experiencing
-    difficulties" became a permanent fact about the world. His turns stay in the
-    transcript for context — they just cannot be the reason we look.
+    Deliberately counts EVERY role, not just the owner's. An earlier version
+    counted the owner's turns alone, on the theory that his narration is the
+    noise — but that also threw away windows where the owner was terse and
+    Jarvis did the talking, which is exactly where a relayed date, place or
+    booking lives. Filtering by WHO SPOKE is the wrong instrument; the noise is
+    a property of what was SAID, and that is the output gate's job below.
     """
-    substance = [r["content"] for r in rows
-                 if r["role"] == "user" and not looks_like_filler(r["content"])]
+    substance = [r["content"] for r in rows if not looks_like_filler(r["content"])]
     return sum(len(c) for c in substance) < MIN_CHARS
 
 
@@ -270,7 +273,7 @@ def process_window(conn, rows, *, dry: bool) -> dict:
               "actions": [], "rejected": [], "skipped": None}
 
     if window_is_trivial(rows):
-        result["skipped"] = "no substantive owner turn in window"
+        result["skipped"] = "filler-only window"
         return result
 
     reply = call_lane(DISCRIMINATOR + transcript_of(rows))
