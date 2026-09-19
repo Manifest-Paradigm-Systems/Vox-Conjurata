@@ -55,7 +55,22 @@ SCOPES = [
     "https://www.googleapis.com/auth/calendar.readonly",
 ]
 
-BUSINESS_SCOPES = ["https://www.googleapis.com/auth/calendar.events"]   # phase 3, not yet
+# calendar.events is a WRITE scope — the first one here, and the first thing in
+# this module that can change something rather than look at it. It is kept
+# separate from SCOPES so the read consent still works for an account that has
+# not been re-consented for writes, and so a reader can see at a glance which
+# scope is the one that can do damage.
+#
+# It is a SENSITIVE scope on an app whose consent screen is External and
+# Published, which is the configuration chosen to stop refresh tokens expiring
+# every 7 days. Google may require a verification review before it will grant
+# this; if `auth.py check` shows it ungranted after a re-consent, that is a
+# console problem rather than a code one.
+BUSINESS_SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
+
+# Everything requested when someone re-consents for writes. Reads keep working
+# either way — adding a scope only ever widens the grant.
+FULL_SCOPES = SCOPES + BUSINESS_SCOPES
 
 
 # ---------------------------------------------------------------- secret storage

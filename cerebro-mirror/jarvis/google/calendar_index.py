@@ -57,31 +57,54 @@ def db() -> sqlite3.Connection:
     return conn
 
 
-def api_get(token, path: str, params: dict | None = None, tries: int = 8):
-    """Paced, with the error body kept — see gmail_index.py for why both matter."""
+def _request(token, method: str, path: str, params: dict | None = None,
+             body: dict | None = None, tries: int = 8):
+    """One authenticated Calendar call: GET, POST, PATCH or DELETE.
+
+    GET was the only verb here until writes arrived. Two things change when a
+    method and a body appear, and the second is the one that matters:
+
+    RETRIES ARE FOR IDEMPOTENT CALLS ONLY. A GET that times out did not happen.
+    A POST that times out may well have succeeded — retrying it books the
+    appointment twice. So a write gets exactly one attempt, and an ambiguous
+    failure is raised for a human rather than swallowed by a retry loop that
+    cannot know whether it already worked.
+    """
     time.sleep(REQUEST_DELAY)
     url = API + path
     if params:
         url += "?" + urllib.parse.urlencode(params, doseq=True)
+    data = json.dumps(body).encode() if body is not None else None
+    idempotent = method in ("GET", "PUT", "PATCH", "DELETE")
+
     delay = 1.0
-    for attempt in range(tries):
+    for attempt in range(tries if idempotent else 1):
         value = token.get() if hasattr(token, "get") else token
-        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {value}"})
+        send = {"Authorization": f"Bearer {value}"}
+        if data is not None:
+            send["Content-Type"] = "application/json"
+        req = urllib.request.Request(url, data=data, method=method, headers=send)
         try:
             with urllib.request.urlopen(req, timeout=120) as r:
-                return json.loads(r.read())
+                raw = r.read()
+                return json.loads(raw) if raw else {}
         except urllib.error.HTTPError as exc:
-            body = exc.read(400).decode("utf-8", "replace")
-            if exc.code == 401 or "UNAUTHENTICATED" in body:
-                if hasattr(token, "get"):
+            detail = exc.read(400).decode("utf-8", "replace")
+            if exc.code == 401 or "UNAUTHENTICATED" in detail:
+                if hasattr(token, "get") and idempotent:
                     token.get(force=True)
                     continue
-            if exc.code in (403, 429, 500, 502, 503) and attempt < tries - 1:
+            if exc.code in (403, 429, 500, 502, 503) and idempotent and attempt < tries - 1:
                 time.sleep(delay)
                 delay = min(delay * 2, 120)
                 continue
-            raise SystemExit(f"{exc.code} on {path}: {body[:300]}")
-    raise SystemExit("calendar: exhausted retries")
+            raise SystemExit(f"{exc.code} on {method} {path}: {detail[:300]}")
+    raise SystemExit(f"calendar: exhausted retries on {method} {path}")
+
+
+def api_get(token, path: str, params: dict | None = None, tries: int = 8):
+    """Paced, with the error body kept — see gmail_index.py for why both matter."""
+    return _request(token, "GET", path, params, None, tries)
 
 
 def _ts(block: dict | None) -> tuple[int, int]:
