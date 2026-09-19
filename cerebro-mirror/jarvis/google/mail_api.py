@@ -226,6 +226,136 @@ async def mail_live(q: str = Query(..., min_length=1),
             "fresh_as_of": time.time(), "results": msgs, "error": None}
 
 
+# --------------------------------------------------------------- calendar
+# Same index, same database, same token as the mail routes above — the calendar
+# is not a second service. The name `mail-api` is now narrower than the job it
+# does; renaming it touches this unit, mail.env, brain.env and the brain, so it
+# is a deliberate change rather than a side effect of adding these two routes.
+
+_EVENT_COLS = ("e.id, e.account, e.summary, e.description, e.location, e.start_ts, e.end_ts,"
+               " e.all_day, e.organizer, e.ev_status, e.attendee_count,"
+               " (SELECT group_concat(a.email, ', ') FROM event_attendees a"
+               "   WHERE a.event_id = e.id AND a.is_self = 0) AS attendees")
+
+
+def _event_shape(row) -> dict:
+    """One event, with its time rendered as words.
+
+    Epoch millis are useless to a model asked "what is on Thursday" — it cannot do
+    the arithmetic and, asked anyway, it guesses. Measured today: told the correct
+    date it still said the 25th fell on a Saturday when it falls on a Friday. So
+    the day name is worked out HERE, once, where the clock and the locale are,
+    and handed over as text.
+
+    Same rule as the mail lane returning raw excerpts rather than a summary: give
+    the speaker facts, not material to infer from.
+    """
+    start = row["start_ts"] or 0
+    end = row["end_ts"] or 0
+    all_day = bool(row["all_day"])
+    day = time.strftime("%A %-d %B %Y", time.localtime(start / 1000)) if start else "date unknown"
+    if all_day:
+        span = "all day"
+    elif start and end:
+        span = (time.strftime("%H:%M", time.localtime(start / 1000)) + "–"
+                + time.strftime("%H:%M", time.localtime(end / 1000)))
+    else:
+        span = "time unknown"
+    return {
+        "id": row["id"],
+        "summary": row["summary"] or "(no title)",
+        "when": f"{day}, {span}",
+        "day": day,
+        "start_ts": start,
+        "end_ts": end,
+        "all_day": all_day,
+        "location": row["location"] or "",
+        "description": (row["description"] or "")[:400],
+        "organizer": row["organizer"] or "",
+        "status": row["ev_status"] or "",
+        "attendees": row["attendees"] or "",
+    }
+
+
+@app.get("/calendar/upcoming", dependencies=[Depends(require_token)])
+async def calendar_upcoming(days: int = Query(default=7, ge=1, le=365),
+                            account: str | None = Query(default=None),
+                            limit: int = Query(default=25, ge=1, le=100)):
+    """Events still to come, soonest first. Cancelled ones are excluded."""
+    now_ms = int(time.time() * 1000)
+    until_ms = now_ms + days * 86_400_000
+
+    def _query():
+        conn = _conn()
+        try:
+            sql = (f"SELECT {_EVENT_COLS} FROM calendar_events e"
+                   " WHERE e.ev_status != 'cancelled'"
+                   "   AND e.end_ts >= ? AND e.start_ts <= ?")
+            args: list = [now_ms, until_ms]
+            if account:
+                sql += " AND e.account = ?"
+                args.append(account)
+            sql += " ORDER BY e.start_ts LIMIT ?"
+            args.append(limit)
+            return conn.execute(sql, args).fetchall()
+        finally:
+            conn.close()
+
+    try:
+        rows = await run_in_threadpool(_query)
+    except sqlite3.Error as exc:
+        return JSONResponse(
+            {"error": "archive_unavailable", "detail": f"{type(exc).__name__}: {exc}",
+             "hint": "the index could not be read; this does NOT mean the calendar "
+                     "is empty"}, status_code=503)
+    return {"source": "archive", "days": days, "count": len(rows),
+            "today": time.strftime("%A %-d %B %Y", time.localtime(now_ms / 1000)),
+            "results": [_event_shape(r) for r in rows], "error": None}
+
+
+@app.get("/calendar/search", dependencies=[Depends(require_token)])
+async def calendar_search(q: str = Query(..., min_length=1),
+                          account: str | None = Query(default=None),
+                          limit: int = Query(default=15, ge=1, le=100)):
+    """Find events by title, place or description, past or future.
+
+    Ordering is by distance from now rather than by date, so "when is Mike's
+    gastro appointment" answers with the nearest one rather than the oldest ever.
+    """
+    like = f"%{q.lower()}%"
+    now_ms = int(time.time() * 1000)
+
+    def _query():
+        conn = _conn()
+        try:
+            sql = (f"SELECT {_EVENT_COLS} FROM calendar_events e"
+                   " WHERE e.ev_status != 'cancelled'"
+                   "   AND (lower(COALESCE(e.summary,'')) LIKE ?"
+                   "     OR lower(COALESCE(e.location,'')) LIKE ?"
+                   "     OR lower(COALESCE(e.description,'')) LIKE ?)")
+            args: list = [like, like, like]
+            if account:
+                sql += " AND e.account = ?"
+                args.append(account)
+            sql += " ORDER BY abs(e.start_ts - ?) LIMIT ?"
+            args += [now_ms, limit]
+            return conn.execute(sql, args).fetchall()
+        finally:
+            conn.close()
+
+    try:
+        rows = await run_in_threadpool(_query)
+    except sqlite3.Error as exc:
+        return JSONResponse(
+            {"error": "archive_unavailable", "detail": f"{type(exc).__name__}: {exc}",
+             "hint": "the index could not be read; this does NOT mean nothing "
+                     "matches"}, status_code=503)
+    events = [_event_shape(r) for r in rows]
+    return {"source": "archive", "query": q, "count": len(events),
+            "today": time.strftime("%A %-d %B %Y", time.localtime(now_ms / 1000)),
+            "results": events, "error": None}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "7870")))
