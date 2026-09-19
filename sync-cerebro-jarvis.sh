@@ -83,7 +83,11 @@ pull_tree "cd '$UNIT_SRC' && find . -maxdepth 2 -name 'jarvis-*' -print0 \
 # the writers, which is the only safe way to snapshot a database in use.
 # Kept outside git, as dated full copies, with retention.
 DB_REMOTE=${DB_REMOTE:-/var/home/admin/jarvis/conversations.db}
-DB_DEST=${DB_DEST:-$HOME/vox-conjurata/jarvis-db-backups}
+# DELIBERATELY OUTSIDE THE REPO. This repo auto-commits (git-failsafe.sh, every
+# 30s) and pushes to a PUBLIC GitHub remote. Snapshots of the conversation DB are
+# private data — family names, personal context — and must never enter git. They
+# did, briefly, on 2026-09-18 and had to be purged from history.
+DB_DEST=${DB_DEST:-$HOME/jarvis-db-backups}
 DB_KEEP=${DB_KEEP:-14}
 mkdir -p "$DB_DEST"
 

@@ -24,3 +24,7 @@ vox-monster-voice/models/
 nohup.out
 .cline/
 .git-corrupted-bak*/
+
+# Jarvis conversation DB snapshots. DATA, not code — and this repo is PUBLIC.
+# They were briefly committed here on 2026-09-18 and purged from history.
+jarvis-db-backups/
