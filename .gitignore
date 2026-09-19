@@ -28,3 +28,7 @@ nohup.out
 # Jarvis conversation DB snapshots. DATA, not code — and this repo is PUBLIC.
 # They were briefly committed here on 2026-09-18 and purged from history.
 jarvis-db-backups/
+
+# Model weights are NOT code: 104 GB of history and 99.9% of the repo size.
+# They are re-downloadable from HuggingFace — keep the setup scripts and the
+# model ids, never the weights. See services/*/weights/.
