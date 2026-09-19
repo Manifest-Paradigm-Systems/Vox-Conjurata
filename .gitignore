@@ -34,3 +34,16 @@ jarvis-db-backups/
 # model ids, never the weights. See services/*/weights/.
 services/*/weights/
 services/*/_*.pth
+
+# Secrets never enter this repo. brain.env was pulled here by the mirror script
+# and sat in the unpushed commits — one working push from publishing a live
+# OpenRouter key. The mirror script now excludes it and fails loudly if any
+# secret-shaped value reappears.
+.env
+*.env
+brain.env
+*credential*
+*secret*
+*.key
+*.pem
+client.json
