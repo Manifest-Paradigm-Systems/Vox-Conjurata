@@ -1,0 +1,14 @@
+[Unit]
+Description=Weekly: FULL Gmail walk (the only pass that sees label changes deep in the mailbox)
+
+[Timer]
+# Name the template explicitly: a timer otherwise triggers a unit of its OWN name,
+# and jarvis-google-gmail.service does not exist — only the template does.
+Unit=jarvis-google-refresh@gmail-full.service
+# Sunday, off the hour so it does not collide with the hourly recent run.
+OnCalendar=Sun 03:23
+RandomizedDelaySec=600
+Persistent=true
+
+[Install]
+WantedBy=timers.target

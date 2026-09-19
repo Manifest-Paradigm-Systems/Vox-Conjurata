@@ -64,6 +64,10 @@ DIRECTOR_MODEL_NAME = "jarvis-director"
 WEB_MODEL_NAME = "jarvis-web"
 NEWS_MODEL_NAME = "jarvis-news"
 WIKI_MODEL_NAME = "jarvis-wiki"
+# The owner's own mail. Archive first, live account only as the fallback, and
+# all of it in the house: the index is local and the live read goes straight to
+# Gmail with the owner's own token, with no third party in the path.
+MAIL_MODEL_NAME = "jarvis-mail"
 SEARXNG_URL = os.getenv("SEARXNG_URL", "http://127.0.0.1:8888/search")
 WIKI_URL = os.getenv("JARVIS_WIKI_URL", "http://127.0.0.1:8090")
 SEARCH_RESULTS = int(os.getenv("JARVIS_SEARCH_RESULTS", "6"))
@@ -357,9 +361,20 @@ CHOOSE_RE = re.compile(r"^\s*@@\s*CHOOSE\s+(\S+)\s+(\d+)\s*$",
                        re.IGNORECASE | re.MULTILINE)
 VOICE_RE = re.compile(r"^\s*@@\s*VOICE\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 PLAY_RE = re.compile(r"^\s*@@\s*PLAY\s+(foley|music|sfx)\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
+# No @@MAIL directive on purpose. A directive is parsed AFTER the reply is
+# written, so results it fetched could never reach the model that asked — it
+# would be a directive that cannot inform the sentence it appears in. Mail is a
+# FETCHING MODEL instead (jarvis-mail), the same shape as jarvis-web: the search
+# runs first, the results go into the prompt, and the answer is grounded in them.
 # The adapter on the Workhorse owns both libraries (audio stays on that box).
 MEDIA_URL = os.getenv("JARVIS_MEDIA_URL", "http://192.168.0.62:7863")
 VOICES_URL = os.getenv("JARVIS_VOICES_URL", "http://192.168.0.62:7863/v1/audio/voices")
+# The mail archive is read over HTTP from mail-api on THIS box, where google.db
+# moved on 2026-09-19. It binds 127.0.0.1 and requires a bearer token: it is the
+# one service here that reads medical, education and health correspondence, so it
+# never leaves the machine and never answers unauthenticated.
+MAIL_URL = os.getenv("JARVIS_MAIL_URL", "http://127.0.0.1:7870")
+MAIL_TOKEN = os.getenv("JARVIS_MAIL_TOKEN", "")
 _VOICE_CACHE: dict = {"at": 0.0, "voices": []}
 
 
@@ -965,6 +980,87 @@ def _local_answer(question: str, context: str, sources: list[dict]) -> str:
     return _strip_think(_chat(CONVERSATIONAL_URL, CONVERSATIONAL_MODEL, system, body, max_tokens=900))
 
 
+def find_mail(query: str, limit: int = 8):
+    """Ask mail-api. Returns (payload, error) — never a bare empty result.
+
+    ARCHIVE FIRST is the service's rule, not this one's: /mail/search answers from
+    the local index and only reaches Gmail when the index has nothing. Keeping the
+    ordering in one place is the point — re-deciding it here is how the two drift
+    apart and one of them starts silently disagreeing.
+
+    What this function owes is honesty about WHICH happened. "Nothing matches" and
+    "I could not reach the archive" are different sentences, and only one of them
+    is true when the service is down.
+    """
+    if not MAIL_TOKEN:
+        return None, "JARVIS_MAIL_TOKEN is not set on the brain"
+    try:
+        with httpx.Client(timeout=120.0) as c:
+            r = c.get(f"{MAIL_URL}/mail/search",
+                      params={"q": query, "limit": limit},
+                      headers={"Authorization": f"Bearer {MAIL_TOKEN}"})
+    except (httpx.HTTPError, ValueError) as exc:
+        return None, f"{type(exc).__name__}: {exc}"
+    if r.status_code != 200:
+        return None, f"HTTP {r.status_code}: {r.text[:160]}"
+    try:
+        return r.json(), None
+    except ValueError as exc:
+        return None, f"unreadable reply: {exc}"
+
+
+def run_mail(messages: list[dict]):
+    """Answer from the archive, falling through to the live account.
+    Returns (reply, sources, timings)."""
+    question = next((m.get("content") or "" for m in reversed(messages)
+                     if m.get("role") == "user"), "").strip()
+    if not question:
+        return "I did not catch what to look for, sir.", [], {}
+    emit("web_start", query=question[:200], where="mail")
+
+    t0 = time.time()
+    payload, err = find_mail(question)
+    search_s = time.time() - t0
+    if err:
+        # Say so. An unreachable archive must not read as an empty mailbox.
+        emit("mail_error", query=question[:120], error=err[:200])
+        return (f"I could not reach the mail archive just now, sir — {err[:140]}. "
+                "That is not the same as there being no matching mail.",
+                [], {"search": round(search_s, 2)})
+
+    hits = payload.get("results") or []
+    source = payload.get("source")
+    if not hits:
+        return ("I looked, sir — nothing in the archive or the account matches that.",
+                [], {"search": round(search_s, 2)})
+
+    # The archive says how stale it is; pass that through so the answer can carry
+    # it rather than implying the index is live.
+    fresh = payload.get("fresh_as_of")
+    when = (time.strftime("%d %b %Y at %H:%M", time.localtime(fresh)) if fresh else "unknown")
+    shelf = ("the local archive" if source == "archive" else "the live Gmail account")
+
+    context = "\n\n".join(
+        f"[{i+1}] From: {h.get('from_addr') or h.get('from') or h.get('from_addr','')}\n"
+        f"Date: {h.get('date') or h.get('date','')}\n"
+        f"Subject: {h.get('subject','')}\n{(h.get('snippet') or '')[:400]}"
+        for i, h in enumerate(hits))
+    # `_local_answer` numbers its sources from `title`/`url`; mail has no URL, so
+    # the id stands in — it is stable, and it is what a follow-up read would use.
+    framed = [{"title": (h.get("subject") or "(no subject)")[:90],
+               "url": f"mail:{h.get('id','')}",
+               "snippet": (h.get("snippet") or "")[:200]} for h in hits]
+
+    t1 = time.time()
+    answer = _local_answer(
+        f"{question}\n\n(Answering from {shelf}, current as of {when}.)",
+        context, framed)
+    timings = {"search": round(search_s, 2), "answer": round(time.time() - t1, 2),
+               "total": round(search_s + time.time() - t1, 2), "results": len(hits)}
+    emit("mail_done", query=question[:120], source=source, count=len(hits))
+    return answer, framed, timings
+
+
 def run_web(messages: list[dict], category: str = "general"):
     """Search, then answer locally. Returns (reply, sources, timings)."""
     question = next((m.get("content") or "" for m in reversed(messages)
@@ -1118,6 +1214,7 @@ async def models():
         {"id": WEB_MODEL_NAME, "object": "model", "created": now, "owned_by": "jarvis"},
         {"id": NEWS_MODEL_NAME, "object": "model", "created": now, "owned_by": "jarvis"},
         {"id": WIKI_MODEL_NAME, "object": "model", "created": now, "owned_by": "jarvis"},
+        {"id": MAIL_MODEL_NAME, "object": "model", "created": now, "owned_by": "jarvis"},
     ]}
 
 
@@ -1276,7 +1373,8 @@ async def chat_completions(request: Request):
     web = WEB_MODEL_NAME in requested
     news = NEWS_MODEL_NAME in requested
     wiki = WIKI_MODEL_NAME in requested
-    fetching = web or news or wiki
+    mail = MAIL_MODEL_NAME in requested
+    fetching = web or news or wiki or mail
     conversational = (DIRECTOR_MODEL_NAME not in requested) and not fetching
     sess = session_for(messages)
     # A photo the panel attached to this turn: the context block /vision composed
@@ -1298,6 +1396,8 @@ async def chat_completions(request: Request):
             return run_web(messages, category="news")
         if wiki:
             return run_wiki(messages)
+        if mail:
+            return run_mail(messages)
         return run_web(messages)
 
     if not stream:

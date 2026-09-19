@@ -1,0 +1,14 @@
+[Unit]
+Description=Refresh the Google index (%i)
+Documentation=file:%h/jarvis/google/refresh-google-index.sh
+# Runs on CEREBRO. Moved there 2026-09-19 together with google.db, because the
+# consumer — the brain — lives there and an index is only useful next to the
+# thing that reads it. rclone (remote `mnmeyer:`) and adb are both present on
+# cerebro, so the Drive backup and the phone leg came along.
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/jarvis/google/refresh-google-index.sh %i
+# A crawl can run for hours; this is a floor, not a target.
+TimeoutStartSec=6h

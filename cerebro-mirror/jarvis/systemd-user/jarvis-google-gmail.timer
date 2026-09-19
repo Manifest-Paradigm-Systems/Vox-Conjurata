@@ -1,0 +1,13 @@
+[Unit]
+Description=Hourly: recent Gmail (bounded, catches new mail)
+
+[Timer]
+# Name the template explicitly: a timer otherwise triggers a unit of its OWN name,
+# and jarvis-google-gmail.service does not exist — only the template does.
+Unit=jarvis-google-refresh@gmail.service
+OnCalendar=*:07
+RandomizedDelaySec=120
+Persistent=true
+
+[Install]
+WantedBy=timers.target

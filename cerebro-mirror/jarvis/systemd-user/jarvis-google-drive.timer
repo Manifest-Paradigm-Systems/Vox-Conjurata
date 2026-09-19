@@ -1,0 +1,17 @@
+[Unit]
+Description=Twice daily: Drive file index (800 files, changes are rare)
+
+[Timer]
+# Name the template explicitly: a timer otherwise triggers a unit of its OWN name,
+# and jarvis-google-gmail.service does not exist — only the template does.
+Unit=jarvis-google-refresh@drive.service
+# Two explicit lines, OR'd — do NOT write these as a comma list.
+# '*-*-* 06:41,18:41' normalizes to '*-*-* 06:18,41:41': the comma builds a
+# MINUTE list, so it would have fired at 06:18:41, silently and plausibly wrong.
+OnCalendar=*-*-* 06:41:00
+OnCalendar=*-*-* 18:41:00
+RandomizedDelaySec=300
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,13 @@
+[Unit]
+Description=Hourly: calendar (677 events, cheap, and appointments move)
+
+[Timer]
+# Name the template explicitly: a timer otherwise triggers a unit of its OWN name,
+# and jarvis-google-gmail.service does not exist — only the template does.
+Unit=jarvis-google-refresh@calendar.service
+OnCalendar=*:37
+RandomizedDelaySec=120
+Persistent=true
+
+[Install]
+WantedBy=timers.target
