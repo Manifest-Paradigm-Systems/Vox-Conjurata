@@ -284,7 +284,7 @@ def start_job(target: str, task: str) -> str:
     job_id = uuid.uuid4().hex[:8]
     url = CODER_URL if target == "coder" else DIRECTOR_URL
     model = "coder" if target == "coder" else "director"
-    system = CODER_SYSTEM if target == "coder" else DIRECTOR_SYSTEM
+    system = (CODER_SYSTEM if target == "coder" else DIRECTOR_SYSTEM) + now_line()
     with STATE_LOCK:
         JOBS[job_id] = {"id": job_id, "target": target, "task": task, "status": "running",
                         "result": "", "started": time.time(), "delivered": False}
@@ -684,6 +684,32 @@ def team_digest(question: str = "") -> str:
     return line
 
 
+def now_line() -> str:
+    """What day it is, for every prompt this brain assembles.
+
+    A model has no clock. The only way it knows the present is being told, and
+    until this existed nothing here told it — so Kunou answered from its training
+    era and said October 2023, roughly when its weights were frozen. Every dated
+    thing he said was suspect as a result: the calendar, "last week", "is that
+    still upcoming".
+
+    ONE function called from every prompt builder, deliberately, rather than a
+    line pasted into each. Four copies of the date are four chances to disagree by
+    an hour or a day, and two lanes that disagree about the date give different
+    answers to the same question.
+
+    The instruction matters as much as the fact. A model handed today's date will
+    still reach for its training prior out of habit unless told not to, so this
+    says what to do with it, not just what it is.
+    """
+    now = time.localtime()
+    return ("\n\nTODAY is " + time.strftime("%A %-d %B %Y", now) + ", "
+            + time.strftime("%H:%M", now) + " local time. Use this for anything date-related. "
+            "Never assume, recall or infer the date — your sense of 'now' is not reliable and "
+            "the line above is. If something depends on a date you have not been given, say so "
+            "rather than guessing at it.")
+
+
 def build_conversationalist(sess: dict) -> Agent:
     return Agent(
         name="jarvis",
@@ -701,7 +727,7 @@ def conversational_prompt() -> str:
         "question deserves — several paragraphs when that genuinely helps, a sentence when it "
         "does not. This is speech, so keep the STRUCTURE of speech: no headings, no bullet "
         "lists, no markdown; just well-organised prose that a person would say aloud."
-        f"{PROTOCOL}"
+        f"{PROTOCOL}{now_line()}"
     )
 
 
@@ -812,7 +838,7 @@ def build_director(sess: dict) -> Agent:
         "You are the DIRECTOR: you shape plans with the human, then — only after an approved plan — "
         "hand tasks to the coder ONE AT A TIME, adapting as results come back. Keep <think> "
         "reasoning internal."
-        f"{DIRECTOR_PROTOCOL}"
+        f"{DIRECTOR_PROTOCOL}{now_line()}"
     )
     return Agent(
         name="director",
@@ -932,7 +958,7 @@ def apply_protocol(reply: str, sess: dict, conversational: bool) -> str:
             return "[refused: empty task]"
         emit("coder_start", task=task[:400])
         try:
-            result = _chat(CODER_URL, "coder", CODER_SYSTEM, task, max_tokens=2000)
+            result = _chat(CODER_URL, "coder", CODER_SYSTEM + now_line(), task, max_tokens=2000)
             ok = "FAILED" not in result.upper()[:400]
         except Exception as exc:  # noqa: BLE001
             result, ok = f"transport error: {exc}", False
@@ -1102,7 +1128,7 @@ def _local_answer(question: str, context: str, sources: list[dict]) -> str:
     system = (f"{load_persona()}\n\nYou are answering from material just fetched for you. "
               "Use it rather than your memory; say plainly if it is thin or contradictory. "
               "Cite the sources inline as [1], [2] … matching the numbered list. "
-              "Keep it to a few sentences.")
+              "Keep it to a few sentences." + now_line())
     numbered = "\n".join(f"[{i+1}] {s['title']} — {s['url']}" for i, s in enumerate(sources))
     body = f"Question: {question}\n\nSources:\n{numbered}\n\nFetched content:\n{context[:6000]}"
     return _strip_think(_chat(CONVERSATIONAL_URL, CONVERSATIONAL_MODEL, system, body, max_tokens=900))

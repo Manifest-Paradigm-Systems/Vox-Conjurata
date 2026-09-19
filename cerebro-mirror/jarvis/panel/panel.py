@@ -774,12 +774,15 @@ LIVE_PAGE = r"""<!doctype html>
 
 <script>
 const SR = 16000;
-// Quiet long enough to end a turn. Was 2000/3200, which after the Kokoro move was
-// the single largest cost in a turn — well over the 400 ms STT and 500 ms TTS it
-// was waiting on. Shortened now that a truncated transcript is REVIEWABLE before
-// it is sent (tap mode), so an early cut costs a glance, not a wrong answer.
-const SILENCE_MS = 1100;          // end a turn after this much quiet
-const SILENCE_LONG_MS = 2000;     // ...more, if they have barely started talking
+// Quiet long enough to end a turn. Shortening this costs turn latency, which was
+// the reason it came down to 1100 ms — but the first version of that change
+// SHRANK the hangover as the human kept talking (past 1.2 s of speech it dropped
+// back to the short value), which is exactly backwards: the pause between the
+// first sentence and the second is the most normal pause there is, and it was
+// ending the turn. A clipped word is reviewable in the text box; a sentence that
+// was never recorded is simply lost. So patience GROWS with the utterance now.
+const SILENCE_MS = 1100;          // the floor: quiet that always ends a turn
+const SILENCE_MAX_MS = 2600;      // the ceiling, so a turn still ends promptly
 const MIN_SPEECH_MS = 300;
 const MAX_UTTERANCE_MS = 40000;
 const MIC_GUARD_MS = 900;         // let the speaker (and its tail) die
@@ -1206,7 +1209,12 @@ function onAudio(e) {
   // Half-duplex: while he speaks we do not listen, or he hears himself and answers.
   if (speaking || Date.now() < micGuardUntil) return;
   const blockMs = (block.length / ctx.sampleRate) * 1000;
-  const hangoverMs = (bufSpeechMs < 1200 ? SILENCE_LONG_MS : SILENCE_MS);
+  // Patience grows with the utterance, at 0.6 ms of extra hangover per ms spoken.
+  // A short command still ends briskly (1.2 s of speech -> ~1.8 s of quiet); a
+  // paragraph gets room to draw breath between sentences without the turn ending
+  // under it. Capped so finishing still feels like finishing.
+  const hangoverMs = Math.min(SILENCE_MAX_MS,
+                              SILENCE_MS + Math.round(bufSpeechMs * 0.6));
 
   if (!recording) {
     noiseFloor = 0.995 * noiseFloor + 0.005 * rms;
