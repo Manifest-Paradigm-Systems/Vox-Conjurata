@@ -58,6 +58,14 @@ IGNORE AND FLUSH — never report these:
 - transient status checks and immediate one-off intents ("what time is it", "call the dentist now")
 - speculation, brainstorming that reached no conclusion, and questions with no answer
 - anything you are inferring rather than reading
+- ANYTHING JARVIS SAID ABOUT HIMSELF. His turns are labelled [JARVIS] and they are not
+  testimony. His status reports and action narration — "the music generator is experiencing
+  difficulties", "development is progressing smoothly", "voice reverted to the regular
+  voice", "has applied DSP" — describe a moment, not the world. Recording them fills memory
+  with things that are true for an hour and quietly false forever. Only the OWNER's turns
+  establish facts.
+- an owner's momentary want. "I want X checked" is a TASK, not a preference and not a fact.
+  A preference is durable and stated as one ("I prefer to be called Michael").
 
 For a decision, record the DECISION, not the debate that preceded it. If the segment \
 revisits a decision and CHANGES it, record the new position — a later worker resolves \
@@ -95,13 +103,62 @@ def looks_like_filler(text: str) -> bool:
 
 
 def window_is_trivial(rows) -> bool:
-    """Cheap pre-filter: skip windows that are nothing but greetings.
+    """Cheap pre-filter: skip windows with nothing worth remembering.
 
     Saves a model call on the overwhelmingly common case, and keeps the
     extractor from having to be trusted on input it should never have seen.
+
+    Only the OWNER's turns count as substance, and that role check is the
+    provenance gate. A window of Jarvis narrating himself has nothing to
+    remember in it, and mining it is how "the music generator is experiencing
+    difficulties" became a permanent fact about the world. His turns stay in the
+    transcript for context — they just cannot be the reason we look.
     """
-    substance = [r["content"] for r in rows if not looks_like_filler(r["content"])]
+    substance = [r["content"] for r in rows
+                 if r["role"] == "user" and not looks_like_filler(r["content"])]
     return sum(len(c) for c in substance) < MIN_CHARS
+
+
+# Statements that describe a moment rather than the world. The extractor is told
+# not to emit these; this is the belt to that prompt's braces, because a prompt is
+# a request and this is a guarantee. Deliberately narrow: a false positive here
+# silently loses a real fact, which is worse than keeping one dud.
+_ADVERBS = r"(?:\w+ly\s+|now\s+|currently\s+|still\s+|already\s+)*"
+_TRANSIENT = re.compile(
+    # Present progressive — "is experiencing", "are progressing", "is being tested".
+    # The adverb slot matters: real sentences say "is FULLY functional", not
+    # "is functional", and the first version of this missed every one of those.
+    r"\b(?:is|are|was|were)\s+" + _ADVERBS +
+    r"(?!(?:during|thing|things|something|anything|nothing|everything|morning|evening)\b)"
+    r"\w{2,}ing\b"
+    # Status adjectives, likewise adverb-tolerant.
+    r"|\b(?:is|are|was|were)\s+" + _ADVERBS +
+    r"(?:complete|stable|functional|operational|ready|available|offline|online|integrated)\b"
+    # Completed-action narration.
+    r"|\bhas\s+(?:applied|been|changed|updated|restarted|toggled|turned|stopped|started|run"
+    r"|reverted|completed|finished|addressed)\b"
+    r"|\bwas\s+(?:reduced|increased|changed|lowered|raised|disabled|enabled|set|completed)\b"
+    # Explicit recency, and progress counters.
+    r"|\b(?:currently|right\s+now|at\s+the\s+moment|temporarily|so\s+far|nearing\s+completion)\b"
+    r"|\b\d+\s*%\s*complete\b"
+    r"|\bprogressing\s+(?:well|smoothly|nicely)\b"
+    # Deictic time. A durable fact does not contain "today" — anything that does
+    # is a reading taken at a moment ("the weather today is clear", "no scheduled
+    # events for the day") and is false by the time anyone reads it back.
+    r"|\b(?:today|yesterday|tonight|tomorrow|this\s+(?:morning|afternoon|evening)|"
+    r"for\s+the\s+day)\b",
+    re.IGNORECASE)
+
+
+def is_transient_statement(statement: str) -> bool:
+    """True for status reports and action narration, which are not facts.
+
+    Everything this catches describes a moment: "the generator is experiencing
+    difficulties", "development is progressing smoothly", "voice reverted". They
+    read as knowledge and behave as noise — true for an hour, quietly false
+    forever, and recall keeps handing them back.
+    """
+    return bool(_TRANSIENT.search(statement or ""))
 
 
 # ------------------------------------------------------------------ model call
@@ -210,10 +267,10 @@ def consolidate(conn, fact: dict, *, session: str, dry: bool) -> tuple[str, int 
 
 def process_window(conn, rows, *, dry: bool) -> dict:
     result = {"facts": 0, "insert": 0, "reinforce": 0, "supersede": 0, "archived": 0,
-              "actions": [], "skipped": None}
+              "actions": [], "rejected": [], "skipped": None}
 
     if window_is_trivial(rows):
-        result["skipped"] = "filler-only window"
+        result["skipped"] = "no substantive owner turn in window"
         return result
 
     reply = call_lane(DISCRIMINATOR + transcript_of(rows))
@@ -226,6 +283,12 @@ def process_window(conn, rows, *, dry: bool) -> dict:
     session = rows[0]["session"]
     for fact in (data.get("extracted_facts") or []):
         if not isinstance(fact, dict):
+            continue
+        statement = (fact.get("statement") or "").strip()
+        if is_transient_statement(statement):
+            # Not written. Reported instead, so that a wrong call here is visible
+            # and tunable rather than a silent deletion.
+            result["rejected"].append(statement[:90])
             continue
         action, fid = consolidate(conn, fact, session=session, dry=dry)
         if action == "empty":
@@ -250,7 +313,7 @@ def run_once(dry: bool = False, max_windows: int = 5, verbose: bool = True) -> d
     conn = jarvis_db.open_db()
     start = int(jarvis_db.get_cursor(conn, CURSOR, "0"))
     totals = {"windows": 0, "facts": 0, "insert": 0, "reinforce": 0, "supersede": 0,
-              "archived": 0, "skipped": 0, "last_id": start}
+              "archived": 0, "skipped": 0, "rejected": 0, "last_id": start}
 
     for _ in range(max_windows):
         rows = fetch_window(conn, totals["last_id"], WINDOW)
@@ -266,6 +329,7 @@ def run_once(dry: bool = False, max_windows: int = 5, verbose: bool = True) -> d
         totals["reinforce"] += res["reinforce"]
         totals["supersede"] += res["supersede"]
         totals["archived"] += res["archived"]
+        totals["rejected"] += len(res["rejected"])
         if res["skipped"]:
             totals["skipped"] += 1
             if verbose:
@@ -273,6 +337,9 @@ def run_once(dry: bool = False, max_windows: int = 5, verbose: bool = True) -> d
         for line in res["actions"]:
             if verbose:
                 print(f"    {line}")
+        for line in res["rejected"]:
+            if verbose:
+                print(f"    rejected (not a fact): {line}")
         totals["last_id"] = rows[-1]["id"]
         # A skipped window still advances: retrying filler forever would wedge the
         # queue behind it. Only an unparseable reply is worth a retry, and that
