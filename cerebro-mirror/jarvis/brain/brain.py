@@ -68,6 +68,10 @@ WIKI_MODEL_NAME = "jarvis-wiki"
 # all of it in the house: the index is local and the live read goes straight to
 # Gmail with the owner's own token, with no third party in the path.
 MAIL_MODEL_NAME = "jarvis-mail"
+# The calendar, from the same local index. Kept separate from mail because they
+# answer different questions, but it is the same service and the same token —
+# see run_calendar().
+CALENDAR_MODEL_NAME = "jarvis-calendar"
 SEARXNG_URL = os.getenv("SEARXNG_URL", "http://127.0.0.1:8888/search")
 WIKI_URL = os.getenv("JARVIS_WIKI_URL", "http://127.0.0.1:8090")
 SEARCH_RESULTS = int(os.getenv("JARVIS_SEARCH_RESULTS", "6"))
@@ -703,11 +707,19 @@ def now_line() -> str:
     says what to do with it, not just what it is.
     """
     now = time.localtime()
+    # The coming days are spelled out for the same reason the calendar lane spells
+    # them out: asked "what day is the 25th", a model treats it as arithmetic and
+    # gets it wrong — measured, with the correct answer in its own evidence one
+    # line above. A ten-day lookup is cheap and removes the question entirely.
+    ahead = " | ".join(time.strftime("%-d %b %a", time.localtime(time.time() + i * 86400))
+                       for i in range(0, 10))
     return ("\n\nTODAY is " + time.strftime("%A %-d %B %Y", now) + ", "
-            + time.strftime("%H:%M", now) + " local time. Use this for anything date-related. "
-            "Never assume, recall or infer the date — your sense of 'now' is not reliable and "
-            "the line above is. If something depends on a date you have not been given, say so "
-            "rather than guessing at it.")
+            + time.strftime("%H:%M", now) + " local time. "
+            f"Coming days: {ahead}. "
+            "Use these for anything date-related. Never assume, recall, infer or ARITHMETICALLY "
+            "WORK OUT a date or a weekday — your sense of 'now' is not reliable and your "
+            "weekday arithmetic is worse; read it from the lines above instead. If something "
+            "depends on a date beyond those, say so or look it up rather than guessing.")
 
 
 def build_conversationalist(sess: dict) -> Agent:
@@ -1215,6 +1227,110 @@ def run_mail(messages: list[dict]):
     return answer, framed, timings
 
 
+def _cal_get(path: str, params: dict):
+    """One calendar call. Returns (payload, error) — never a bare empty result."""
+    if not MAIL_TOKEN:
+        return None, "JARVIS_MAIL_TOKEN is not set on the brain"
+    try:
+        with httpx.Client(timeout=60.0) as c:
+            r = c.get(f"{MAIL_URL}{path}", params=params,
+                      headers={"Authorization": f"Bearer {MAIL_TOKEN}"})
+    except (httpx.HTTPError, ValueError) as exc:
+        return None, f"{type(exc).__name__}: {exc}"
+    if r.status_code != 200:
+        return None, f"HTTP {r.status_code}: {r.text[:160]}"
+    try:
+        return r.json(), None
+    except ValueError as exc:
+        return None, f"unreadable reply: {exc}"
+
+
+# Words that appear in almost every calendar question and match nothing useful.
+_CAL_NOISE = {"what", "when", "where", "which", "next", "this", "that", "have",
+              "does", "about", "calendar", "coming", "week", "month", "today",
+              "tomorrow", "upcoming", "schedule", "happening", "anything"}
+
+
+def run_calendar(messages: list[dict]):
+    """Answer from the calendar. Returns (reply, sources, timings).
+
+    Fetches what is COMING UP and, when the question names something, searches
+    for it too — rather than choosing between the two. The dominant question is
+    "what is on this week", where searching the question's own words would match
+    nothing; "when is Mike's appointment" needs the search. Deciding which one
+    the human meant by asking a 14B model to classify its own input is a failure
+    mode with no upside, so this does both and lets the answer pick.
+    """
+    question = next((m.get("content") or "" for m in reversed(messages)
+                     if m.get("role") == "user"), "").strip()
+    if not question:
+        return "I did not catch what to look for, sir.", [], {}
+    emit("web_start", query=question[:200], where="calendar")
+
+    t0 = time.time()
+    upcoming, err = _cal_get("/calendar/upcoming", {"days": 90, "limit": 40})
+    if err:
+        emit("mail_error", query=question[:120], error=err[:200])
+        return (f"I could not read your calendar just now, sir — {err[:140]}. "
+                "That is not the same as it being empty.",
+                [], {"search": round(time.time() - t0, 2)})
+
+    found: list[dict] = []
+    words = [w for w in re.findall(r"[A-Za-z]{4,}", question) if w.lower() not in _CAL_NOISE]
+    if words:
+        # The longest word is the likeliest to be a name or a place. Searching
+        # every word would drag in half the calendar on "appointment".
+        probe = max(words, key=len).lower()
+        hit, search_err = _cal_get("/calendar/search", {"q": probe, "limit": 15})
+        if hit:
+            found = hit.get("results") or []
+        elif search_err:
+            emit("mail_error", query=probe, error=search_err[:200])
+
+    seen: set = set()
+    merged: list[dict] = []
+    for event in found + (upcoming.get("results") or []):
+        if event["id"] not in seen:
+            seen.add(event["id"])
+            merged.append(event)
+
+    today = upcoming.get("today") or ""
+    if not merged:
+        return (f"Your calendar is clear for the next while, sir. (Today is {today}.)",
+                [], {"search": round(time.time() - t0, 2)})
+
+    # A day-name table, worked out here rather than by the model. Measured: handed
+    # the correct date AND an entry reading "Friday 25 September 2026", the model
+    # still answered "the 25th falls on a Sunday" when asked directly — because a
+    # direct question about a weekday reads as arithmetic, and it does arithmetic
+    # badly. Telling it not to calculate did not help; removing the need to does.
+    ref = " | ".join(
+        time.strftime("%-d %b %a", time.localtime(time.time() + i * 86400))
+        for i in range(0, 22))
+    events_text = "\n\n".join(
+        f"[{i+1}] {e['when']} — {e['summary']}"
+        + (f"\n  where: {e['location']}" if e.get("location") else "")
+        + (f"\n  with: {e['attendees']}" if e.get("attendees") else "")
+        + (f"\n  {e['description'][:200]}" if e.get("description") else "")
+        for i, e in enumerate(merged))
+    context = ("Date reference (already worked out — read from this, never calculate):\n"
+               f"{ref}\n\n" + events_text)
+    framed = [{"title": f"{e['when']} — {e['summary']}"[:90],
+               "url": f"calendar:{e['id']}",
+               "snippet": (e.get("location") or "")[:120]} for e in merged]
+
+    t1 = time.time()
+    answer = _local_answer(
+        f"{question}\n\n(Today is {today}. Answer from the entries below. Each entry "
+        "already states its own day and date — do not work any date out yourself, "
+        "and do not add events that are not listed.)",
+        context, framed)
+    timings = {"search": round(t1 - t0, 2), "answer": round(time.time() - t1, 2),
+               "total": round(time.time() - t0, 2), "results": len(merged)}
+    emit("mail_done", query=question[:120], source="calendar", count=len(merged))
+    return answer, framed, timings
+
+
 def run_web(messages: list[dict], category: str = "general"):
     """Search, then answer locally. Returns (reply, sources, timings)."""
     question = next((m.get("content") or "" for m in reversed(messages)
@@ -1369,6 +1485,7 @@ async def models():
         {"id": NEWS_MODEL_NAME, "object": "model", "created": now, "owned_by": "jarvis"},
         {"id": WIKI_MODEL_NAME, "object": "model", "created": now, "owned_by": "jarvis"},
         {"id": MAIL_MODEL_NAME, "object": "model", "created": now, "owned_by": "jarvis"},
+        {"id": CALENDAR_MODEL_NAME, "object": "model", "created": now, "owned_by": "jarvis"},
     ]}
 
 
@@ -1538,7 +1655,8 @@ async def chat_completions(request: Request):
     news = NEWS_MODEL_NAME in requested
     wiki = WIKI_MODEL_NAME in requested
     mail = MAIL_MODEL_NAME in requested
-    fetching = web or news or wiki or mail
+    calendar = CALENDAR_MODEL_NAME in requested
+    fetching = web or news or wiki or mail or calendar
     conversational = (DIRECTOR_MODEL_NAME not in requested) and not fetching
     sess = session_for(messages)
     # A photo the panel attached to this turn: the context block /vision composed
@@ -1569,6 +1687,8 @@ async def chat_completions(request: Request):
             return run_wiki(messages)
         if mail:
             return run_mail(messages)
+        if calendar:
+            return run_calendar(messages)
         return run_web(messages)
 
     if not stream:
