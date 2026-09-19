@@ -307,6 +307,90 @@ def start_job(target: str, task: str) -> str:
     return job_id
 
 
+def escalate(request: str, sess: dict) -> str:
+    """Hand a multi-step request to the DIRECTOR LANE, in the background.
+
+    Not `@@DELEGATE director`, which runs a flat "plan only, do not execute"
+    completion — it never emits @@PLAN, never touches the approval gate and never
+    reaches the coder. This runs the LANE: build_director() + apply_protocol(),
+    which is what sets sess["plan"] and emits the event the panel's approval chip
+    listens for. The actor and the director already share one session (session_for
+    ignores the model name), so the plan lands somewhere the actor can see it.
+
+    BACKGROUND, not inline. do_handoff is synchronous and blocks for the whole
+    coder run; escalating inside Kunou's own reply would stall his stream on a
+    request whose whole point is that it takes a while.
+
+    The director will emit @@PLAN and stop. It cannot proceed to @@HANDOFF until
+    sess["approved"] is set — by the owner, through the gate. Nothing here can
+    approve anything.
+    """
+    job_id = uuid.uuid4().hex[:8]
+    with STATE_LOCK:
+        JOBS[job_id] = {"id": job_id, "target": "escalation", "task": request,
+                        "status": "running", "result": "", "started": time.time(),
+                        "delivered": False}
+    emit("job_start", job=job_id, target="escalation", task=request[:400])
+
+    def run():
+        try:
+            async def _ask():
+                agent = build_director(sess)
+                reply = await agent.ask(
+                    to_ag2_messages([{"role": "user", "content": request}], sess,
+                                    conversational=False))
+                text = getattr(reply, "content", None)
+                if callable(text):
+                    text = await text()
+                return _strip_think(str(text if text is not None else reply))
+            # A fresh loop in a fresh thread; the brain's own loop is elsewhere.
+            raw = asyncio.run(_ask())
+            had_plan = bool(sess.get("plan"))
+            text = apply_protocol(raw, sess, conversational=False)
+            if sess.get("plan") and not had_plan:
+                text = f"[plan ready — put it to the owner for approval]\n{sess['plan']}"
+            else:
+                # The director is a conversational agent, so it will sometimes reply
+                # with a QUESTION rather than a plan ("what time would you like?").
+                # That is a legitimate outcome, but it is not a plan — and reporting
+                # it as one leaves the owner waiting for a chip that never arms. Say
+                # so, so the actor relays the question instead of promising a plan.
+                text = ("[no plan was drawn up — the director replied with this, which you "
+                        f"should pass on to the owner]\n{text}")
+            status = "done"
+        except Exception as exc:  # noqa: BLE001
+            text, status = f"{type(exc).__name__}: {exc}", "failed"
+        with STATE_LOCK:
+            job = JOBS.get(job_id)
+            if job:
+                job.update(status=status, result=text[:6000], finished=time.time())
+        emit("job_done", job=job_id, target="escalation", ok=status == "done",
+             task=request[:200], result=text[:600])
+
+    threading.Thread(target=run, daemon=True).start()
+    return job_id
+
+
+def resume_escalation(sess: dict) -> str | None:
+    """Carry out a plan the owner just approved.
+
+    The escalation job ends when the plan is drawn — the director cannot proceed
+    to @@HANDOFF until sess["approved"] is set, and only the human can set it. So
+    something has to run the lane a second time once the gate opens, or the plan
+    sits there approved and nothing happens.
+
+    Guarded by `running_plan` so a doubled approval cannot start two coder runs
+    over the same plan.
+    """
+    plan = sess.get("plan")
+    if not plan or sess.get("running_plan"):
+        return None
+    sess["running_plan"] = True
+    return escalate(
+        "Your plan is APPROVED. Carry it out now — hand ONE task at a time to the "
+        f"coder with @@HANDOFF, adapting as each result comes back.\n\nPlan:\n{plan}", sess)
+
+
 def job_digest() -> str:
     """What the conversationalist should know about work in flight."""
     with STATE_LOCK:
@@ -350,6 +434,9 @@ def check_background_work() -> str:
 
 DELEGATE_RE = re.compile(r"^\s*@@\s*DELEGATE\s+(coder|director)\s*:\s*(.+?)\s*$",
                          re.IGNORECASE | re.MULTILINE)
+# Hand a request to the DIRECTOR LANE — plan, approval gate, coder — rather than
+# to the flat "plan only" completion that @@DELEGATE director runs. See escalate().
+ESCALATE_RE = re.compile(r"^\s*@@\s*ESCALATE\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 PLAN_RE = re.compile(r"@@PLAN\s*\n(.*?)\n\s*@@END", re.DOTALL)
 HANDOFF_RE = re.compile(r"^\s*@@\s*HANDOFF\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 
@@ -495,11 +582,23 @@ PROTOCOL = (
     "      would otherwise say you will get back to them. It queues a message\n"
     "      to their phone, so the promise is kept without them asking again.\n"
     "    @@DELEGATE coder: <one concrete task>\n"
-    "or  @@DELEGATE director: <a task needing a considered plan>\n"
     "You may emit more than one. Say in one short sentence that it is underway, then carry on. The "
     "system removes the @@ line before the human sees your reply, and it will show you the result "
     "when it lands. Never invent a result you have not been given. If a result is in the background "
     "state, report it naturally in speech.\n"
+    "When a request needs SEVERAL steps and real actions — anything with consequences, anything "
+    "you would otherwise attempt in one shot and get wrong — do NOT attempt it yourself, and do "
+    "NOT tell the human you have handled it or are handling it. Emit:\n"
+    "    @@ESCALATE: <the whole request, in the human's own words>\n"
+    "That is the ONLY route for multi-step work, and it REPLACES @@FOLLOWUP for it. A promise "
+    "queued with @@FOLLOWUP does nothing to get the work done — it only tells the human you will "
+    "come back, and then nothing happens. Escalating is what actually produces a plan. Do not "
+    "emit both.\n"
+    "It hands the request to the director, who draws up a plan the human must approve before "
+    "anything is done. Say only that a plan is being drawn up — never describe a plan you have "
+    "not been shown, never promise the outcome, and never say the work is done.\n"
+    "Do NOT use it for questions you can answer from what you have been given: retrieve those "
+    "and answer them yourself, in the same breath.\n"
     "When the human asks you to speak in a different voice, emit:\n"
     "    @@VOICE: <a description of the voice, e.g. a scottish dwarf, a calm narrator>\n"
     "The system picks the closest voice from the library and switches to it. Confirm briefly; the "
@@ -735,6 +834,16 @@ def apply_directives(text: str, sess: dict) -> str:
         if not text:
             text = (f"Of course, sir — I've put that in front of the "
                     f"{target.lower()} and will report back shortly.")
+    escalations = ESCALATE_RE.findall(text)
+    text = ESCALATE_RE.sub("", text).strip()
+    for request in escalations:
+        escalate(request.strip(), sess)
+        # The plan does not exist yet — it arrives as background work, and the
+        # director cannot act on it until the owner approves. So promise the plan,
+        # never describe one.
+        note = ("Of course, sir — that one wants proper planning. I've put it in front of "
+                "the director; I'll bring you the plan to approve shortly.")
+        text = f"{text}\n\n_{note}_".strip() if text else note
     for kind, description in PLAY_RE.findall(text):
         media = find_media(kind.lower(), description.strip())
         text = PLAY_RE.sub("", text).strip()
@@ -808,6 +917,9 @@ def apply_protocol(reply: str, sess: dict, conversational: bool) -> str:
         sess["approved"] = False
         sess["failures"] = 0
         sess["log"] = []
+        # A fresh plan has not been carried out yet. Without this, re-planning
+        # after one approved run would silently refuse to run the new one.
+        sess["running_plan"] = False
         emit("plan", plan=plan)
         reply = PLAN_RE.sub("", reply).strip()
 
@@ -919,6 +1031,22 @@ def to_ag2_messages(messages: list[dict], sess: dict, conversational: bool) -> l
             out.append({"role": "system", "content": team})
         if vision:
             out.append({"role": "system", "content": vision})
+        # The plan block. This branch used to return before it, so Kunou was blind
+        # to a plan it shared a session with and could not tell the owner what it
+        # had escalated. Truncated hard on purpose: this is an 8k window already
+        # carrying persona, PROTOCOL, up to 24 history messages, memory and team
+        # state, and everything here is read before the model can say a word.
+        if sess.get("plan") and sess.get("approved"):
+            out.append({"role": "system",
+                        "content": "The owner APPROVED this plan and it is being carried out. "
+                                   "Do not say any of it is done until you are given the result.\n"
+                                   f"Plan:\n{sess['plan'][:900]}"})
+        elif sess.get("plan"):
+            out.append({"role": "system",
+                        "content": "This plan is awaiting the owner's verdict. Put it to them "
+                                   "plainly and ask them to approve it. Nothing may begin before "
+                                   "they do.\n"
+                                   f"Plan:\n{sess['plan'][:900]}"})
         return out
     if sess.get("approved") and sess.get("plan"):
         out.append({"role": "system",
@@ -1320,22 +1448,32 @@ async def events(request: Request):
 async def approve(payload: dict):
     key = payload.get("session")
     approved = bool(payload.get("approved"))
+    them: dict | None = None
     with STATE_LOCK:
         if key and key in SESSIONS:
             SESSIONS[key]["approved"] = approved
             plan = SESSIONS[key]["plan"]
             if not approved:
                 SESSIONS[key]["plan"] = ""
+            else:
+                them = SESSIONS[key]
         else:
             pending = [s for s in SESSIONS.values() if s["plan"] and not s["approved"]]
             if not pending:
                 return JSONResponse({"status": "no pending plan"}, status_code=404)
-            sess = max(pending, key=lambda s: s["touched"])
-            sess["approved"] = approved
-            plan = sess["plan"]
+            them = max(pending, key=lambda s: s["touched"])
+            them["approved"] = approved
+            plan = them["plan"]
             if not approved:
-                sess["plan"] = ""
+                them["plan"] = ""
+                them = None
     emit("approval", approved=approved, plan=plan[:400])
+    # Deliberately OUTSIDE the lock: resume_escalation() -> escalate() takes
+    # STATE_LOCK itself, and it is a plain Lock, not a reentrant one. Holding it
+    # here would deadlock the approval — which looks exactly like the button
+    # doing nothing.
+    if them is not None:
+        resume_escalation(them)
     return {"status": "approved" if approved else "rejected", "plan": plan[:400]}
 
 
@@ -1386,10 +1524,17 @@ async def chat_completions(request: Request):
     ephemeral = bool(body.get("ephemeral"))
 
     last_user = next((m.get("content") or "" for m in reversed(messages) if m.get("role") == "user"), "")
-    if not conversational and not fetching and sess.get("plan") and not sess.get("approved") \
+    # `not conversational` used to be here, which meant an approval was only heard
+    # if the owner had switched the panel to jarvis-director. Now that the actor can
+    # escalate, the plan is put to them by the voice they actually talk to — so a
+    # "yes" to Kunou must open the same gate. The gate itself is unchanged: it still
+    # needs a plan to exist and to be unapproved, and it is still only ever opened by
+    # the human's own words (or the panel button), never by a model.
+    if not fetching and sess.get("plan") and not sess.get("approved") \
             and looks_like_approval(last_user):
         sess["approved"] = True
         emit("approval", approved=True, plan=sess["plan"][:400])
+        resume_escalation(sess)
 
     def fetch_kind():
         if news:
