@@ -523,8 +523,20 @@ def team_digest(question: str = "") -> str:
             r = c.get(f"{BOARD_URL}/api/board")
             r.raise_for_status()
             d = r.json()
-    except Exception:  # noqa: BLE001
-        return ""
+    except Exception as exc:  # noqa: BLE001
+        # SAY SO. This used to return "", which made a board that is DOWN
+        # indistinguishable from a team that is IDLE — so "what is going on?"
+        # produced nothing, and nothing reads as "no news", when the truth was
+        # "I could not ask". That is the one answer that must never be ambiguous:
+        # the human asks precisely BECAUSE they cannot see the fleet themselves.
+        #
+        # Still never raises: a missing board must not break a reply. It just
+        # stops pretending the silence means something.
+        print(f"[brain] board unreachable: {type(exc).__name__}: {exc}", flush=True)
+        return ("Dev team state: UNAVAILABLE — I could not reach the board service "
+                f"({type(exc).__name__}), so I cannot tell you what the team is doing. "
+                "This does NOT mean nothing is happening; it means I could not look. "
+                "Say so plainly if you mention the team, and do not guess at their state.")
     needs = d.get("needs") or []
     if not wants_team and not needs:
         return ""

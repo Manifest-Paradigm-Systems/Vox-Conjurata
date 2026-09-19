@@ -734,7 +734,11 @@ LIVE_PAGE = r"""<!doctype html>
   <button data-mode="camera">Take photo</button>
   <button data-mode="library">Choose image</button>
 </div>
-<input type="file" id="filePicker" accept="image/*" style="display:none">
+<!-- Hidden OFF-SCREEN, not display:none. Desktop Chrome will open a chooser for a
+     display:none input; Android WebView will not — it treats the element as
+     unrendered and the .click() does nothing at all, which reads as a dead
+     button. Positioned out of view keeps it rendered and still unreachable. -->
+<input type="file" id="filePicker" accept="image/*" style="position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0">
 
 
 <script>
