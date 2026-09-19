@@ -64,7 +64,41 @@ pull_tree "tar czf - -C '$REMOTE' \
     --exclude=node_modules \
     --exclude='*.log' --exclude='*.tgz' \
     --exclude='*.bak' --exclude='*.bak-*' \
+    --exclude='.env' --exclude='*.env' \
+    --exclude='*secret*' --exclude='*credential*' \
+    --exclude='*.key' --exclude='*.pem' --exclude='client.json' \
     ." "$DEST"
+
+# A name blocklist is a guess. brain.env was the only file in the whole tree
+# carrying a real credential, and '--exclude=*token*' would have been the wrong
+# way to reach it: jarvis-devteam.service.d/tokens.conf matches that name and is
+# legitimate config (DEVTEA*_TOKENS= output limits). So check by CONTENT, and
+# fail loudly rather than mirroring a secret into a repo that pushes publicly.
+if command -v python3 >/dev/null; then
+    python3 - "$DEST" <<'GUARD' || { echo "[$(date -Is)] REFUSING: secret-shaped value found in the mirror (see above)" >&2; exit 3; }
+import os, re, sys
+root = sys.argv[1]
+pats = [r"sk-[A-Za-z0-9_\-]{20,}", r"AIza[A-Za-z0-9_\-]{20,}", r"ghp_[A-Za-z0-9]{20,}",
+        r"hf_[A-Za-z0-9]{20,}", r"xox[bp]-[A-Za-z0-9\-]{10,}", r"BEGIN [A-Z ]*PRIVATE KEY",
+        r"(?:API_KEY|AUTH_TOKEN|ACCESS_TOKEN|SECRET|PASSWORD)\s*=\s*\S{16,}"]
+bad = []
+for dp, dn, fn in os.walk(root):
+    for f in fn:
+        p = os.path.join(dp, f)
+        try:
+            if os.path.getsize(p) > 2_000_000:
+                continue
+            txt = open(p, "r", errors="ignore").read()
+        except Exception:
+            continue
+        for pat in pats:
+            if re.search(pat, txt):
+                bad.append(p); break
+for p in bad:
+    print(f"  SECRET-SHAPED VALUE: {p}", file=sys.stderr)
+sys.exit(1 if bad else 0)
+GUARD
+fi
 
 # The systemd USER units and their drop-ins — the half that was never backed up.
 # The drop-ins are where Jarvis's voice, TTS routing and devteam environment
