@@ -119,6 +119,25 @@ def _db() -> sqlite3.Connection:
     # find them again, and a LIKE scan over years of chat is not a plan.
     conn.execute("""CREATE VIRTUAL TABLE IF NOT EXISTS turns_fts USING fts5(
         content, session UNINDEXED, ts UNINDEXED, role UNINDEXED)""")
+    # The conversation list. `sessions` has been in db.py's SCHEMA since the
+    # beginning and has never held a row — its only writer, touch_session(), is
+    # called from nowhere in the tree. So this is scaffolding finally being used,
+    # not a new table.
+    conn.execute("""CREATE TABLE IF NOT EXISTS sessions (
+        key TEXT PRIMARY KEY, started REAL, touched REAL, model TEXT,
+        title TEXT, topic TEXT, turns INTEGER DEFAULT 0, archived INTEGER DEFAULT 0)""")
+    try:
+        conn.execute("ALTER TABLE sessions ADD COLUMN topic TEXT")
+    except sqlite3.Error:
+        pass                       # already there; CREATE above only applies fresh
+    conn.execute("CREATE INDEX IF NOT EXISTS turns_session ON turns(session)")
+    conn.execute("CREATE INDEX IF NOT EXISTS sessions_touched ON sessions(touched DESC)")
+    # Tombstones. A delete has to be remembered after the rows are gone, because
+    # the backup snapshots taken BEFORE it still contain the conversation and
+    # rotate out only slowly. See the purge in sync-cerebro-jarvis.sh.
+    conn.execute("""CREATE TABLE IF NOT EXISTS deleted_conversations (
+        key TEXT PRIMARY KEY, deleted_at REAL)""")
+    conn.row_factory = sqlite3.Row
     return conn
 
 
@@ -126,14 +145,144 @@ def record(session: str, model: str, role: str, content: str, ephemeral: bool = 
     """Persist one turn. Incognito conversations write nothing at all."""
     if ephemeral or not (content or "").strip():
         return
+    now = time.time()
+    # A conversation titles itself from its first user turn and keeps that title
+    # until someone renames it by hand — hence the CASE, which refuses to let a
+    # later turn overwrite a title that already exists.
+    auto_title = content.strip().split("\n")[0][:60] if role == "user" else None
     try:
         with _db() as c:
             cur = c.execute("INSERT INTO turns (ts, session, model, role, content) VALUES (?,?,?,?,?)",
-                            (time.time(), session, model, role, content))
+                            (now, session, model, role, content))
             c.execute("INSERT INTO turns_fts (rowid, content, session, ts, role) VALUES (?,?,?,?,?)",
-                      (cur.lastrowid, content, session, time.time(), role))
+                      (cur.lastrowid, content, session, now, role))
+            # Same transaction as the turn, so a turn can never exist without the
+            # conversation row that makes it findable in the list.
+            c.execute(
+                "INSERT INTO sessions (key, started, touched, model, title, turns)"
+                " VALUES (?,?,?,?,?,1)"
+                " ON CONFLICT(key) DO UPDATE SET"
+                "  touched = excluded.touched,"
+                "  turns   = turns + 1,"
+                "  model   = COALESCE(excluded.model, model),"
+                "  title   = CASE WHEN COALESCE(sessions.title,'') <> ''"
+                "                 THEN sessions.title ELSE excluded.title END",
+                (session, now, now, model, auto_title))
     except sqlite3.Error as exc:      # never lose a reply because the log failed
         print(f"[jarvis-brain] conversation log failed: {exc}", flush=True)
+        return
+    # Told once the write actually landed, so a second window showing the same
+    # conversation can append it. Emitting before the write would put the two
+    # devices permanently out of step over a turn that was never stored.
+    emit("turn", session=session, role=role)
+
+
+# ------------------------------------------------------------ conversations
+
+def conversation_turns(cid: str, limit: int = 24) -> list[dict]:
+    """The transcript of one conversation, oldest first.
+
+    Takes the LAST `limit` rows by id and then reverses, rather than taking the
+    first — a long conversation must reopen at its end, which is where the human
+    left off.
+    """
+    with _db() as c:
+        rows = c.execute("SELECT id, ts, role, content FROM turns WHERE session=?"
+                         " ORDER BY id DESC LIMIT ?", (cid, max(1, min(limit, 200)))).fetchall()
+    return [dict(r) for r in reversed(rows)]
+
+
+def list_conversations(topic: str | None = None, limit: int = 50) -> list[dict]:
+    """The chat list, most recently used first. Archived rows are not shown."""
+    sql = ("SELECT key, started, touched, model, title, topic, turns FROM sessions"
+           " WHERE archived = 0")
+    args: list = []
+    if topic:
+        sql += " AND topic = ?"
+        args.append(topic)
+    sql += " ORDER BY touched DESC LIMIT ?"
+    args.append(max(1, min(limit, 200)))
+    with _db() as c:
+        return [dict(r) for r in c.execute(sql, args)]
+
+
+def rename_conversation(cid: str, title: str | None, topic: str | None) -> bool:
+    """Rename and/or retopic. COALESCE so passing only one leaves the other be."""
+    with _db() as c:
+        cur = c.execute(
+            "UPDATE sessions SET title = COALESCE(?, title), topic = COALESCE(?, topic)"
+            " WHERE key = ?", (title, topic, cid))
+        return cur.rowcount > 0
+
+
+def topic_list() -> list[dict]:
+    """Topics worth offering in a picker: the ones actually in use.
+
+    Drawn from facts (assigned during memory extraction) unioned with any topic
+    set on a conversation by hand. No new taxonomy — the vocabulary already
+    exists and this just enumerates it.
+    """
+    with _db() as c:
+        rows = c.execute(
+            "SELECT topic, COUNT(*) AS n FROM ("
+            "  SELECT topic FROM facts WHERE status='active' AND COALESCE(topic,'') <> ''"
+            "  UNION ALL"
+            "  SELECT topic FROM sessions WHERE COALESCE(topic,'') <> ''"
+            ") GROUP BY topic ORDER BY n DESC").fetchall()
+    return [dict(r) for r in rows]
+
+
+def delete_conversation(cid: str) -> dict:
+    """Forget a conversation completely, and report what was destroyed.
+
+    Everything derived from it goes, not just the transcript:
+
+      turns          the log itself
+      turns_fts      A SECOND FULL COPY OF THE TEXT. turns_fts is a standalone
+                     FTS5 table (no `content=` clause), so its _content shadow
+                     table holds every transcript verbatim — deleting from
+                     `turns` alone would leave it on disk and still findable by
+                     /recall, with nothing on screen to suggest it survived.
+                     facts_fts and archive_fts are external-content and need no
+                     equivalent, which is exactly why this is easy to get wrong.
+      facts          what memory extraction learned from this conversation
+      archive_chunks the chunked archive copy of it
+      sessions       the row in the chat list
+    """
+    with _db() as c:
+        counts = {
+            "turns": c.execute("SELECT COUNT(*) FROM turns WHERE session=?", (cid,)).fetchone()[0],
+            "facts": c.execute("SELECT COUNT(*) FROM facts WHERE source_session=?",
+                               (cid,)).fetchone()[0],
+            "chunks": c.execute("SELECT COUNT(*) FROM archive_chunks WHERE session=?",
+                                (cid,)).fetchone()[0],
+        }
+        c.execute("DELETE FROM turns WHERE session=?", (cid,))
+        c.execute("DELETE FROM turns_fts WHERE session=?", (cid,))
+        c.execute("DELETE FROM facts WHERE source_session=?", (cid,))
+        c.execute("DELETE FROM archive_chunks WHERE session=?", (cid,))
+        c.execute("DELETE FROM sessions WHERE key=?", (cid,))
+        # A tombstone, because the backup snapshots taken before now still hold
+        # this conversation. The sync script on the Workhorse reads these and
+        # purges them from every snapshot it can see.
+        c.execute("INSERT OR REPLACE INTO deleted_conversations (key, deleted_at) VALUES (?,?)",
+                  (cid, time.time()))
+    # secure_delete is already ON, so deleted content is overwritten rather than
+    # left in free pages; VACUUM rewrites the file regardless. For a privacy
+    # feature the gap between "very likely gone" and "not in the file" is the
+    # entire point, and it is cheap here.
+    try:
+        raw = sqlite3.connect(DB_PATH, timeout=30)
+        try:
+            raw.execute("VACUUM")
+            raw.commit()
+        finally:
+            raw.close()
+    except sqlite3.Error as exc:
+        print(f"[jarvis-brain] vacuum after delete failed: {exc}", flush=True)
+    with STATE_LOCK:
+        SESSIONS.pop(cid, None)
+    return counts
 
 
 def recall(query: str, limit: int = 8) -> list[dict]:
@@ -224,10 +373,21 @@ def emit(kind: str, **fields) -> None:
             pass
 
 
-def session_for(messages: list[dict]) -> dict:
-    first_user = next((m.get("content") or "" for m in messages if m.get("role") == "user"), "")
-    system = next((m.get("content") or "" for m in messages if m.get("role") == "system"), "")
-    key = hashlib.sha1(f"{system}\x00{first_user}".encode()).hexdigest()[:16]
+def session_for(messages: list[dict], conversation: str | None = None) -> dict:
+    """The session for this turn.
+
+    `conversation` is the id the CLIENT holds and sends back. When it is absent
+    one is minted here — which is precisely what "start a new chat" means — and
+    returned to the caller so it can be stored.
+
+    This used to be derived: sha1(system prompt + first user message). That was a
+    bug rather than merely an inconvenience. The panel trims its history to 24
+    turns, so once the first message fell off the front the hash changed, the
+    session silently split in two, and anything waiting on approval was orphaned
+    mid-conversation. Editing persona.txt did the same thing to every new
+    conversation at once. An id the client keeps cannot drift.
+    """
+    key = (conversation or "").strip() or uuid.uuid4().hex[:16]
     now = time.time()
     with STATE_LOCK:
         for k, s in list(SESSIONS.items()):
@@ -926,7 +1086,7 @@ def apply_directives(text: str, sess: dict) -> str:
 FOLLOWUP_RE = re.compile(r"@@FOLLOWUP\s*:?\s*(.+?)(?=\n@@|\Z)", re.DOTALL)
 
 
-def take_followups(reply: str) -> tuple[str, list[str]]:
+def take_followups(reply: str, sess: dict | None = None) -> tuple[str, list[str]]:
     """Pull @@FOLLOWUP lines out of a reply and queue them for the device.
 
     Handled here rather than inside apply_directives so it applies on BOTH the
@@ -937,6 +1097,13 @@ def take_followups(reply: str) -> tuple[str, list[str]]:
     notes = [n for n in notes if n]
     if not notes:
         return reply, []
+    if sess is not None and sess.get("ephemeral"):
+        # A test chat keeps nothing, and that has to include the PROMISE. This is
+        # a genuinely separate path: queue_device_message writes to device_messages
+        # and knows nothing about `ephemeral`, so without this a conversation that
+        # is supposed to be forgotten puts a message on the owner's phone — a
+        # memory of the chat, outliving the chat, sitting on a device.
+        return FOLLOWUP_RE.sub("", reply).strip(), []
     for n in notes:
         queue_device_message(n)
     return FOLLOWUP_RE.sub("", reply).strip(), notes
@@ -945,7 +1112,7 @@ def take_followups(reply: str) -> tuple[str, list[str]]:
 def apply_protocol(reply: str, sess: dict, conversational: bool) -> str:
     """Turn the model's @@ directives into real work, and return what the human
     sees (directives stripped, handoff results inlined)."""
-    reply, _ = take_followups(reply)
+    reply, _ = take_followups(reply, sess)
     if conversational:
         return apply_directives(reply, sess) or "Of course, sir — here it is."
     plan_match = PLAN_RE.search(reply)
@@ -1538,6 +1705,85 @@ def device_notify(payload: dict):
     return {"ok": True, "id": row_id}
 
 
+# ---------------------------------------------------------------- chats
+
+@app.get("/api/conversations")
+def conversations_list(topic: str | None = None, limit: int = 50):
+    """The chat list, most recently used first."""
+    try:
+        rows = list_conversations(topic, limit)
+    except sqlite3.Error as exc:
+        # Explicit, not an empty list: "no chats" and "the query broke" must not
+        # look alike to a UI deciding what to draw.
+        return JSONResponse({"error": "db", "detail": str(exc)}, status_code=500)
+    return {"count": len(rows), "conversations": rows}
+
+
+@app.get("/api/conversations/{cid}/turns")
+def conversations_turns(cid: str, limit: int = 24):
+    """One conversation's transcript, oldest first."""
+    try:
+        turns = conversation_turns(cid, limit)
+    except sqlite3.Error as exc:
+        return JSONResponse({"error": "db", "detail": str(exc)}, status_code=500)
+    return {"id": cid, "count": len(turns), "turns": turns}
+
+
+@app.post("/api/conversations")
+def conversations_new():
+    """Start a chat. Returns the id to send back with every turn."""
+    cid = uuid.uuid4().hex[:16]
+    try:
+        with _db() as c:
+            c.execute("INSERT INTO sessions (key, started, touched, turns) VALUES (?,?,?,0)",
+                      (cid, time.time(), time.time()))
+    except sqlite3.Error as exc:
+        return JSONResponse({"error": "db", "detail": str(exc)}, status_code=500)
+    return {"id": cid}
+
+
+@app.patch("/api/conversations/{cid}")
+async def conversations_rename(cid: str, payload: dict):
+    """Rename and/or move to a topic. Either field may be omitted."""
+    title, topic = payload.get("title"), payload.get("topic")
+    if title is None and topic is None:
+        return JSONResponse({"error": "nothing to change"}, status_code=400)
+    try:
+        ok = rename_conversation(cid, title, topic)
+    except sqlite3.Error as exc:
+        return JSONResponse({"error": "db", "detail": str(exc)}, status_code=500)
+    if not ok:
+        return JSONResponse({"error": "no such conversation"}, status_code=404)
+    emit("conversation", id=cid, title=title, topic=topic)
+    return {"ok": True, "id": cid, "title": title, "topic": topic}
+
+
+@app.delete("/api/conversations/{cid}")
+def conversations_delete(cid: str):
+    """Forget a conversation — transcript, search copies and what was learned.
+
+    Irreversible, and it reports what it destroyed rather than just claiming
+    success, so the caller can say "that removed 12 turns and 4 remembered facts"
+    instead of a bare OK. It also tombstones the id, which is what lets the
+    Workhorse purge it out of the backup snapshots taken before now.
+    """
+    try:
+        counts = delete_conversation(cid)
+    except sqlite3.Error as exc:
+        return JSONResponse({"error": "db", "detail": str(exc)}, status_code=500)
+    emit("conversation_deleted", id=cid, **counts)
+    return {"ok": True, "id": cid, "destroyed": counts}
+
+
+@app.get("/api/topics")
+def topics():
+    """The topic vocabulary already in use, for a picker."""
+    try:
+        return {"topics": topic_list()}
+    except sqlite3.Error as exc:
+        return JSONResponse({"error": "db", "detail": str(exc)}, status_code=500)
+
+
 @app.post("/api/device/ack")
 def device_ack(payload: dict):
     """Mark delivered. Idempotent: a re-delivered notification must not error."""
@@ -1658,7 +1904,7 @@ async def chat_completions(request: Request):
     calendar = CALENDAR_MODEL_NAME in requested
     fetching = web or news or wiki or mail or calendar
     conversational = (DIRECTOR_MODEL_NAME not in requested) and not fetching
-    sess = session_for(messages)
+    sess = session_for(messages, body.get("conversation"))
     # A photo the panel attached to this turn: the context block /vision composed
     # from what the eyes read. See to_ag2_messages for why it rides the session.
     if body.get("vision"):
@@ -1666,6 +1912,9 @@ async def chat_completions(request: Request):
     # epub = "keep nothing". Set by the panel's incognito toggle; OWUI callers
     # simply never send it, so their conversations are kept by default.
     ephemeral = bool(body.get("ephemeral"))
+    # Carried on the session so the directive handlers can see it: a promise made
+    # in a test chat must not be queued to the phone. See take_followups.
+    sess["ephemeral"] = ephemeral
 
     last_user = next((m.get("content") or "" for m in reversed(messages) if m.get("role") == "user"), "")
     # `not conversational` used to be here, which meant an approval was only heard

@@ -707,8 +707,30 @@ LIVE_PAGE = r"""<!doctype html>
   #incognitoLbl { display:flex; align-items:center; gap:6px; color:var(--dim); font-size:12px;
                   padding:7px 10px; border:1px solid var(--line); border-radius:8px; cursor:pointer; }
   #incognitoLbl.on { color:var(--ok); border-color:var(--ok); }
+  #chatsBtn.on { color:var(--accent); border-color:var(--accent); }
   #micHint { padding:0 16px 8px; color:var(--dim); font-size:11px; flex:0 0 auto; }
   #log { flex:1; overflow-y:auto; padding:4px 16px 16px; }
+  /* The conversation list. Hidden until asked for, then it takes the sheet body;
+     #log stays in the DOM rather than being emptied, so toggling between the two
+     never loses the transcript you were reading. */
+  #convos { display:none; flex:1; flex-direction:column; min-height:0; }
+  #convos.open { display:flex; }
+  #convos.open ~ #log { display:none; }
+  #convoHead { display:flex; gap:8px; align-items:center; padding:6px 16px 10px; }
+  #convoHead input { flex:1; min-width:0; background:#0e1620; color:var(--text);
+                     border:1px solid var(--line); border-radius:8px; padding:7px 10px;
+                     font:inherit; }
+  #convoHead select { max-width:40%; }
+  #convoList { flex:1; overflow-y:auto; padding:0 10px 14px; }
+  .convo { display:flex; align-items:baseline; gap:8px; padding:9px 10px; border-radius:8px;
+           border:1px solid transparent; cursor:pointer; }
+  .convo:hover { background:#0e1620; border-color:var(--line); }
+  .convo.here { border-color:var(--accent); }
+  .convo .t { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .convo .meta { color:var(--dim); font-size:11px; white-space:nowrap; }
+  .convo .acts { display:flex; gap:4px; }
+  .convo .acts button { padding:2px 7px; font-size:11px; }
+  .convos-empty { color:var(--dim); padding:16px 10px; font-style:italic; }
   .m { margin-bottom:10px; }
   .m .who { color:var(--dim); font-size:11px; letter-spacing:.1em; }
   .m.you .who { color:var(--warn); } .m.jarvis .who { color:var(--accent); }
@@ -740,6 +762,20 @@ LIVE_PAGE = r"""<!doctype html>
     <label id="incognitoLbl" title="A throwaway chat: nothing is kept, and it is forgotten when you close it">
       <input type="checkbox" id="incognito"> test chat
     </label>
+    <button id="newChatBtn" title="Start a new conversation">＋ new</button>
+    <button id="chatsBtn" title="Your conversations">chats</button>
+  </div>
+
+  <!-- The conversation list. Lives in the sheet because the sheet is already the
+       place the layout keeps non-face chrome, and it is hidden until opened — you
+       should watch the face, not a sidebar. -->
+  <div id="convos">
+    <div id="convoHead">
+      <input id="convoSearch" placeholder="filter…" autocomplete="off">
+      <select id="topicFilter" title="Filter by topic"><option value="">all topics</option></select>
+      <button id="convoClose" title="Back to the conversation">×</button>
+    </div>
+    <div id="convoList"></div>
   </div>
   <!-- The mic carries two gestures and a gesture has no affordance of its own,
        so it is written down once, where the other controls are explained. -->
@@ -1113,6 +1149,16 @@ const esc = s => (s || '').replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&
 // told to write nothing — the transcript still lives in this page's memory.
 let MODEL = localStorage.getItem('jarvis.model') || 'jarvis';
 let INCOGNITO = localStorage.getItem('jarvis.incognito') === '1';
+// Which conversation this page is in. Minted HERE rather than asked for, so a
+// streaming reply never has to make a round trip to learn its own id. The brain
+// creates the row lazily on the first turn it records.
+let CONVO = localStorage.getItem('jarvis.conversation') || '';
+const setConvo = id => { CONVO = id || ''; localStorage.setItem('jarvis.conversation', CONVO); };
+
+function newConvoId() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID().replace(/-/g, '').slice(0, 16);
+  return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
 
 function setState(s) {
   const label = (s === 'idle' && running) ? 'your turn — take your time' : s;
@@ -1142,6 +1188,192 @@ function openSheet(open) {
 }
 $('handle').onclick = () => openSheet(false);
 $('chatBtn').onclick = () => openSheet();
+
+/* ---- conversations ---------------------------------------------------- */
+
+// Repaint the transcript from server state. say() only ever APPENDS, so opening
+// an old conversation needs a path that clears first — this is the only place in
+// the file that empties #log, and it has to stay that way or the two get out of
+// step.
+function renderTranscript(turns) {
+  $('log').innerHTML = '';
+  history = [];
+  for (const t of turns) {
+    say(t.role === 'user' ? 'you' : 'jarvis', t.content);
+    history.push({role: t.role, content: t.content});
+  }
+  if (history.length > 24) history = history.slice(-24);
+}
+
+async function openConversation(id) {
+  setConvo(id);
+  try {
+    const r = await fetch('/api/conversations/' + encodeURIComponent(id) + '/turns?limit=24');
+    const d = await r.json();
+    if (d.error) throw new Error(d.detail || d.error);
+    renderTranscript(d.turns || []);
+  } catch (e) {
+    say('system', 'Could not open that conversation (' + e.message + ').');
+  }
+  closeConvos();
+}
+
+function newChat() {
+  setConvo(newConvoId());
+  $('log').innerHTML = '';
+  history = [];
+  closeConvos();
+}
+
+function closeConvos() {
+  $('convos').classList.remove('open');
+  $('chatsBtn').classList.remove('on');
+}
+
+const shortWhen = ts => {
+  const d = new Date(ts * 1000);
+  return d.toDateString() === new Date().toDateString()
+    ? d.toTimeString().slice(0, 5)
+    : d.toLocaleDateString(undefined, {month: 'short', day: 'numeric'});
+};
+
+async function loadConversations() {
+  const q = $('convoSearch').value.trim().toLowerCase();
+  const topic = $('topicFilter').value;
+  const list = $('convoList');
+  list.innerHTML = '<div class="convos-empty">loading…</div>';
+  try {
+    const r = await fetch('/api/conversations?limit=100'
+                          + (topic ? '&topic=' + encodeURIComponent(topic) : ''));
+    const d = await r.json();
+    if (d.error) throw new Error(d.detail || d.error);
+    let rows = d.conversations || [];
+    if (q) rows = rows.filter(c => ((c.title || '') + ' ' + (c.topic || '')).toLowerCase().includes(q));
+    if (!rows.length) {
+      list.innerHTML = '<div class="convos-empty">No conversations yet.</div>';
+      return;
+    }
+    list.innerHTML = '';
+    for (const c of rows) {
+      const el = document.createElement('div');
+      el.className = 'convo' + (c.key === CONVO ? ' here' : '');
+      el.innerHTML =
+        '<span class="t">' + esc(c.title || '(untitled)') + '</span>'
+        + '<span class="meta">' + (c.topic ? esc(c.topic) + ' · ' : '') + c.turns + ' · '
+        + shortWhen(c.touched) + '</span>'
+        + '<span class="acts">'
+        + '<button data-act="rename" title="Rename">ab</button>'
+        + '<button data-act="topic" title="Set a topic">#</button>'
+        + '<button data-act="delete" title="Delete and forget">×</button></span>';
+      el.querySelector('.t').onclick = () => openConversation(c.key);
+      el.querySelector('.meta').onclick = () => openConversation(c.key);
+      el.querySelector('[data-act="rename"]').onclick = e => { e.stopPropagation(); renameConvo(c); };
+      el.querySelector('[data-act="topic"]').onclick = e => { e.stopPropagation(); topicConvo(c); };
+      el.querySelector('[data-act="delete"]').onclick = e => { e.stopPropagation(); deleteConvo(c); };
+      list.appendChild(el);
+    }
+  } catch (e) {
+    list.innerHTML = '<div class="convos-empty">Could not load conversations — '
+      + esc(e.message) + '. That is not the same as having none.</div>';
+  }
+}
+
+async function patchConvo(id, body) {
+  try {
+    const r = await fetch('/api/conversations/' + encodeURIComponent(id),
+                          {method: 'PATCH', headers: {'Content-Type': 'application/json'},
+                           body: JSON.stringify(body)});
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+  } catch (e) {
+    say('system', 'Could not save that (' + e.message + ').');
+  }
+}
+
+async function renameConvo(c) {
+  const name = prompt('Rename this conversation:', c.title || '');
+  if (name === null) return;
+  await patchConvo(c.key, {title: name.trim()});
+  loadConversations();
+}
+
+async function topicConvo(c) {
+  const t = prompt('Topic for this conversation (blank to clear):', c.topic || '');
+  if (t === null) return;
+  await patchConvo(c.key, {topic: t.trim()});
+  loadConversations();
+  loadTopics();
+}
+
+async function deleteConvo(c) {
+  // The count is shown BEFORE it happens, deliberately. This removes the
+  // transcript, everything Jarvis learned from the conversation, and its copies
+  // in the backup snapshots. A delete that silently drops a dozen remembered
+  // facts is one you use once and regret.
+  let turns = c.turns || 0;
+  try {
+    const r = await fetch('/api/conversations/' + encodeURIComponent(c.key) + '/turns?limit=200');
+    const d = await r.json();
+    if (typeof d.count === 'number') turns = d.count;
+  } catch (e) { /* the count is a courtesy; the delete still has to work */ }
+
+  if (!confirm('Delete "' + (c.title || 'untitled') + '"?\n\n'
+             + turns + ' turn(s), plus everything Jarvis learned from this\n'
+             + 'conversation and its copies in the backups.\n\n'
+             + 'This cannot be undone.')) return;
+  try {
+    const r = await fetch('/api/conversations/' + encodeURIComponent(c.key), {method: 'DELETE'});
+    const d = await r.json();
+    if (d.error) throw new Error(d.detail || d.error);
+    const k = d.destroyed || {};
+    say('system', 'Deleted and forgotten: ' + (k.turns || 0) + ' turns, '
+        + (k.facts || 0) + ' remembered facts, ' + (k.chunks || 0) + ' archived passages.');
+    if (c.key === CONVO) newChat();
+    loadConversations();
+  } catch (e) {
+    say('system', 'Could not delete that (' + e.message + '). Nothing was removed.');
+  }
+}
+
+async function loadTopics() {
+  try {
+    const d = await (await fetch('/api/topics')).json();
+    const sel = $('topicFilter'), keep = sel.value;
+    sel.innerHTML = '<option value="">all topics</option>';
+    for (const t of (d.topics || [])) {
+      const o = document.createElement('option');
+      o.value = t.topic;
+      o.textContent = t.topic + ' (' + t.n + ')';
+      sel.appendChild(o);
+    }
+    sel.value = keep;
+  } catch (e) { /* a missing topic list is not worth complaining about */ }
+}
+
+$('newChatBtn').onclick = () => { newChat(); openSheet(true); };
+$('chatsBtn').onclick = () => {
+  openSheet(true);
+  if ($('convos').classList.toggle('open')) {
+    $('chatsBtn').classList.add('on');
+    loadConversations();
+    loadTopics();
+  } else {
+    $('chatsBtn').classList.remove('on');
+  }
+};
+$('convoClose').onclick = closeConvos;
+$('convoSearch').oninput = () => loadConversations();
+$('topicFilter').onchange = () => loadConversations();
+
+// Resume where this device left off. A test chat is never resumed, and starting
+// a new one is the default — the id in localStorage is a hint, not a claim, so a
+// conversation deleted from the other device simply starts fresh.
+if (INCOGNITO) {
+  setConvo('');
+} else if (CONVO) {
+  openConversation(CONVO);
+} else {
+  newChat();
+}
 
 /* ---- live audio ------------------------------------------------------- */
 async function start(which) {
@@ -1344,6 +1576,10 @@ function looksLikeEcho(text) {
 async function ask(text, vision) {
   chirpedThisTurn = false;
   setState('thinking…');
+  // The first turn of a new chat names it. Minted before the request goes out,
+  // which is what lets a STREAMING reply be filed under it without waiting for
+  // the server to hand an id back.
+  if (!INCOGNITO && !CONVO) setConvo(newConvoId());
   history.push({role:'user', content:text});
   let reply = '';
   const speaker = new Speaker();
@@ -1353,6 +1589,7 @@ async function ask(text, vision) {
     const r = await fetchWithTimeout('/api/chat', {method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({messages: history, model: MODEL,
+                            conversation: INCOGNITO ? '' : CONVO,
                             ephemeral: INCOGNITO, stream: true,
                             ...(vision ? {vision: vision} : {})})}, 120000);
     if (!r.ok) throw new Error('chat ' + r.status);
@@ -1492,7 +1729,17 @@ inc.onchange = () => {
   INCOGNITO = inc.checked;
   localStorage.setItem('jarvis.incognito', INCOGNITO ? '1' : '0');
   $('incognitoLbl').classList.toggle('on', INCOGNITO);
-  if (INCOGNITO) { history = []; say('system', 'Test chat — nothing here is kept, and this conversation is forgotten when you close it.'); }
+  if (INCOGNITO) {
+    // Forget which conversation we were in, and start clean: a test chat is not
+    // filed under the real one, and must not be resumed by a later reload.
+    setConvo('');
+    $('log').innerHTML = '';
+    history = [];
+    say('system', 'Test chat — nothing here is kept, and this conversation is forgotten '
+                + 'when you close it or start a new one.');
+  } else {
+    newChat();
+  }
 };
 
 fetch('/api/faces').then(r => r.json()).then(cfg => {
