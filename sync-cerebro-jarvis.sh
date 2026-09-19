@@ -96,12 +96,14 @@ c = sqlite3.connect(f"file:{src}?mode=ro", uri=True)
 c.execute(f"VACUUM INTO '{out}'")        # consistent + compacted, schema and all
 c.close()
 
-# Empty `runs` in the COPY. It is the devteam's black box — every model call's
-# full prompt and output, ~17.6 KB a row and 96% of the file — and essentially
+# Empty the "runs" table in the COPY. It is the devteam's black box — every model
+# call's full prompt and output, ~17.6 KB a row and 96% of the file — and almost
 # nothing reads the text back (the board takes metadata only; devteam reads
-# `output` only WHERE ok=0). The conversations we actually care about are 48 KB.
+# "output" only WHERE ok=0). The conversations we actually care about are 48 KB.
 # The table and its schema stay, so a restore still has a valid DB; it just has
 # no devteam history. Set DB_KEEP_RUNS=1 to keep it.
+# NB: no backticks anywhere in this heredoc — it is deliberately unquoted so that
+# $DB_REMOTE expands, which means backticks would be command-substituted.
 if os.environ.get("DB_KEEP_RUNS") != "1":
     d = sqlite3.connect(out)
     d.execute("DELETE FROM runs")
