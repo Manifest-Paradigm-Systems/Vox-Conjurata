@@ -143,6 +143,68 @@ def recall(query: str, limit: int = 8) -> list[dict]:
             for r in rows]
 
 
+# Device messages: things Jarvis has PROMISED to come back with.
+#
+# He says "I will get back to you on that" and then structurally cannot — the
+# reply goes to the panel and nowhere else, so the promise is unkeepable. This
+# is the delivery path: a durable queue, because the phone is often not
+# connected at the moment he follows up, and a live emit, so a connected phone
+# sees it at once.
+#
+# It is also the prerequisite for Android Auto: templated messaging apps MUST
+# also raise their own notifications, so this queue is what both the follow-up
+# and the car depend on.
+DEVICE_MESSAGES_DDL = """
+CREATE TABLE IF NOT EXISTS device_messages (
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts      REAL NOT NULL,
+    kind    TEXT NOT NULL DEFAULT 'followup',
+    title   TEXT,
+    body    TEXT NOT NULL,
+    item_id TEXT,
+    ack_ts  REAL
+)
+"""
+
+
+def _device_messages_ready() -> None:
+    with _db() as c:
+        c.execute(DEVICE_MESSAGES_DDL)
+        c.execute("CREATE INDEX IF NOT EXISTS device_messages_pending"
+                  " ON device_messages(ack_ts, id)")
+
+
+def queue_device_message(body: str, title: str = "Jarvis", kind: str = "followup",
+                         item_id: str = "") -> int:
+    """Queue something for the device to be told about. Returns the row id.
+
+    Never raises: a chat that produced a good answer must not fail because the
+    notification could not be queued.
+    """
+    body = (body or "").strip()
+    if not body:
+        return 0
+    try:
+        _device_messages_ready()
+        with _db() as c:
+            cur = c.execute(
+                "INSERT INTO device_messages (ts, kind, title, body, item_id)"
+                " VALUES (?,?,?,?,?)",
+                (time.time(), kind, title, body[:2000], item_id or ""))
+            row_id = cur.lastrowid
+        # live push too: a connected panel shows it instantly, the queue covers
+        # the phone that is not there.
+        # NOT kind= — emit's first parameter is already `kind`, so passing it
+        # again is "got multiple values for argument 'kind'". Name the field
+        # for what it is on the wire instead.
+        emit("device_message", id=row_id, msg_kind=kind, title=title,
+             body=body[:400], item_id=item_id or "")
+        return row_id
+    except Exception as exc:  # noqa: BLE001
+        print(f"[brain] device message queue failed: {exc}", flush=True)
+        return 0
+
+
 def emit(kind: str, **fields) -> None:
     event = {"ts": time.time(), "kind": kind, **fields}
     with STATE_LOCK:
@@ -414,6 +476,9 @@ PROTOCOL = (
     "\n\nDELEGATION PROTOCOL (use it exactly; it is parsed by the house system)\n"
     "When a request needs real work — code, research, anything slow — do NOT do it yourself and do "
     "NOT pretend to. Emit a line on its own:\n"
+    "    @@FOLLOWUP: <what you will come back with> — use this WHENEVER you\n"
+    "      would otherwise say you will get back to them. It queues a message\n"
+    "      to their phone, so the promise is kept without them asking again.\n"
     "    @@DELEGATE coder: <one concrete task>\n"
     "or  @@DELEGATE director: <a task needing a considered plan>\n"
     "You may emit more than one. Say in one short sentence that it is underway, then carry on. The "
@@ -684,9 +749,29 @@ def apply_directives(text: str, sess: dict) -> str:
     return re.sub(r"\s*@@\s*$", "", text, flags=re.MULTILINE).strip()
 
 
+FOLLOWUP_RE = re.compile(r"@@FOLLOWUP\s*:?\s*(.+?)(?=\n@@|\Z)", re.DOTALL)
+
+
+def take_followups(reply: str) -> tuple[str, list[str]]:
+    """Pull @@FOLLOWUP lines out of a reply and queue them for the device.
+
+    Handled here rather than inside apply_directives so it applies on BOTH the
+    conversational and the plan path: a promise to follow up is a promise either
+    way, and dropping it on one path is how the promise became unkeepable.
+    """
+    notes = [m.group(1).strip() for m in FOLLOWUP_RE.finditer(reply or "")]
+    notes = [n for n in notes if n]
+    if not notes:
+        return reply, []
+    for n in notes:
+        queue_device_message(n)
+    return FOLLOWUP_RE.sub("", reply).strip(), notes
+
+
 def apply_protocol(reply: str, sess: dict, conversational: bool) -> str:
     """Turn the model's @@ directives into real work, and return what the human
     sees (directives stripped, handoff results inlined)."""
+    reply, _ = take_followups(reply)
     if conversational:
         return apply_directives(reply, sess) or "Of course, sir — here it is."
     plan_match = PLAN_RE.search(reply)
@@ -1030,6 +1115,70 @@ async def recall_endpoint(q: str, limit: int = 8):
     than holding the past in the window, the past is looked up on demand."""
     hits = recall(q, limit)
     return {"query": q, "hits": len(hits), "results": hits}
+
+
+@app.get("/api/device/messages")
+def device_messages(limit: int = 20):
+    """What the device has not been told yet. The phone polls or holds /events."""
+    try:
+        _device_messages_ready()
+        with _db() as c:
+            # _db() sets no row_factory, so rows are plain tuples and dict(r)
+            # raises "object is not iterable". Set it here rather than changing
+            # _db(), which every other query in this file already relies on.
+            c.row_factory = sqlite3.Row
+            rows = [dict(r) for r in c.execute(
+                "SELECT id, ts, kind, title, body, item_id FROM device_messages"
+                " WHERE ack_ts IS NULL ORDER BY id LIMIT ?", (max(1, min(limit, 100)),))]
+    except sqlite3.Error as exc:
+        # Distinguishable from "nothing pending". An empty list and a broken
+        # query must never look the same to a caller deciding whether to notify.
+        return JSONResponse({"error": "db", "detail": str(exc)}, status_code=500)
+    return {"pending": len(rows), "messages": rows}
+
+
+@app.post("/api/device/notify")
+def device_notify(payload: dict):
+    """Queue a message for the device. The producer side of the channel.
+
+    Anything that finishes work the human is waiting on can call this — the
+    devteam at the end of a plan, a long job, Jarvis himself. Kept separate from
+    /api/device/messages (which the phone reads) so the read path stays read-only.
+    """
+    body = ((payload or {}).get("body") or "").strip()
+    if not body:
+        return JSONResponse({"error": "body is required"}, status_code=400)
+    row_id = queue_device_message(
+        body,
+        title=(payload or {}).get("title") or "Jarvis",
+        kind=(payload or {}).get("kind") or "followup",
+        item_id=(payload or {}).get("item_id") or "")
+    if not row_id:
+        return JSONResponse({"error": "could not queue"}, status_code=500)
+    return {"ok": True, "id": row_id}
+
+
+@app.post("/api/device/ack")
+def device_ack(payload: dict):
+    """Mark delivered. Idempotent: a re-delivered notification must not error."""
+    ids = (payload or {}).get("ids")
+    if ids is None:
+        ids = [(payload or {}).get("id")]
+    if isinstance(ids, int):          # a bare int is not iterable
+        ids = [ids]
+    elif not isinstance(ids, (list, tuple)):
+        ids = []
+    ids = [i for i in ids if isinstance(i, int)]
+    if not ids:
+        return JSONResponse({"error": "ids (list of ints) required"}, status_code=400)
+    try:
+        _device_messages_ready()
+        with _db() as c:
+            c.executemany("UPDATE device_messages SET ack_ts=? WHERE id=? AND ack_ts IS NULL",
+                          [(time.time(), i) for i in ids])
+    except sqlite3.Error as exc:
+        return JSONResponse({"error": "db", "detail": str(exc)}, status_code=500)
+    return {"ok": True, "acked": len(ids)}
 
 
 @app.get("/events")
