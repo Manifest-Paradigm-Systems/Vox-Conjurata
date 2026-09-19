@@ -32,3 +32,5 @@ jarvis-db-backups/
 # Model weights are NOT code: 104 GB of history and 99.9% of the repo size.
 # They are re-downloadable from HuggingFace — keep the setup scripts and the
 # model ids, never the weights. See services/*/weights/.
+services/*/weights/
+services/*/_*.pth
