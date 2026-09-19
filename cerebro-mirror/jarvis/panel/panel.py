@@ -161,6 +161,37 @@ async def events(request: Request):
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
+@app.get("/api/device/messages")
+async def device_messages(limit: int = 20):
+    """Proxy the follow-up queue so the phone has ONE origin to talk to.
+
+    The phone reaches the panel over the tailnet; the brain's :8092 is not
+    exposed. Without this the app would need a second host and a second route
+    through whatever fronts it.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(15.0)) as c:
+            r = await c.get(f"{BRAIN_URL}/api/device/messages", params={"limit": limit})
+    except httpx.HTTPError as exc:
+        # 502, not an empty list: a phone deciding whether to notify must be able
+        # to tell "nothing pending" from "could not ask".
+        return JSONResponse({"error": str(exc)}, status_code=502)
+    return Response(content=r.content, status_code=r.status_code,
+                    media_type=r.headers.get("content-type", "application/json"))
+
+
+@app.post("/api/device/ack")
+async def device_ack(payload: dict):
+    """Proxy the ack. Idempotent on the brain side, so a retry is harmless."""
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(15.0)) as c:
+            r = await c.post(f"{BRAIN_URL}/api/device/ack", json=payload)
+    except httpx.HTTPError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=502)
+    return Response(content=r.content, status_code=r.status_code,
+                    media_type=r.headers.get("content-type", "application/json"))
+
+
 @app.post("/approve")
 async def approve(payload: dict):
     try:
