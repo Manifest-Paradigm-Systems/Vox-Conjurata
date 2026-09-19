@@ -614,7 +614,10 @@ LIVE_PAGE = r"""<!doctype html>
 <title>JARVIS — live</title>
 <style>
   :root { --bg:#05070a; --panel:rgba(9,14,20,.86); --line:#16202b; --text:#cfe3f2;
-          --dim:#6b8497; --accent:#39d0ff; --ok:#4ade80; --warn:#ffb454; --bad:#ff6b6b; }
+          --dim:#6b8497; --accent:#39d0ff; --ok:#4ade80; --warn:#ffb454; --bad:#ff6b6b;
+          /* Tells the widget layer the page is dark, so native popups (a <select>
+             dropdown is drawn by the toolkit, not by us) come up dark too. */
+          color-scheme: dark; }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html, body { margin:0; height:100%; background:var(--bg); color:var(--text); overflow:hidden;
                font:15px/1.6 ui-monospace, Menlo, monospace; }
@@ -694,6 +697,13 @@ LIVE_PAGE = r"""<!doctype html>
   #controls { display:flex; gap:8px; padding:0 14px 8px; flex-wrap:wrap; flex:0 0 auto; }
   #controls select { color:var(--text); background:#0e1620; border:1px solid var(--line);
                      border-radius:8px; padding:7px 10px; font:inherit; max-width:45%; }
+  /* Styling the <select> is NOT enough. The dropdown list is drawn by the native
+     toolkit, which ignores the select's own background and colour — so near-white
+     option text (#cfe3f2) landed on a white native popup and every picker looked
+     empty. Chrome styles the popup itself, which is why this only appeared in the
+     desktop app's WebKitGTK webview. Both the color-scheme above and this rule
+     are needed: one sets the widget theme, the other the list itself. */
+  select option { background:#0e1620; color:var(--text); }
   #incognitoLbl { display:flex; align-items:center; gap:6px; color:var(--dim); font-size:12px;
                   padding:7px 10px; border:1px solid var(--line); border-radius:8px; cursor:pointer; }
   #incognitoLbl.on { color:var(--ok); border-color:var(--ok); }
@@ -727,8 +737,8 @@ LIVE_PAGE = r"""<!doctype html>
     <select id="facePicker" title="Visualization"></select>
     <select id="voicePicker" title="Voice"></select>
     <select id="modelPicker" title="Which model answers"></select>
-    <label id="incognitoLbl" title="Keep nothing: no memory, no transcript on disk">
-      <input type="checkbox" id="incognito"> incognito
+    <label id="incognitoLbl" title="A throwaway chat: nothing is kept, and it is forgotten when you close it">
+      <input type="checkbox" id="incognito"> test chat
     </label>
   </div>
   <!-- The mic carries two gestures and a gesture has no affordance of its own,
@@ -1482,7 +1492,7 @@ inc.onchange = () => {
   INCOGNITO = inc.checked;
   localStorage.setItem('jarvis.incognito', INCOGNITO ? '1' : '0');
   $('incognitoLbl').classList.toggle('on', INCOGNITO);
-  if (INCOGNITO) { history = []; say('system', 'Incognito — nothing from here is kept.'); }
+  if (INCOGNITO) { history = []; say('system', 'Test chat — nothing here is kept, and this conversation is forgotten when you close it.'); }
 };
 
 fetch('/api/faces').then(r => r.json()).then(cfg => {
