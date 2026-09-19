@@ -59,4 +59,32 @@ echo "[$(date -Is)] pulling systemd user units -> $UNIT_DEST"
 ssh "$HOST" "cd '$UNIT_SRC' && find . -maxdepth 2 -name 'jarvis-*' -print0 \
     | tar czf - --null -T -" | tar xzf - -C "$UNIT_DEST"
 
-echo "[$(date -Is)] done"
+# --- the conversation database ---------------------------------------------
+# Deliberately NOT in the git mirror above: the DB is ~33M (mostly the `runs`
+# table's devteam transcripts) and a live SQLite file copied while open is a
+# torn read. VACUUM INTO writes a consistent, compacted copy without blocking
+# the writers, which is the only safe way to snapshot a database in use.
+# Kept outside git, as dated full copies, with retention.
+DB_REMOTE=${DB_REMOTE:-/var/home/admin/jarvis/conversations.db}
+DB_DEST=${DB_DEST:-$HOME/vox-conjurata/jarvis-db-backups}
+DB_KEEP=${DB_KEEP:-14}
+mkdir -p "$DB_DEST"
+
+SNAP_BYTES=$(cat <<PY | ssh "$HOST" python3 -
+import sqlite3, os
+src, out = "$DB_REMOTE", "/tmp/conv-snapshot.db"
+if os.path.exists(out):
+    os.remove(out)
+c = sqlite3.connect(f"file:{src}?mode=ro", uri=True)
+c.execute(f"VACUUM INTO '{out}'")
+c.close()
+print(os.path.getsize(out))
+PY
+)
+STAMP=$(date +%Y%m%d-%H%M%S)
+scp -q "$HOST:/tmp/conv-snapshot.db" "$DB_DEST/conversations-$STAMP.db"
+ssh "$HOST" 'rm -f /tmp/conv-snapshot.db'
+gzip -f "$DB_DEST/conversations-$STAMP.db"
+# keep the newest N snapshots
+ls -1t "$DB_DEST"/conversations-*.db.gz 2>/dev/null | tail -n +$((DB_KEEP + 1)) | xargs -r rm -f
+echo "[$(date -Is)] conversation snapshot ${SNAP_BYTES:-?}B -> conversations-$STAMP.db.gz"
