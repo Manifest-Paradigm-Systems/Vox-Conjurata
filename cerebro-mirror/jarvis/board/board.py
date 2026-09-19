@@ -270,6 +270,14 @@ a.back:hover { border-color:var(--accent); text-decoration:none; }
               cursor:pointer; font:12px ui-monospace,Menlo,monospace; }
 .opt button:hover { border-color:var(--accent); color:var(--accent); }
 .opt button:disabled { opacity:.45; cursor:default; }
+/* The number sits ON the button so "option two" is sayable while looking at it. */
+.opt .num { color:var(--accent); margin-right:2px; }
+/* Ask-before-deciding row — an option like any other, so it looks like one. */
+.opt.ask button { color:var(--warn); border-color:#4a3a12; }
+.opt.ask .cmt { width:100%; box-sizing:border-box; background:#080d13; color:var(--text);
+                border:1px solid var(--line); border-radius:6px; padding:6px 8px;
+                font:inherit; font-size:12px; }
+.opt.ask .cmt:focus { outline:none; border-color:var(--warn); }
 .opt .body { flex:1; }
 .opt .lbl { font-weight:600; }
 .opt .lbl .rec { color:var(--ok); font-size:11px; margin-left:7px; }
@@ -332,6 +340,26 @@ function choose(item, index, btn, label) {
       toast('Request failed: ' + e, 'err');
     });
 }
+// Ask about an item instead of choosing. Reads the sibling input, so Enter and
+// the ? button behave identically.
+function ask(item, btn) {
+  var box = btn.parentElement.querySelector('.cmt');
+  var q = (box && box.value || '').trim();
+  if (!q) { if (box) box.focus(); return; }
+  btn.disabled = true; btn.textContent = '…';
+  fetch('api/comment', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({item_id: item, question: q})
+  }).then(function(r){ return r.json().then(function(d){ return {ok:r.ok, d:d}; }); })
+    .then(function(res){
+      btn.disabled = false; btn.textContent = '?';
+      if (res.ok) { box.value = ''; toast(item + ': question recorded', 'ok'); }
+      else { toast('Could not record: ' + (res.d.detail || res.d.error || 'unknown'), 'err'); }
+    }).catch(function(e){
+      btn.disabled = false; btn.textContent = '?';
+      toast('Request failed: ' + e, 'err');
+    });
+}
 """
 
 
@@ -358,12 +386,27 @@ def _options_html(item) -> str:
             meta += _esc(f"  |  runs: {action['command']}")
         elif kind == "manual":
             meta += "  |  needs a human — recorded, not executed"
+        # The number is ON the button, not just implied by position: the owner
+        # picks by voice as often as by tap, and "option two" has to be something
+        # he can see while saying it.
         rows.append(
             f'<div class="opt"><button onclick="choose(\'{_esc(item["id"])}\', {n}, this, '
-            f'\'{lbl}\')">apply</button>'
-            f'<div class="body"><div class="lbl">{lbl}{rec}</div>'
+            f'\'{lbl}\')" title="Apply option {n}">{n}</button>'
+            f'<div class="body"><div class="lbl"><b class="num">{n}.</b> {lbl}{rec}</div>'
             f'<div>{what}</div><div class="meta">{meta}</div></div></div>')
-    return f'<div class="opts">{"".join(rows)}</div>' if rows else ""
+    if not rows:
+        return ""
+    # Always offer a way to ask before deciding: a list of options with no way to
+    # ask forces a choice the human is not ready to make, which is how a stuck
+    # item stays stuck.
+    item_id = _esc(item["id"])
+    rows.append(
+        f'<div class="opt ask"><button onclick="ask(\'{item_id}\', this)">?</button>'
+        f'<div class="body"><input class="cmt" placeholder="ask a question before deciding…"'
+        f' onkeydown="if(event.key===\'Enter\')ask(\'{item_id}\',this.nextElementSibling)">'
+        f'<div class="meta">the question is recorded against this item, in its history.'
+        f'</div></div></div>')
+    return f'<div class="opts">{"".join(rows)}</div>'""
 
 
 def _totals(t: dict) -> str:
@@ -563,6 +606,44 @@ def api_choose(payload: dict):
                             status_code=500)
     return {"ok": True, "item_id": item_id, "index": index, "result": result,
             "log": lines}
+
+
+@app.post("/api/comment")
+def api_comment(payload: dict):
+    """Record a question against an item, without choosing an option.
+
+    Owner 2026-09-19: "always offer a 'comment' option if necessary to ask a
+    question before deciding". Options with no way to ask force a decision the
+    human is not ready to make, which is how a stuck item stays stuck.
+
+    Goes into `runs` as role='question' — the item's history is where a question
+    about the item belongs, it shows up in the board's run list immediately, and
+    any later pass that reads the history sees it. Anywhere else would be a
+    second place to look.
+
+    A SECOND write path in a service whose docstring calls /api/choose "the ONE
+    write path". It writes an append-only note and cannot change item state.
+
+    NOTE: records the question. ANSWERING it (via Jarvis) is the follow-up.
+    """
+    item_id = (payload or {}).get("item_id")
+    question = ((payload or {}).get("question") or "").strip()[:2000]
+    if not item_id or not question:
+        return JSONResponse({"error": "item_id and question are required"}, status_code=400)
+    try:
+        conn = _db()
+        row = conn.execute("SELECT plan_id FROM work_items WHERE id=?", (item_id,)).fetchone()
+        if row is None:
+            return JSONResponse({"error": "unknown item", "detail": item_id}, status_code=404)
+        with conn:
+            conn.execute(
+                "INSERT INTO runs (ts, plan_id, item_id, role, engine, prompt, output, ok, ms)"
+                " VALUES (?,?,?,?,?,?,?,?,?)",
+                (time.time(), row["plan_id"], item_id, "question", "human", question, "", 1, 0))
+    except sqlite3.Error as exc:
+        return JSONResponse({"error": "db", "detail": str(exc)}, status_code=500)
+    return {"ok": True, "item_id": item_id,
+            "note": "recorded in the item's history — the team will see it"}
 
 
 @app.get("/health")

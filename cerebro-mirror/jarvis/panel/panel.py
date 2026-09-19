@@ -688,7 +688,7 @@ LIVE_PAGE = r"""<!doctype html>
 <body>
 <iframe id="face" allow="autoplay; microphone"></iframe>
 <div id="stateChip">idle</div>
-<a id="teamLink" href="/team/" title="What the dev team is working on" style="position:fixed;top:10px;right:12px;z-index:60;font:11px ui-monospace,SFMono-Regular,Menlo,monospace;color:#6b8497;text-decoration:none;border:1px solid #16202b;border-radius:6px;padding:4px 9px;background:#0b1016">dev team</a>
+<a id="teamLink" href="/team/" title="What the dev team is working on — plans, items, and the option buttons" style="position:fixed;top:calc(58px + env(safe-area-inset-top));right:12px;z-index:60;font:12px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em;color:var(--accent);text-decoration:none;border:1px solid var(--accent);border-radius:8px;padding:7px 11px;background:rgba(11,16,22,.92);box-shadow:0 0 14px rgba(57,208,255,.22);text-transform:uppercase">◆ team</a>
 
 <div id="sheet">
   <div id="handle" title="Close"><span></span></div>
