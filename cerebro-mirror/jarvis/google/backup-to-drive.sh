@@ -71,11 +71,31 @@ python3 - "$SNAP" <<'PY'
 import sqlite3, sys
 c = sqlite3.connect(sys.argv[1])
 r = c.execute("PRAGMA integrity_check").fetchone()[0]
-n = c.execute("SELECT count(*) FROM messages").fetchone()[0]
+# NOT `SELECT count(*) FROM messages`. That is what this did, and it made the script
+# unusable for anything that is not the mail index: verifying life_records.db — a
+# perfectly good database with no `messages` table — raised, so the run exited non-zero
+# AFTER taking a valid snapshot and BEFORE uploading it. The object simply never
+# appeared, and the log said the problem was the database rather than the check.
+# Count the tables instead: it works on any SQLite file and still proves the snapshot
+# opens and can be read.
+tables = [r[0] for r in c.execute(
+    "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")]
+counts = {}
+for t in tables:
+    if t.startswith("sqlite_"):
+        continue
+    try:
+        counts[t] = c.execute(f'SELECT count(*) FROM "{t}"').fetchone()[0]
+    except sqlite3.Error:
+        counts[t] = None
 c.close()
 if r != "ok":
     raise SystemExit(f"integrity_check said {r!r} — refusing to upload a bad snapshot")
-print(f"  integrity ok, {n} messages")
+if not tables:
+    raise SystemExit("the snapshot has no tables at all — refusing to upload it")
+biggest = sorted(((v or 0, k) for k, v in counts.items()), reverse=True)[:3]
+summary = ", ".join(f"{k}={v}" for v, k in biggest)
+print(f"  integrity ok, {len(tables)} tables ({summary})")
 PY
 
 gzip -9 "$SNAP"

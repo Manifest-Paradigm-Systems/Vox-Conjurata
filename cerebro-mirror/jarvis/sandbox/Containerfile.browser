@@ -1,0 +1,70 @@
+# Chromium + Playwright + PDF tooling, for cerebro.
+#
+# WHY CEREBRO NEEDS ONE AT ALL. Two reasons, and only one of them is Google.
+#
+#  1. The OAuth consent for each Google account has to happen where a browser is, and
+#     cerebro is where the tokens live. A HEADLESS browser does not solve this: Google
+#     requires a password and, usually, a second factor — a human has to drive it. So the
+#     image carries a small X desktop and noVNC as well, which means the owner opens a URL
+#     from his own machine and clicks through the consent against THIS host. The
+#     alternative (run the flow on Workhorse, copy the token across) works too, but it
+#     puts a mailbox credential in two places and adds a copy step that can rot.
+#
+#  2. Playwright is the missing capability for Jarvis generally: pages that render with
+#     JavaScript are invisible to the http-search path, and Chromium can print a page to
+#     PDF, which is what a document pipeline needs when it is handed a URL.
+#
+# WHY NOT FLATPAK, which is this fleet's route for applications. Cerebro has no flatpak
+# and no distrobox — it is rpm-ostree with podman, and layering a browser would reboot the
+# box that runs the brain, mail-api and the panel. See [[fleet-packaging-policy]].
+#
+# PDF TOOLS ARE HERE TOO, AND THE HOST HAS NONE. `pdftotext`, `qpdf` and `gs` are all
+# absent from cerebro, which is what the separate jarvis-ocr image was built to work
+# around. This image carries its own copy so a URL-to-PDF or a PDF-splitting job does not
+# need a third container.
+#
+# Build (context is the repo root, same as the OCR image):
+#
+#     podman build -t localhost/jarvis-browser -f sandbox/Containerfile.browser .
+#
+# Run it interactively with sandbox/run-browser.sh, which starts Xvfb, a window manager,
+# x11vnc and noVNC and prints the URL to open. Playwright works headlessly in the same
+# image with no display at all.
+FROM docker.io/library/python:3.12-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+        # the PDF toolbox the host does not have
+        poppler-utils \
+        qpdf \
+        ghostscript \
+        # fonts, or every rendered page is a wall of tofu
+        fonts-liberation \
+        fonts-dejavu-core \
+        # the small desktop that makes this a browser somebody can actually use
+        xvfb \
+        x11vnc \
+        novnc \
+        websockify \
+        fluxbox \
+        xterm \
+ && rm -rf /var/lib/apt/lists/*
+
+# Playwright installs its own Chromium build — the one it has been tested against — and
+# --with-deps pulls the shared libraries that build needs. Installing Debian's chromium
+# instead would give a browser Playwright cannot drive without version pinning, which is
+# the whole reason to use Playwright.
+RUN pip install --no-cache-dir playwright \
+ && playwright install --with-deps chromium \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY sandbox/browser-entrypoint.sh /usr/local/bin/browser-entrypoint.sh
+RUN chmod +x /usr/local/bin/browser-entrypoint.sh
+
+ENV DISPLAY=:99 \
+    SCREEN=1600x1000x24 \
+    NOVNC_PORT=6080
+EXPOSE 6080
+
+ENTRYPOINT ["/usr/local/bin/browser-entrypoint.sh"]

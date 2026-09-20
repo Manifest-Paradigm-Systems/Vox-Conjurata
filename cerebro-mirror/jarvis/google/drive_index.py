@@ -220,59 +220,44 @@ def index_account(email: str, max_files: int | None = None, page_limit: int = 20
         for f in data.get("files", []):
             mime = f.get("mimeType") or ""
             can = bool(indexable(mime))
-            # EXTRACT FIRST, WITH NO TRANSACTION OPEN.
-            #
-            # This used to insert the file row and then extract inside the same
-            # transaction — so a download plus a PDF OCR pass ran while HOLDING the
-            # database's write lock. Some documents take a minute to read, and no amount of
-            # `busy_timeout` on the other side survives a writer that holds the lock for
-            # minutes at a time. That is what killed the mail crawler twice, at the same
-            # step, and it looked like two unrelated causes both times.
-            #
-            # The slow work belongs outside the transaction. Two inserts then take
-            # microseconds, and the lock is a shared resource held briefly rather than a
-            # private one held for the length of a download.
-            text, source, error = ("", "", None)
-            if can:
-                text, source, error = extract(token, f["id"], mime)
 
-            # Three outcomes, and they are recorded differently on purpose:
-            #   ok                    we read it and there was text
-            #   empty                 we read it and there genuinely was none
-            #   unavailable:<why>     we could not read it — the tool was missing
-            # Only the middle one is an answer. Reporting the third as the second is the
-            # bug this whole change exists to kill.
-            if not can:
-                state = "skipped"
-            elif error:
-                state = error
-            elif text:
-                state = "ok"
-            else:
-                state = "empty"
+            # THIS WALK NO LONGER READS CONTENTS, and that is a correction rather than a
+            # simplification. Reading a file here meant re-downloading every indexable
+            # file on every pass — there is no early exit on known ids — which is the
+            # whole reason `documents` exists as a separate, database-driven pass. Doing
+            # both would download all 7,385 files twice and, worse, this walk would
+            # OVERWRITE a good `text_state` with `unavailable:pdftotext` on a host with no
+            # poppler. The listing walk had no way to know it was downgrading a file that
+            # had already been read.
+            #
+            # So: metadata here, contents in `documents`. A new row gets text_state NULL
+            # (meaning "not attempted yet") if it is readable and 'skipped' if it is not,
+            # and `text_state = COALESCE(drive_files.text_state, excluded.text_state)`
+            # below means an existing state — ok, empty, or a reason — is never replaced.
+            state = None if can else "skipped"
 
             with conn:
                 conn.execute(
-                    "INSERT OR REPLACE INTO drive_files (id, account, name, mime_type,"
+                    "INSERT INTO drive_files (id, account, name, mime_type,"
                     " modified_time, created_time, size, owners, trashed, indexable,"
                     " source, text_state, indexed_at)"
-                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)"
+                    " ON CONFLICT(id) DO UPDATE SET"
+                    "   account=excluded.account, name=excluded.name,"
+                    "   mime_type=excluded.mime_type,"
+                    "   modified_time=excluded.modified_time,"
+                    "   created_time=excluded.created_time, size=excluded.size,"
+                    "   owners=excluded.owners, trashed=excluded.trashed,"
+                    "   indexable=excluded.indexable,"
+                    "   text_state=COALESCE(drive_files.text_state, excluded.text_state),"
+                    "   indexed_at=excluded.indexed_at",
                     (f["id"], email, f.get("name"), mime, f.get("modifiedTime"),
                      f.get("createdTime"), int(f.get("size") or 0),
                      json.dumps([o.get("emailAddress") for o in (f.get("owners") or [])]),
                      0, 1 if can else 0, "drive", state, time.time()))
-                if can and text:
-                    conn.execute(
-                        "INSERT OR REPLACE INTO document_text (file_id, account, body,"
-                        " source) VALUES (?,?,?,?)", (f["id"], email, text, source))
-                    conn.execute("DELETE FROM document_fts WHERE file_id=?", (f["id"],))
-                    conn.execute(
-                        "INSERT INTO document_fts (file_id, account, name, body)"
-                        " VALUES (?,?,?,?)",
-                        (f["id"], email, f.get("name"), text[:400000]))
 
             seen += 1
-            if can and text:
+            if can:
                 indexed += 1
             else:
                 skipped += 1
@@ -336,7 +321,10 @@ def documents(limit: int | None = None, batch: int = 40, account: str | None = N
     if not total:
         print("  nothing unread — every indexable file has been attempted")
         return 0
-    print(f"  {total} file(s) to read")
+    # Flushed immediately. Without it the first line of an hours-long job sits in the
+    # stdout buffer behind a batch of scanned PDFs, and an empty log is indistinguishable
+    # from a crawl that died on start — which is exactly what it looked like.
+    print(f"  {total} file(s) to read", flush=True)
 
     tokens: dict[str, auth.TokenSource] = {}
     read = empty = unavailable = 0
