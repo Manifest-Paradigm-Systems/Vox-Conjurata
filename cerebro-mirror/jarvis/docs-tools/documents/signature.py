@@ -1,7 +1,5 @@
-import os
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import RectangleObject
-from pypdf.pdf import PageObject
 
 
 def add_signature_widget(pdf_path, out_path, field_name="Signature1", position=(100, 100), size=(200, 100)):
@@ -29,7 +27,6 @@ def add_signature_widget(pdf_path, out_path, field_name="Signature1", position=(
         page["/Annots"] = page.get("/Annots", []) + [writer._add_object(signature_annotation)]
 
         # Write the updated PDF to a new file
-        os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
         with open(out_path, "wb") as out_file:
             writer.write(out_file)
     return out_path
