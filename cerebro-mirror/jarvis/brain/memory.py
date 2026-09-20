@@ -186,7 +186,19 @@ def is_transient_statement(statement: str) -> bool:
 _IDENTITY = re.compile(
     r"\b(?:full name|owner'?s name|his name is|her name is|my name is|is named|"
     r"date of birth|birth ?date|born on|social security|\bssn\b|home address|"
-    r"lives at|phone number|email address)\b", re.I)
+    r"lives at|phone number|email address|"
+    # SERVICE AFFILIATION, added 2026-09-20 after the same invention twice. Jarvis
+    # asserted "you are currently a member of the 75th Ranger Regiment" from no source,
+    # the owner corrected it two minutes later, and the extractor stored it anyway — then
+    # stored a SECOND copy of it twenty-four hours afterwards. The only mention of a
+    # Ranger anywhere in the service record is the phrase "Ranger Training" in an option
+    # list on a personnel form; the real unit is a sustainment detachment.
+    r"is a member of|member of the|joined the|served in|enlisted in|"
+    r"unit is|assigned to|stationed at|deployed to|belongs to)\b", re.I)
+
+
+_NEGATION = re.compile(
+    r"\b(?:not|never|no|isn'?t|aren'?t|wasn'?t|weren'?t|don'?t|doesn'?t|didn'?t|without)\b", re.I)
 
 
 def identity_from_nobody(statement: str, rows) -> bool:
@@ -198,12 +210,25 @@ def identity_from_nobody(statement: str, rows) -> bool:
     """
     if not _IDENTITY.search(statement or ""):
         return False
-    owner = " ".join((r["content"] or "") for r in rows
-                     if r.get("role") == "user").lower()
     names = {w.lower() for w in re.findall(r"\b[A-Z][a-z]{2,}\b", statement or "")}
     if not names:
         return False
-    return not any(n in owner for n in names)
+
+    # AND A CORRECTION MUST NOT COUNT AS SUPPORT. The first version of this asked only
+    # "did the owner use these words", which the Ranger case defeats: he wrote "No, I'm
+    # not a member of the Ranger Regiment", so the name is present in his turn and the
+    # invention would have been waved through BY the sentence that denied it. So a
+    # mention only counts when it is not inside a negation.
+    for r in rows:
+        if r.get("role") != "user":
+            continue
+        text = (r["content"] or "").lower()
+        for name in names:
+            for m in re.finditer(re.escape(name), text):
+                window = text[max(0, m.start() - 45):m.end() + 45]
+                if not _NEGATION.search(window):
+                    return False          # the owner asserted it; keep the fact
+    return True
 
 
 # ------------------------------------------------------------------ model call
