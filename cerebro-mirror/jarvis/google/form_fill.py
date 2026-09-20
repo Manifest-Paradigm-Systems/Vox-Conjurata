@@ -250,10 +250,42 @@ def report(rows: list[dict]) -> None:
           f" a field is filled only when a document supports the value.")
 
 
+def as_plan(rows: list[dict]) -> dict:
+    """The machine-readable half of a plan — what ANOTHER HOST should fill in.
+
+    THE TWO HOSTS ARE WHY THIS EXISTS. The record lives here, beside the brain that reads
+    it; the documents live where the person and the card reader are. A plan travels between
+    them instead of a database, a document or a credential: it is small, it is reviewable,
+    and every value in it already carries the fact it came from.
+
+    Only FILLED values are in `values`, and that is the whole safety property — the other
+    three buckets are reported so a person can see what was left out, but a filler reading
+    this file has nothing to fill them with. A document filled from this cannot contain a
+    value the record does not support, because no such value is present to copy.
+    """
+    buckets: dict[str, dict] = {"values": {}, "unconfirmed": {},
+                                "blank": [], "refused": [], "unmapped": []}
+    for r in rows:
+        if r["status"] == "FILLED":
+            buckets["values"][r["field"]] = {
+                "value": r["value"],
+                "from": r.get("keys", []),
+                "documents": r.get("evidence", 0),
+                "source": (r.get("sources") or [""])[0],
+            }
+        elif r["status"] == "UNCONFIRMED":
+            buckets["unconfirmed"][r["field"]] = {"value": r["value"], "why": r["why"]}
+        else:
+            buckets[r["status"].lower()].append(r["field"])
+    return buckets
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["plan", "ledger", "fields"])
     ap.add_argument("args", nargs="*")
+    ap.add_argument("--json", action="store_true",
+                    help="emit the plan as JSON, for a host that will apply it")
     a = ap.parse_args()
     conn = db()
 
@@ -275,7 +307,13 @@ def main() -> int:
 
     if not a.args:
         print("  give at least one field label"); return 2
-    report(plan(conn, a.args))
+    rows = plan(conn, a.args)
+    if a.json:
+        # Imported here so the JSON half stays usable without a terminal.
+        import json as _json
+        print(_json.dumps(as_plan(rows), indent=2))
+    else:
+        report(rows)
     return 0
 
 
