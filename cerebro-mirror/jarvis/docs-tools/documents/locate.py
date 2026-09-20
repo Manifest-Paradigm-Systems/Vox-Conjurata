@@ -13,7 +13,9 @@ def find_blank_regions(pdf_path, labels, tolerance=10):
 
     with pdfplumber.open(pdf_path) as pdf:
         for page in pdf.pages:
+            # Extract text elements
             text_elements = page.extract_text_elements()
+            # Filter for character-level text elements
             text_boxes = [element for element in text_elements if element['object_type'] == 'char']
 
             for label in labels:
@@ -35,6 +37,14 @@ def find_blank_regions(pdf_path, labels, tolerance=10):
                         # Check for blank regions in the search area
                         blank = True
                         for other_text_box in text_boxes:
+                            # Skip if it's the same text box
+                            if (other_text_box['x0'] == text_box['x0'] and
+                                other_text_box['x1'] == text_box['x1'] and
+                                other_text_box['top'] == text_box['top'] and
+                                other_text_box['bottom'] == text_box['bottom']):
+                                continue
+                            
+                            # Check if the other text box overlaps with the search area
                             if (search_x0 <= other_text_box['x1'] and search_x1 >= other_text_box['x0'] and
                                 search_top <= other_text_box['bottom'] and search_bottom >= other_text_box['top']):
                                 blank = False
