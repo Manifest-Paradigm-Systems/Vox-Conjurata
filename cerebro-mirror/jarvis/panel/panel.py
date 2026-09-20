@@ -829,6 +829,16 @@ const SR = 16000;
 // was never recorded is simply lost. So patience GROWS with the utterance now.
 const SILENCE_MS = 1100;          // the floor: quiet that always ends a turn
 const SILENCE_MAX_MS = 2600;      // the ceiling, so a turn still ends promptly
+// Voice-detection floor. This was a flat 0.012, tuned for a normal microphone. On
+// a very quiet input that bar sits ~7.5x above the device's own noise, so speech
+// has to be shouted to register at all — measured on one such device: the mic
+// opens, the button lights, the stream is live, and NOT ONE utterance is ever
+// recorded. The ratio term (noiseFloor * 3.5) is what actually protects against
+// false triggers in a noisy room; this floor only matters on a device quiet
+// enough for the ratio to fall below it, and there it was far too high.
+// Raising the input GAIN instead does not help: past ~+6 dB the noise crosses
+// this threshold, the ratio term takes over, and the bar rises with the noise.
+const VOICE_FLOOR = 0.004;
 const MIN_SPEECH_MS = 300;
 const MAX_UTTERANCE_MS = 40000;
 const MIC_GUARD_MS = 900;         // let the speaker (and its tail) die
@@ -1460,7 +1470,7 @@ function onAudio(e) {
 
   if (!recording) {
     noiseFloor = 0.995 * noiseFloor + 0.005 * rms;
-    const threshold = Math.max(0.012, noiseFloor * 3.5);
+    const threshold = Math.max(VOICE_FLOOR, noiseFloor * 3.5);
     if (rms > threshold) {
       speechMs += blockMs;
       if (speechMs > MIN_SPEECH_MS) {
@@ -1471,7 +1481,7 @@ function onAudio(e) {
     if (recording) buf.push(new Float32Array(block));
   } else {
     buf.push(new Float32Array(block));
-    const threshold = Math.max(0.012, noiseFloor * 3.5);
+    const threshold = Math.max(VOICE_FLOOR, noiseFloor * 3.5);
     if (rms < threshold) { silentMs += blockMs; } else { silentMs = 0; bufSpeechMs += blockMs; }
     const totalMs = buf.reduce((n, b) => n + b.length, 0) / ctx.sampleRate * 1000;
     if (silentMs > hangoverMs || totalMs > MAX_UTTERANCE_MS) finishUtterance();
