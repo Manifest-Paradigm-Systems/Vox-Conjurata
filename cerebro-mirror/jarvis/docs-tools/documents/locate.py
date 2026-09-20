@@ -20,7 +20,8 @@ def find_blank_regions(pdf_path, labels, tolerance=10):
                 label_found = False
                 for element in text_elements:
                     # Check if the label exists as a substring in the text
-                    if label in element.get('text', ''):
+                    line_text = element.get('text', '')
+                    if label in line_text:
                         label_found = True
                         
                         # Get the bounding box of the label
@@ -31,7 +32,7 @@ def find_blank_regions(pdf_path, labels, tolerance=10):
                         
                         # Define the search area after the label
                         search_x0 = x1  # Start right after the label
-                        search_x1 = x1 + tolerance  # Extend tolerance to the right
+                        search_x1 = page.width  # Extend to page end
                         search_y0 = y0 - tolerance  # Extend tolerance up
                         search_y1 = y1 + tolerance  # Extend tolerance down
                         
