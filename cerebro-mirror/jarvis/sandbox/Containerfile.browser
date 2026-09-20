@@ -60,7 +60,11 @@ RUN pip install --no-cache-dir playwright \
  && rm -rf /var/lib/apt/lists/*
 
 COPY sandbox/browser-entrypoint.sh /usr/local/bin/browser-entrypoint.sh
-RUN chmod +x /usr/local/bin/browser-entrypoint.sh
+# `chromium`, the name a person actually types. Playwright's install puts its build in a
+# versioned cache and installs no command for it, so without this there is a desktop with
+# no browser to open in it.
+COPY sandbox/chromium-launcher.sh /usr/local/bin/chromium
+RUN chmod +x /usr/local/bin/browser-entrypoint.sh /usr/local/bin/chromium
 
 ENV DISPLAY=:99 \
     SCREEN=1600x1000x24 \

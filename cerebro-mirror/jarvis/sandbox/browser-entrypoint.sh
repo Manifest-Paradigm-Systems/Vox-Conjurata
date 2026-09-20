@@ -23,21 +23,33 @@ start_desktop() {
     fluxbox >/dev/null 2>&1 &
     # x11vnc needs SOMETHING before it will serve, and it must have a framebuffer to
     # attach to — hence the sleep above rather than racing it.
+    # -localhost IS THE POINT, NOT A DETAIL. Without it x11vnc binds 0.0.0.0:5900 — a
+    # raw, unauthenticated VNC server on the LAN, sitting behind the loopback-bound noVNC
+    # that was supposed to be the only way in. The websockify binding looked right and the
+    # port beside it was wide open; `ss -ltnp` was what showed it. With -localhost,
+    # x11vnc accepts connections only from this host, so the ssh tunnel is genuinely the
+    # only route in.
     if [ -n "${VNC_PASSWORD:-}" ]; then
         x11vnc -storepasswd "$VNC_PASSWORD" "$VNC_PASSWORD_FILE" >/dev/null 2>&1
-        x11vnc -display "$DISPLAY" -forever -shared -rfbauth "$VNC_PASSWORD_FILE" \
-               -rfbport 5900 >/dev/null 2>&1 &
+        x11vnc -display "$DISPLAY" -localhost -forever -shared \
+               -rfbauth "$VNC_PASSWORD_FILE" -rfbport 5900 >/dev/null 2>&1 &
         echo "  VNC password: set from \$VNC_PASSWORD"
     else
-        # NO PASSWORD BY DEFAULT, AND THAT IS DELIBERATE: this is meant to be reached
-        # over an ssh tunnel, and a shared secret that gets printed into a log is worse
-        # than no secret on a loopback socket. Publish the port beyond the host and you
-        # must set VNC_PASSWORD.
-        x11vnc -display "$DISPLAY" -forever -shared -nopw -rfbport 5900 >/dev/null 2>&1 &
-        echo "  VNC password: NONE — reachable only as far as you publish it"
+        # NO PASSWORD, which is only defensible because of -localhost. A shared secret
+        # printed into a log is worse than no secret on a socket that nothing off-host can
+        # reach. Publish beyond the host (NOVNC_BIND / JARVIS_BROWSER_BIND) and you must
+        # set VNC_PASSWORD.
+        x11vnc -display "$DISPLAY" -localhost -forever -shared -nopw \
+               -rfbport 5900 >/dev/null 2>&1 &
+        echo "  VNC password: NONE — loopback only (-localhost)"
     fi
     sleep 1
-    websockify --web=/usr/share/novnc "$NOVNC_PORT" localhost:5900 >/dev/null 2>&1 &
+    # BOUND TO LOOPBACK UNLESS TOLD OTHERWISE. The container runs with host networking
+    # (see run-browser.sh), so 127.0.0.1 here is cerebro's loopback — reachable through an
+    # ssh tunnel and nowhere else. Publishing it needs NOVNC_BIND=0.0.0.0 and, with it,
+    # VNC_PASSWORD, because this is a browser somebody signs into Google with.
+    websockify --web=/usr/share/novnc "${NOVNC_BIND:-127.0.0.1}:${NOVNC_PORT}" \
+        localhost:5900 >/dev/null 2>&1 &
 
     cat <<EOF
 
@@ -49,12 +61,14 @@ start_desktop() {
 
     ssh -N -L ${NOVNC_PORT}:127.0.0.1:${NOVNC_PORT} cerebro
 
-  Then, in the noVNC window, run the flow you need. For a Google consent:
+  For a Google consent, run this in ANOTHER ssh session and open the URL it prints
+  inside the noVNC window (see google/CONSENT.md for the whole procedure):
 
-    python3 ~/jarvis/google/auth.py add <email> --port 8765
+    cd ~/jarvis/google && python3 auth.py add <email>
 
-  and open the URL it prints INSIDE that window — the redirect comes back to cerebro's
-  loopback, which is where the catcher is listening.
+  No port argument is needed. auth.py picks a free port and prints it in the URL, and
+  because this browser shares cerebro's network namespace, the redirect to
+  127.0.0.1:<port> lands on the listener that is waiting for it.
 EOF
 
     # Keep the container alive for as long as the desktop is.

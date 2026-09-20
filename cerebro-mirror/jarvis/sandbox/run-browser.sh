@@ -34,9 +34,19 @@ cat <<EOF
 
 EOF
 
+# HOST NETWORKING, AND IT IS NOT AN OPTIMISATION. The point of this container is to be
+# signed into a Google account, and the OAuth flow ends with Google redirecting the
+# browser to http://127.0.0.1:<port> where `auth.py` is listening. Inside an isolated
+# container that address is the CONTAINER's loopback and the redirect goes nowhere — the
+# consent appears to succeed and the waiting process never hears about it.
+#
+# With --network=host the container shares cerebro's network namespace, so 127.0.0.1 is
+# the same loopback on both sides and the redirect lands. noVNC binds to loopback inside
+# the image by default, so this does not put a signed-in browser on the LAN.
 exec podman run --rm --name "$NAME" \
+    --network=host \
     --security-opt label=disable \
-    -p "${BIND}:${PORT}:${PORT}" \
     -e VNC_PASSWORD="${VNC_PASSWORD:-}" \
     -e NOVNC_PORT="$PORT" \
+    -e NOVNC_BIND="$BIND" \
     localhost/jarvis-browser desktop
