@@ -47,7 +47,18 @@ run() {   # run <label> <database> <object name>
         failed=$((failed + 1))
         return
     fi
-    JARVIS_DRIVE_DB="$db" JARVIS_DRIVE_NAME="$name" JARVIS_DRIVE_ACCOUNT=mnmeyer \
+    echo "  backing up : $db"
+    echo "  as object  : $name.gz"
+    # JARVIS_GOOGLE_DB, which is the name backup-to-drive.sh actually reads. This
+    # dispatcher passed JARVIS_DRIVE_DB for its first run — a variable the script has
+    # never heard of — so it fell back to its default and uploaded GOOGLE.DB three times
+    # under three different names. Every object was 341 MB, the log said COMPLETE, and
+    # two of the three databases had no backup at all behind a name that said they did.
+    #
+    # Unset it explicitly on the fallback path below rather than inheriting whatever the
+    # unit happens to have: an inherited value here would silently redirect every backup
+    # to one database, which is the same bug wearing a different hat.
+    JARVIS_GOOGLE_DB="$db" JARVIS_DRIVE_NAME="$name" JARVIS_DRIVE_ACCOUNT=mnmeyer \
         bash "$BACKUP" || failed=$((failed + 1))
 }
 
@@ -81,10 +92,37 @@ else
     failed=$((failed + 1))
 fi
 
+# --- what is actually in Drive now -------------------------------------------------
+# The check that would have caught the first run. That run uploaded google.db three times
+# under three names, and every line of its log said what it intended to do rather than
+# what it did — "backing up conversations.db", "replaced mnmeyer-JarvisConversationsDB.gz"
+# — so the only thing that told the truth was the SIZE, and nothing printed it.
+#
+# Two databases of different sizes do not produce two objects of the same size. Printing
+# the sizes every run, and saying so out loud when two of them match, turns "the log says
+# COMPLETE" into "here is what I can see", which is a different kind of claim.
+echo
+echo "--- the backup folder now contains ---"
+sizes=$(rclone ls "$JARVIS_DRIVE_REMOTE/" --max-depth 1 2>/dev/null | sort -k2 || true)
+if [ -z "$sizes" ]; then
+    echo "  (could not list the folder — rclone failed or the remote is unreachable)" >&2
+    failed=$((failed + 1))
+else
+    echo "$sizes" | awk '{printf "  %12d  %s\n", $1, $2}'
+    dupe=$(echo "$sizes" | awk '{print $1}' | sort | uniq -d | head -1)
+    if [ -n "$dupe" ]; then
+        echo
+        echo "  WARNING: two or more objects are exactly $dupe bytes." >&2
+        echo "  Databases of different sizes do not compress to the same size — this is" >&2
+        echo "  what uploading ONE database under several names looks like." >&2
+        failed=$((failed + 1))
+    fi
+fi
+
 echo
 if [ "$failed" -eq 0 ]; then
     echo "$(date -Is) ALL BACKUPS COMPLETE"
 else
-    echo "$(date -Is) $failed of 4 steps FAILED — see above" >&2
+    echo "$(date -Is) $failed step(s) FAILED or suspect — see above" >&2
 fi
 exit "$failed"
