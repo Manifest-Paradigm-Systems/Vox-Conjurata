@@ -289,6 +289,44 @@ FEATURED_VOICES = [v.strip() for v in
                    os.getenv("JARVIS_FEATURED_VOICES", "jarvis,c3po,narrator").split(",") if v.strip()]
 
 
+async def _brain_proxy(path: str, method: str = "GET", params=None, body=None):
+    """Forward a request to the brain and return its answer unchanged.
+
+    A proxy rather than a copy: the brain owns these tables, and two implementations of
+    "list conversations" would drift the moment either changed.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=5.0)) as c:
+            r = await c.request(method, f"{BRAIN_URL}{path}", params=params, json=body)
+    except httpx.HTTPError as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=502)
+    return Response(content=r.content, status_code=r.status_code,
+                    media_type=r.headers.get("content-type", "application/json"))
+
+
+# THE CONVERSATION API, PROXIED. Every one of these was a 404 until now — the panel's
+# own JS calls them on its own origin, and the panel only ever defined /api/chat. So the
+# chat list was permanently empty, rename and topic did nothing, and deleting a
+# conversation could not work. The failure was silent: no error surfaced because the JS
+# catches a failed fetch the same way it catches an empty list.
+@app.api_route("/api/conversations{rest:path}",
+               methods=["GET", "POST", "PATCH", "DELETE"])
+async def api_conversations(rest: str, request: Request):
+    body = None
+    if request.method in ("POST", "PATCH"):
+        try:
+            body = await request.json()
+        except Exception:                                         # noqa: BLE001
+            body = None
+    return await _brain_proxy(f"/api/conversations{rest}", request.method,
+                              dict(request.query_params), body)
+
+
+@app.get("/api/topics")
+async def api_topics():
+    return await _brain_proxy("/api/topics")
+
+
 @app.get("/api/models")
 async def api_models():
     """Which brains the conversationalist picker offers — straight from the
