@@ -77,6 +77,17 @@ CALENDAR_MODEL_NAME = "jarvis-calendar"
 # document_text and document_fts and no code ever opened them, so 7,385 Drive
 # files and the owner's Army service record were stored and unanswerable.
 DRIVE_MODEL_NAME = "jarvis-drive"
+# EVERYTHING LOCAL, IN ONE PASS. This is the lane a question should reach when its
+# owner has not said which corpus to look in — which is almost always. The five lanes
+# below each search one place and are right when the question names that place; this one
+# searches documents (including the curated fact ledger), mail and the calendar together
+# and answers from the union.
+#
+# It exists because the DEFAULT lane was the one lane that could not answer: it did no
+# retrieval at all, so a factual question about the owner was answered from memory and
+# priors. Measured — see evals/lane_eval.py — every model tested, at every size, scored
+# ZERO on answerable questions when ungrounded and improved sharply when given evidence.
+ASK_MODEL_NAME = "jarvis-ask"
 SEARXNG_URL = os.getenv("SEARXNG_URL", "http://127.0.0.1:8888/search")
 WIKI_URL = os.getenv("JARVIS_WIKI_URL", "http://127.0.0.1:8090")
 SEARCH_RESULTS = int(os.getenv("JARVIS_SEARCH_RESULTS", "6"))
@@ -1388,6 +1399,137 @@ def _local_answer(question: str, context: str, sources: list[dict]) -> str:
     return _strip_think(_chat(CONVERSATIONAL_URL, CONVERSATIONAL_MODEL, system, body, max_tokens=900))
 
 
+# ------------------------------------------------------------------ everything at once
+# How each corpus is described to the reader. The label says WHAT THIS IS, because the
+# difference between a curated fact, a photograph of a form, and a rulebook is the
+# difference between an answer and a coincidence.
+_SOURCE_LABEL = {
+    "fact": "FACT",
+    "lifepacket": "SERVICE RECORD",
+    "drive": "DRIVE DOCUMENT",
+    "mail": "EMAIL",
+    "calendar": "CALENDAR",
+}
+
+
+def _account_labels() -> dict:
+    """email -> what that mailbox is for, from the index. Never fatal.
+
+    Four mailboxes are being consented; when their records arrive, "which account did this
+    come from" stops being a detail and becomes the answer. Read from the database rather
+    than written down here, so adding a fifth account needs no code change.
+    """
+    payload, _err = _cal_get("/accounts", {})
+    return (payload or {}).get("accounts") or {}
+
+
+def _describe(h: dict, kind: str, labels: dict) -> str:
+    """One line naming what a hit is and whose it is."""
+    label = _SOURCE_LABEL.get(h.get("source") or kind, kind.upper())
+    if h.get("collection"):
+        label = f"{label} ({h['collection']})"
+    acct = labels.get(h.get("account") or "", {}).get("label")
+    if acct:
+        label += f" · {acct} account"
+    if h.get("source") == "drive" and not h.get("read"):
+        label += " · CONTENTS NOT READ, filename only"
+    return label
+
+
+def run_ask(messages: list[dict]):
+    """Search everything local and answer from the union. Returns (reply, sources, timings).
+
+    THE WHOLE POINT IS THAT NOTHING IS CLASSIFIED. Choosing a lane by inspecting the
+    question means a wrong guess silently loses the answer, and this codebase has already
+    decided that asking a small model to classify its own input is a failure mode with no
+    upside. So this does not choose: it searches every local corpus, puts them in the tiers
+    the index already defines, and lets the material decide what the answer is about. A
+    question that names nothing — which is most of them — still lands somewhere real.
+
+    Sources are labelled with what they are and which account they came from. That is the
+    half of the indexing rule that was never implemented: retrieval has been open since the
+    four mailboxes were designed, but nothing ever said whose records a hit was.
+    """
+    question = next((m.get("content") or "" for m in reversed(messages)
+                     if m.get("role") == "user"), "").strip()
+    if not question:
+        return "I did not catch what to look for, sir.", [], {}
+    emit("web_start", query=question[:200], where="ask")
+
+    t0 = time.time()
+    labels = _account_labels()
+
+    blocks, framed, errors = [], [], []
+    n = 0
+
+    docs, derr = _doc_get("/documents/search", {"q": question, "limit": 6})
+    if derr:
+        errors.append(f"documents: {derr}")
+    for h in ((docs or {}).get("results") or []):
+        n += 1
+        blocks.append(f"[{n}] {_describe(h, 'document', labels)}\n"
+                      f"    {(h.get('name') or '')[:90]}\n"
+                      f"    {(h.get('snippet') or '')[:400]}")
+        # A fact cites the document that proves it; everything else cites itself.
+        ref = h.get("cite") or h.get("id") or ""
+        framed.append({"title": (h.get("name") or "(unnamed)")[:90],
+                       "url": f"doc:{ref}",
+                       "snippet": (h.get("snippet") or "")[:200]})
+
+    payload, merr = find_mail(question, limit=4)
+    if merr:
+        errors.append(f"mail: {merr}")
+    for h in ((payload or {}).get("results") or []):
+        n += 1
+        blocks.append(f"[{n}] {_describe({'source': 'mail', 'account': h.get('account')}, 'mail', labels)}\n"
+                      f"    From: {h.get('from_addr') or h.get('from') or ''}\n"
+                      f"    Subject: {h.get('subject') or ''}\n"
+                      f"    {(h.get('snippet') or '')[:400]}")
+        framed.append({"title": (h.get("subject") or "(no subject)")[:90],
+                       "url": f"mail:{h.get('id', '')}",
+                       "snippet": (h.get("snippet") or "")[:200]})
+
+    cal, cerr = _cal_get("/calendar/upcoming", {"days": 60, "limit": 8})
+    if cerr:
+        errors.append(f"calendar: {cerr}")
+    for e in ((cal or {}).get("events") or []):
+        n += 1
+        blocks.append(f"[{n}] {_describe({'source': 'calendar', 'account': e.get('account')}, 'calendar', labels)}\n"
+                      f"    {e.get('when') or ''} — {e.get('summary') or ''}\n"
+                      f"    {e.get('location') or ''}")
+        framed.append({"title": f"{e.get('when') or ''} — {(e.get('summary') or '')[:60]}"[:90],
+                       "url": f"calendar:{e.get('id', '')}",
+                       "snippet": (e.get("location") or "")[:200]})
+
+    search_s = time.time() - t0
+    if not blocks:
+        # An unreachable index and an empty one are different sentences, and only one of
+        # them is true. Every lane here says which.
+        if errors:
+            emit("mail_error", query=question[:120], error="; ".join(errors)[:200])
+            return ("I could not read your records just now, sir — "
+                    + "; ".join(errors)[:140]
+                    + ". That is not the same as there being nothing in them.",
+                    [], {"search": round(search_s, 2)})
+        return ("I looked, sir — nothing in your records or your mail matches that.",
+                [], {"search": round(search_s, 2)})
+
+    context = "\n\n".join(blocks)
+
+    t1 = time.time()
+    answer = _local_answer(
+        f"{question}\n\n(The material below is everything local that matched, strongest "
+        f"first. A FACT is already read out of the documents behind it; a document whose "
+        f"contents were not read has only its filename. Say which kind you are relying on, "
+        f"and if the material does not answer the question, say that plainly rather than "
+        f"filling it in.)",
+        context, framed)
+    timings = {"search": round(search_s, 2), "answer": round(time.time() - t1, 2),
+               "total": round(search_s + time.time() - t1, 2), "results": n}
+    emit("web_done", query=question[:120], count=n)
+    return answer, framed, timings
+
+
 def find_mail(query: str, limit: int = 8):
     """Ask mail-api. Returns (payload, error) — never a bare empty result.
 
@@ -1824,6 +1966,7 @@ async def models():
         {"id": MAIL_MODEL_NAME, "object": "model", "created": now, "owned_by": "jarvis"},
         {"id": CALENDAR_MODEL_NAME, "object": "model", "created": now, "owned_by": "jarvis"},
         {"id": DRIVE_MODEL_NAME, "object": "model", "created": now, "owned_by": "jarvis"},
+        {"id": ASK_MODEL_NAME, "object": "model", "created": now, "owned_by": "jarvis"},
     ]}
 
 
@@ -2074,7 +2217,8 @@ async def chat_completions(request: Request):
     mail = MAIL_MODEL_NAME in requested
     calendar = CALENDAR_MODEL_NAME in requested
     drive = DRIVE_MODEL_NAME in requested
-    fetching = web or news or wiki or mail or calendar or drive
+    ask = ASK_MODEL_NAME in requested
+    fetching = web or news or wiki or mail or calendar or drive or ask
     conversational = (DIRECTOR_MODEL_NAME not in requested) and not fetching
     sess = session_for(messages, body.get("conversation"))
     # A photo the panel attached to this turn: the context block /vision composed
@@ -2102,6 +2246,8 @@ async def chat_completions(request: Request):
         resume_escalation(sess)
 
     def fetch_kind():
+        if ask:
+            return run_ask(messages)
         if news:
             return run_web(messages, category="news")
         if wiki:

@@ -60,20 +60,98 @@ _COLS = ("f.id, f.account, f.name, f.mime_type, f.modified_time, f.source, "
 # honest best matches are game books, which is exactly what the owner does not want when
 # the question is about his own affairs. So the tiers come before relevance:
 #
-#   0  the service record    the owner's own military file
-#   1  his own documents     everything untagged — mail, invoices, medical, school
-#   2  tagged collections    reference works that merely live in the same Drive
-#   3  anything else
+#   0  curated facts         records_facts — the answer, with the document behind it
+#   1  the service record    the owner's own military file
+#   2  his own documents     everything untagged — mail, invoices, medical, school
+#   3  tagged collections    reference works that merely live in the same Drive
+#   4  anything else
 #
 # Ranking only reorders WITHIN a tier, so a rulebook can never outrank a personal document
 # by matching better. The books remain searchable — ask in a way that clearly means them
 # and they are right there — they just stop answering questions they were never part of.
 def _tier(row) -> int:
-    if row["source"] == "lifepacket":
+    if row["source"] == "fact":
         return 0
+    if row["source"] == "lifepacket":
+        return 1
     if row["source"] == "drive":
-        return 2 if (row["collection"] or "") else 1
-    return 3
+        return 3 if (row["collection"] or "") else 2
+    return 4
+
+
+def _fact_hits(conn, terms, limit, account=None):
+    """The curated facts about the owner, from `records_facts`.
+
+    THE MOST AUTHORITATIVE THING IN THIS INDEX, AND NOTHING WAS SEARCHING IT. The table
+    holds rank, unit, station number, dates — read out of the documents and adjudicated by
+    `lifepacket_facts.py` — and neither this module nor `mail_search.py` has ever queried
+    it. Measured 2026-09-20, with the lane eval: given the entire service record as
+    material, three different models all failed "what is my military unit", because the
+    answer is a row in this table and the search could not reach it. Meanwhile retrieval
+    was cheerfully matching form boilerplate — "NOT APPLICABLE to military personnel".
+
+    A fact CITES THE DOCUMENT IT CAME FROM rather than itself: `source_file_id` points at
+    a `drive_files` row, so following a citation opens the paperwork that proves it. A fact
+    with no source document is still returned, but carries no id and says so — an unsourced
+    fact is labelled, never dressed up as evidence.
+    """
+    if not terms:
+        return []
+    # ANY TERM, NOT ALL OF THEM — and this was wrong on the first attempt. A key/value
+    # table does not share vocabulary with a question: "what is my military unit called"
+    # reduces to military/unit/called, the row is (`unit`, `SUST CMD DET 2`), and it matches
+    # exactly one of the three. Requiring all of them returned nothing for a question whose
+    # answer was sitting in the table. Documents can afford AND because a passage contains
+    # many words; a fact is two short strings and will usually match one.
+    #
+    # So: match any, then rank by HOW MANY matched, so a row hitting "unit" and "military"
+    # beats one that only hit "unit".
+    score = " + ".join("(lower(key_name) LIKE ? OR lower(value) LIKE ?)" for _ in terms)
+    args: list = []
+    for t in terms:
+        args += [f"%{t}%", f"%{t}%"]
+    sql = ("SELECT account, domain, key_name, value, effective_date, source_file_id,"
+           " source_name, sourced, evidence_count,"
+           f" ({score}) AS matched FROM records_facts"
+           f" WHERE is_current = 1 AND ({score}) > 0")
+    args = args + args
+    if account:
+        sql += " AND account = ?"
+        args.append(account)
+    sql += " ORDER BY matched DESC, evidence_count DESC LIMIT ?"
+    args.append(limit)
+
+    out = []
+    for r in conn.execute(sql, args):
+        src = "unsourced" if r["sourced"] == 0 else ("no source document" if not r["source_file_id"] else "")
+        note = f"  [{src}]" if src else ""
+        out.append({
+            # A FACT NEEDS ITS OWN ID, WITH THE DOCUMENT NAMED SEPARATELY. Several facts
+            # routinely come from one document — `date_of_birth` and `date_of_rank` are
+            # both read off the same personnel file — so keying a fact by its source
+            # document made two of them collide in the merge and the last one inserted
+            # silently replaced the other. Measured: "what is my date of birth" returned
+            # the date of a RANK, because the birth fact had been overwritten by the fact
+            # behind it. `id` is now unique per fact; `cite` is the document that proves
+            # it, and that is what a citation opens.
+            "id": f"fact:{r['key_name']}",
+            "cite": r["source_file_id"] or "",
+            "account": r["account"],
+            "name": f"{r['key_name']}: {r['value']}",
+            "mime_type": None,
+            "modified_time": r["effective_date"] or "",
+            "source": "fact",
+            "text_state": "ok",
+            "size": 0,
+            "collection": None,
+            "body": r["value"],
+            "snip": f"{r['key_name']} = {r['value']}"
+                    + (f", from {r['source_name'][:60]}" if r["source_name"] else "")
+                    + f" ({r['evidence_count']} document(s)){note}",
+            "score": 0.0,
+            "read": True,
+        })
+    return out
 
 
 def _shape(row, read: bool) -> dict:
@@ -178,9 +256,20 @@ def search_archive(conn, query: str, account=None, limit: int = 8, source=None
     #
     # Ordering cannot rescue a query that already excluded the right answer. So each side
     # gets its own budget, and the tiering below decides what the reader sees first.
+    facts: list = []
+    try:
+        facts = _fact_hits(conn, terms, limit, account)
+    except sqlite3.Error as exc:
+        failed_tiers.append(f"fact tier: {exc}")
+    # A fact names the document it came from, so that document is already represented in
+    # the result. Mentioning both would double-count one piece of evidence and give the
+    # reader two citations to the same page.
+    fact_docs = {f["cite"] for f in facts if f.get("cite")}
+
     for scope, label in (("personal", "full-text tier"), ("collection", "collections")):
         try:
-            rows += list(_fts_hits(conn, terms, limit, account, source, scope))
+            rows += [r for r in _fts_hits(conn, terms, limit, account, source, scope)
+                     if r["id"] not in fact_docs]
         except sqlite3.Error as exc:
             # NOT swallowed. The reference implementation in brain/db.py returns [] on a
             # bad query, which is indistinguishable from "no mail" — and that is exactly
@@ -192,14 +281,22 @@ def search_archive(conn, query: str, account=None, limit: int = 8, source=None
     except sqlite3.Error as exc:
         failed_tiers.append(f"name tier: {exc}")
 
-    if len(failed_tiers) == 2:
+    # Four fetches, so an empty result is only trustworthy when all four failed to run.
+    if len(failed_tiers) >= 4:
         return [], "; ".join(failed_tiers)
     errors.extend(failed_tiers)
 
     rules = load_rules(conn, "drive") + load_rules(conn, "records")
     by_id: dict[str, sqlite3.Row] = {}
+    # Facts go in first and win their document's slot: a fact IS that document's answer,
+    # stated once and adjudicated, and listing both would hand the reader two citations to
+    # the same page — one of them a worse rendition of the other.
+    for r in facts:
+        by_id[r["id"]] = r
     for r in rows:
         prev = by_id.get(r["id"])
+        if prev is not None and isinstance(prev, dict) and prev.get("source") == "fact":
+            continue
         if prev is None or (len(r["body"] or "") > len(prev["body"] or "")):
             by_id[r["id"]] = r
 
@@ -219,7 +316,7 @@ def search_archive(conn, query: str, account=None, limit: int = 8, source=None
     # between two pages of the service record and destroy the ordering that makes personal
     # material primary. The tier is the first key; relevance only orders within it.
     out: list[dict] = []
-    for tier in (0, 1, 2, 3):
+    for tier in (0, 1, 2, 3, 4):
         group = [r for r in kept if _tier(r) == tier]
         if not group:
             continue

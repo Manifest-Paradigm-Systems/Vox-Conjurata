@@ -88,7 +88,16 @@ def _rank(rows, terms: list[str], limit: int, keys: tuple[str, ...]):
         hay = " ".join(str(r[k] or "") for k in keys if k in r.keys()).lower()
         score = sum(1 for t in terms if t in hay)
         if score:
-            scored.append((score, -i, r))       # -i keeps source order on ties
+            # THE INDEX, NOT ITS NEGATION. This stored `-i` and sorted ascending on it,
+            # which orders ties by DESCENDING index — the opposite of both the comment's
+            # claim and the intent. The input already arrives in relevance order (bm25 from
+            # FTS, or an evidence ranking from the fact table), so reversing ties hands back
+            # the weakest of every tied group. It was invisible in mail, where true ties are
+            # rare; it became obvious the moment facts were added, because every fact ties
+            # at one keyword and the whole list came back backwards — "what is my military
+            # unit" was answered from a deactivated reserve group rather than the current
+            # one, which sat third.
+            scored.append((score, i, r))
     scored.sort(key=lambda x: (-x[0], x[1]))
     return [r for _, _, r in scored[:limit]]
 
