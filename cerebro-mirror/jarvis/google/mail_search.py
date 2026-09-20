@@ -381,7 +381,7 @@ def main(argv: list[str]) -> int:
         return 0
 
     if cmd == "live":
-        msgs, error = search_live(account or "mnmeyer@gmail.com", argv[2], limit)
+        msgs, error = search_live(account or "unconfigured@invalid", argv[2], limit)
         if error:
             print(f"  !! {error}")
         print(f"  {len(msgs)} live message(s)")

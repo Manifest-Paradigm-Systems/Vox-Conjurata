@@ -45,7 +45,7 @@ import auth          # noqa: E402
 import calendar_index as ci   # noqa: E402
 import control       # noqa: E402
 
-DEFAULT_ACCOUNT = os.environ.get("JARVIS_MAIL_ACCOUNT", "mnmeyer@gmail.com")
+DEFAULT_ACCOUNT = os.environ.get("JARVIS_MAIL_ACCOUNT", "unconfigured@invalid")
 
 
 def _iso(when: str) -> str:

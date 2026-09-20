@@ -18,7 +18,7 @@ Two details that matter more than they look:
   forty-person all-hands are not the same signal, and only the count can tell them apart.
 
 Usage:
-    python3 calendar_index.py run mnmeyer@gmail.com [--years 3]
+    python3 calendar_index.py run <account-email> [--years 3]
 """
 
 from __future__ import annotations

@@ -24,7 +24,7 @@ CONF="${JARVIS_GOOGLE_ACCOUNTS:-$HOME/.config/jarvis/google/accounts.json}"
 if [ ! -f "$CONF" ]; then
     # Pre-split fallback: one database, one account. Replace with the JSON file
     # above once the index is per-account.
-    ACCOUNTS=( "${JARVIS_GOOGLE_ACCOUNT:-mnmeyer@gmail.com}" )
+    ACCOUNTS=( "${JARVIS_GOOGLE_ACCOUNT:-unconfigured@invalid}" )
 else
     mapfile -t ACCOUNTS < <(python3 -c "
 import json,sys
@@ -35,11 +35,18 @@ run_source() {   # run_source <account> <db>
     local acct="$1" db="$2"
     case "$MODE" in
         gmail)
-            # Bounded recent run: sets the everyday refresh apart from the full
-            # walk. Re-fetches the newest N (there is no early exit on known ids),
-            # which is bounded and cheap; everything deeper waits for gmail-full.
-            echo "[$(date -Is)] $acct: gmail recent (${JARVIS_GMAIL_RECENT:-1000})"
-            ( cd "$HERE" && JARVIS_GOOGLE_DB="$db" python3 gmail_index.py run "$acct" "${JARVIS_GMAIL_RECENT:-1000}" ) ;;
+            # Bounded recent run: sets the everyday refresh apart from the full walk.
+            # Re-fetches the newest N (there is no early exit on known ids), which is
+            # bounded and cheap; everything deeper waits for gmail-full.
+            #
+            # 100, NOT 1000. The window only has to cover what arrives between two
+            # hourly runs, and that is a handful of messages — a thousand was guessing
+            # three orders of magnitude high and paying for it every hour, in API calls
+            # and in the crawl's own time. Anything unusual is not lost either way: the
+            # daily gmail-full walk covers the whole mailbox, which is what it is for.
+            # Raise it with JARVIS_GMAIL_RECENT if a burst ever does exceed it.
+            echo "[$(date -Is)] $acct: gmail recent (${JARVIS_GMAIL_RECENT:-100})"
+            ( cd "$HERE" && JARVIS_GOOGLE_DB="$db" python3 gmail_index.py run "$acct" "${JARVIS_GMAIL_RECENT:-100}" ) ;;
         gmail-full)
             # No max_messages: the complete walk. This is what sees a message move
             # to TRASH, or a label change, anywhere in the mailbox.

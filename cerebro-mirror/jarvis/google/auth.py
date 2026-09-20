@@ -20,9 +20,9 @@ Both are written 0600. A refresh token is not a session; it is standing access t
 mailbox. If one leaks it does not expire on its own.
 
 Usage:
-    python3 auth.py add mnmeyer@gmail.com      # one browser consent for one account
+    python3 auth.py add <email>               # one browser consent for one account
     python3 auth.py list                       # which accounts are authorized
-    python3 auth.py check mnmeyer@gmail.com    # prove the token still works
+    python3 auth.py check <email>             # prove the token still works
 """
 
 from __future__ import annotations

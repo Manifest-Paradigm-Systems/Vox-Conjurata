@@ -17,8 +17,8 @@ exported as text. They are usually the most valuable things in a Drive and they 
 almost nothing to index.
 
 Usage:
-    python3 drive_index.py run mnmeyer@gmail.com [max_files]
-    python3 drive_index.py stats mnmeyer@gmail.com
+    python3 drive_index.py run <account-email> [max_files]
+    python3 drive_index.py stats <account-email>
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ DB_PATH = os.path.expanduser(os.environ.get("JARVIS_GOOGLE_DB",
                                             "~/jarvis/google/google.db"))
 API = "https://www.googleapis.com/drive/v3"
 PAGE = 200
-DEFAULT_ACCOUNT = os.getenv("JARVIS_MAIL_ACCOUNT", "mnmeyer@gmail.com")
+DEFAULT_ACCOUNT = os.getenv("JARVIS_MAIL_ACCOUNT", "unconfigured@invalid")
 
 # The fleet watchdog flag. Reading 2,713 PDFs is many hours of CPU, and this fleet's rule
 # is that heavy jobs yield between batches rather than competing with whatever else the

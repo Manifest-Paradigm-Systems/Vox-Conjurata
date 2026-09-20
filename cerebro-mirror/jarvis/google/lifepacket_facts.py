@@ -6,8 +6,8 @@ each document. As a source of record it fails in three ways, and all three have
 consequences:
 
   * **The values are generated text, not extracted spans.** 39 of the 123 do not appear
-    in their own source document. `home_city` is stored as "Peton"; ten documents say
-    PEYTON, CO.
+    in their own source document — a city name is stored misspelled, and the misspelling
+    traces to a single recent scan our own OCR misread.
   * **`effective_date` is NULL for every row**, so "which is current" cannot be decided
     from the data at all.
   * **`is_current` is therefore set by WRITE ORDER** — last run wins. Re-running the same
@@ -48,7 +48,7 @@ LIFE_DB = os.path.expanduser(os.getenv("JARVIS_LIFEPACKET_DB",
                                        "~/.lifepacket/life_records.db"))
 DB_PATH = os.path.expanduser(os.environ.get("JARVIS_GOOGLE_DB",
                                             "~/jarvis/google/google.db"))
-ACCOUNT = os.getenv("JARVIS_LIFEPACKET_ACCOUNT", "mnmeyer@gmail.com")
+ACCOUNT = os.getenv("JARVIS_LIFEPACKET_ACCOUNT", "unconfigured@invalid")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS records_facts (
@@ -175,11 +175,11 @@ def rebuild() -> int:
     #   rank        is temporal. CPT until a promotion order makes MAJ effective
     #               13 JUN 2016. Recency is the right judge — the latest evidence wins.
     #               The original ledger answered CPT because `is_current` was write order.
-    #   home_city   is constant. Ten documents say PEYTON, CO; exactly one says PETON —
-    #               a 2025 scan our own OCR misread, which the extractor then copied
-    #               faithfully. Recency is the WRONG judge here: it picks the one bad
-    #               read because it is the most recent document. Agreement is the right
-    #               judge.
+    #   address     is constant. Ten documents agree on the spelling and exactly one
+    #               disagrees — a recent scan our own OCR misread, which the extractor
+    #               then copied faithfully. Recency is the WRONG judge here: it picks the
+    #               one bad read because it is the most recent document. Agreement is the
+    #               right judge.
     #
     # So a date-like fact is ranked by its latest evidence, and a stable fact by how many
     # documents support it. Getting either rule wrong produces a confident wrong answer,

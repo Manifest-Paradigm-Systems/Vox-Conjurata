@@ -164,6 +164,48 @@ def is_transient_statement(statement: str) -> bool:
     return bool(_TRANSIENT.search(statement or ""))
 
 
+# FACTS ABOUT WHO THE OWNER IS MUST COME FROM THE OWNER.
+#
+# The rule further up says Jarvis as a SOURCE is fine — "a name, a date, a place is a
+# fact about the world no matter which of you said it". That is right for a date he read
+# off the calendar and wrong for the owner's own identity, because in the text an
+# INVENTED name and a RETRIEVED one are indistinguishable. There is no phrasing that
+# tells them apart; only the source does.
+#
+# Measured, 2026-09-20: the owner asked "what is my full name", Jarvis answered "Michael
+# Corwin", and this extractor stored that as a fact at confidence 1.0 with entity=user.
+# The word Corwin appears in ZERO owner turns anywhere in the transcript — he never said
+# it — and the stored fact then fed itself back into every later conversation, so Jarvis
+# grew more certain of a name that was never his. Two further facts recorded his own
+# narration of where the name had come from, which is the same invention wearing a
+# provenance story.
+#
+# So an identity statement is kept only when its distinctive words appear in an OWNER
+# turn in the same window. Identity lives in the service record, the accounts table and
+# the documents — all of which can be pointed at. Conversation cannot.
+_IDENTITY = re.compile(
+    r"\b(?:full name|owner'?s name|his name is|her name is|my name is|is named|"
+    r"date of birth|birth ?date|born on|social security|\bssn\b|home address|"
+    r"lives at|phone number|email address)\b", re.I)
+
+
+def identity_from_nobody(statement: str, rows) -> bool:
+    """True when a statement is about who the owner IS and he never said it.
+
+    Deliberately requires a proper noun in the statement and that the owner used it.
+    A statement made entirely of ordinary words ("the owner's date of birth is
+    recorded") carries no name to check and is caught by the narration rules instead.
+    """
+    if not _IDENTITY.search(statement or ""):
+        return False
+    owner = " ".join((r["content"] or "") for r in rows
+                     if r.get("role") == "user").lower()
+    names = {w.lower() for w in re.findall(r"\b[A-Z][a-z]{2,}\b", statement or "")}
+    if not names:
+        return False
+    return not any(n in owner for n in names)
+
+
 # ------------------------------------------------------------------ model call
 
 def _extract_json(text: str) -> dict | None:
@@ -292,6 +334,11 @@ def process_window(conn, rows, *, dry: bool) -> dict:
             # Not written. Reported instead, so that a wrong call here is visible
             # and tunable rather than a silent deletion.
             result["rejected"].append(statement[:90])
+            continue
+        if identity_from_nobody(statement, rows):
+            # About who the owner is, and he never said it. See the note above —
+            # this is the gate that would have stopped "Michael Corwin".
+            result["rejected"].append(f"identity, not from the owner: {statement[:70]}")
             continue
         action, fid = consolidate(conn, fact, session=session, dry=dry)
         if action == "empty":

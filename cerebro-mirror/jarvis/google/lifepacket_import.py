@@ -30,7 +30,7 @@ failure this whole piece of work exists to remove.
 
 THE FACTS ARE A SEPARATE STEP. `profile_data_history` holds model output rather than
 quoted spans, and its `is_current` is decided by write order — which is how `home_city`
-came to be stored as "Peton" when ten documents say PEYTON, CO, and why the rank answer
+came to be stored misspelled when ten documents spell it correctly, and why the rank answer
 flips between MAJ and CPT depending on which run wrote last. `lifepacket_facts.py
 rebuild` regenerates that ledger from these documents; this module only supplies the
 documents.
@@ -59,7 +59,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ocr_ladder  # noqa: E402
 
-ACCOUNT = os.getenv("JARVIS_LIFEPACKET_ACCOUNT", "mnmeyer@gmail.com")
+ACCOUNT = os.getenv("JARVIS_LIFEPACKET_ACCOUNT", "unconfigured@invalid")
 LIFE_DB = os.path.expanduser(os.getenv("JARVIS_LIFEPACKET_DB",
                                        "~/.lifepacket/life_records.db"))
 RAW_DIR = os.path.expanduser(os.getenv(

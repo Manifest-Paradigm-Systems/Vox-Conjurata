@@ -7,12 +7,18 @@ Read-only, local-only, four accounts.
 Jarvis as an expert on the owner's calendar, email and life, across four mailboxes that
 each cover a different part of it:
 
-| Account | Domain |
+| Role | Domain |
 |---|---|
-| `mnmeyer@gmail.com` | personal life, medical, military career |
-| `meyerfamily813@gmail.com` | his son Michael's care — medical, education, extracurricular |
-| `meyerfamilyhomes@gmail.com` | rental property business |
-| `meyerbrothers78@gmail.com` | his brother Dave's health |
+| `personal` | the owner's own life, medical and military career |
+| `family` | one family member's care — medical, education, extracurricular |
+| `property` | the rental property business |
+| `brother` | another family member's health |
+
+The addresses themselves are **not listed here**. They live in the `accounts` table in
+the index database, which is not in git, and this repository is published — a table of
+real addresses beside what each mailbox is for is exactly the kind of thing that should
+not be in a public history. `domains.py` reads the mapping from that table; the roles
+above are the stable part.
 
 The account **is** the domain. That is what makes "which account was that in?" a lookup
 rather than a classifier that can be wrong, and it is why `account` is on every row.

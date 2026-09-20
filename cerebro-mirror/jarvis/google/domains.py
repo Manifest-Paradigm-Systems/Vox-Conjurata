@@ -1,8 +1,8 @@
 """Which part of the owner's life does this contact belong to?
 
-The four Google accounts are four domains — personal, Michael's care, the rental
-business, Dave's health. Email and calendar arrive already labelled by which account they
-came from. **Phone data does not**: a call and a text come from the handset, with no idea
+The four Google accounts are four domains — the owner's own, and one each for the other
+parts of his life that have their own mailbox. Email and calendar arrive already labelled
+by which account they came from. **Phone data does not**: a call and a text come from the handset, with no idea
 that the number belongs to a contractor rather than to a brother.
 
 So this assigns one. It matters for a concrete reason: without it, "what did the roofer
@@ -38,59 +38,83 @@ import time
 DB_PATH = os.path.expanduser(os.environ.get("JARVIS_GOOGLE_DB",
                                             "~/jarvis/google/google.db"))
 
-# Where phone rows land when no contact claims them. Owner decision 2026-09-18:
-# the owner's own device traffic defaults to the personal account. Kept here as
-# the single definition rather than a literal inside apply_to_rows.
-DEFAULT_ACCOUNT = os.environ.get("JARVIS_GOOGLE_DEFAULT_ACCOUNT", "mnmeyer@gmail.com")
+# WHERE THE ACCOUNT ADDRESSES LIVE NOW.
+#
+# They used to be literals in this file: four addresses with the label beside each one,
+# saying which mailbox is for a family member's medical care and which is for the rental
+# property. This repository is published on GitHub, so that was a table of the owner's
+# addresses and what each one is for, in a public place.
+#
+# The mapping was never really code. It is exactly the contents of the `accounts` table,
+# which every indexer already reads, which is not in git, and which is backed up. So it is
+# read from there. No new config file, and nothing new to keep in step — the database
+# already knew, and the source file was a second copy waiting to drift.
+#
+# JARVIS_GOOGLE_DEFAULT_ACCOUNT still overrides the default for a one-off run.
 
-# Label -> account email. The same four as everywhere else.
-DOMAINS = {
-    "personal": "mnmeyer@gmail.com",
-    "family": "meyerfamily813@gmail.com",
-    "property": "meyerfamilyhomes@gmail.com",
-    "brother": "meyerbrothers78@gmail.com",
-}
 
-# What a thread has to talk about to belong to a domain. Deliberately concrete: these are
-# words people actually use, not categories. Weights are not used because a thread that
-# talks about invoices eight times is not eight times as likely to be the property account
-# as one that mentions it once — it is either a business thread or it is not.
-SIGNALS = {
-    "property": [
-        "invoice", "quote", "estimate", "paid", "pay ", "zelle", "receipt", "deposit",
-        "balance", "materials", "labor", "supply", "repair", "install", "roof", "plumb",
-        "electr", "hvac", "contract", "tenant", "rent", "lease", "property", "drywall",
-        "foundation", "septic", "well pump", "insulation", "siding", "permit", "inspect",
-        "closing", "escrow", "mortgage", "landlord", "home warranty",
-    ],
-    "family": [
-        # Both names, because both are used — "Mikie" is what he is called in person and
-        # therefore what the texts say. A search for the formal name would miss the
-        # overwhelming majority of the threads about him.
-        "michael", "mikie", "mikey", "mike ",
-        "school", "iep", "teacher", "therapy", "pediatric", "homework",
-        "field trip", "soccer", "practice", "tutor", "counselor", "grades", "permission",
-        "slip", "absence", "pickup", "bus", "daycare", "camp",
-        # Appointments are the single most common thing about him worth finding later:
-        # "when is Mikie's appointment", "what time is the dentist".
-        "appointment", "appt", "dentist", "orthodont", "checkup", "check-up",
-        "immunization", "vaccine", "referral", "prescription", "pharmacy",
-    ],
-    "brother": [
-        # His name, spelled the ways people actually type it.
-        "dave", "david", "brother",
-        "hospital", "clinic", "oncolog", "dialysis", "medication", "medicaid",
-        "medicare", "caregiver", "hospice", "surgery", "specialist", "prescription",
-        "pharmacy", "rehab", "physical therapy", "infusion", "chemo", "radiation",
-        "mri", "ct scan", "blood work", "lab work", "disability", "insurance",
-        # Appointments again. They are the substance of a health thread whoever it is
-        # about — what separates them is whose name is in the same conversation, which
-        # is why scoring happens per contact across all of their threads rather than per
-        # message. A thread that only ever says "appointment" is ambiguous and stays
-        # unassigned; one that says "Dave" and "appointment" is not.
-        "appointment", "appt", "doctor", "dr ", "nurse",
-    ],
-}
+def domains_map(conn) -> dict[str, str]:
+    """Label -> account email, from the accounts table."""
+    try:
+        rows = conn.execute("SELECT label, email FROM accounts ORDER BY rowid").fetchall()
+    except sqlite3.Error as exc:
+        raise SystemExit(f"cannot read the accounts table: {exc}")
+    out = {r["label"]: r["email"] for r in rows if r["label"] and r["email"]}
+    if not out:
+        raise SystemExit(
+            "the accounts table is empty. domains.py needs the label -> address map, and"
+            " it lives there now rather than in this file — see google/schema.sql.")
+    return out
+
+
+def default_account(conn) -> str:
+    """Where phone rows land when no contact claims them.
+
+    Owner decision 2026-09-18: the owner's own device traffic defaults to the personal
+    account. Resolved here rather than written down, for the reason above.
+    """
+    override = os.environ.get("JARVIS_GOOGLE_DEFAULT_ACCOUNT")
+    if override:
+        return override
+    domains = domains_map(conn)
+    return domains.get("personal") or next(iter(domains.values()))
+
+# What a thread has to talk about to belong to a domain, read from the database.
+#
+# THESE LISTS USED TO BE HERE, and they were the largest piece of personal material in
+# this repository: the names the family mailboxes are about, and the health words that
+# appear in the threads concerning them. Together they describe who the owner's family
+# are and what is medically going on with them — in a file that is published.
+#
+# Like the account addresses, this was never really code. The lists are data the
+# classifier consults, they change when the owner's life changes rather than when the
+# software does, and putting them in the database means tuning a keyword no longer
+# needs a commit to a public repository. Seed and edit them with:
+#
+#     python3 -c "import control; ..."     # or plain SQL against domain_signals
+#
+# Shape is the same either way: label -> [words], and the matching code below is
+# unchanged.
+SIGNALS_TABLE = "domain_signals"
+
+
+def signals_map(conn) -> dict[str, list[str]]:
+    """Label -> the words that suggest it, from the domain_signals table."""
+    try:
+        rows = conn.execute(
+            f"SELECT label, keyword FROM {SIGNALS_TABLE} ORDER BY label, rowid").fetchall()
+    except sqlite3.Error as exc:
+        raise SystemExit(f"cannot read {SIGNALS_TABLE}: {exc}")
+    out: dict[str, list[str]] = {}
+    for r in rows:
+        out.setdefault(r["label"], []).append(r["keyword"])
+    if not out:
+        raise SystemExit(
+            f"{SIGNALS_TABLE} is empty. The keyword lists live in the database now rather"
+            " than in this file — see google/schema.sql for the table and the module"
+            " docstring for how they got there.")
+    return out
+
 
 # Two hits before a domain is claimed. One keyword is a coincidence — "paid" appears in
 # ordinary conversation; a thread about a job mentions several of these.
@@ -148,13 +172,20 @@ def thread_text(conn, address: str) -> str:
     return " ".join(parts).lower()
 
 
-def score_contact(conn, address: str) -> tuple[str | None, int, str]:
-    """(domain_label, hits, matched keywords) for one contact."""
+def score_contact(conn, address: str, signals: dict | None = None
+                  ) -> tuple[str | None, int, str]:
+    """(domain_label, hits, matched keywords) for one contact.
+
+    `signals` is passed in by the caller that loops over every contact, so the
+    keyword lists are read once per run rather than once per number.
+    """
     text = thread_text(conn, address)
     if not text.strip():
         return None, 0, ""
+    if signals is None:
+        signals = signals_map(conn)
     best, best_hits, best_words = None, 0, []
-    for label, words in SIGNALS.items():
+    for label, words in signals.items():
         hits = [w for w in words if w in text]
         if len(hits) > best_hits:
             best, best_hits, best_words = label, len(hits), hits
@@ -175,6 +206,8 @@ def all_contacts(conn) -> list[str]:
 
 def assign(conn, dry_run: bool = False) -> dict:
     """Score every contact and record a domain, leaving the owner's choices alone."""
+    domains = domains_map(conn)
+    signals = signals_map(conn)
     owners = {r["address"] for r in conn.execute(
         "SELECT address FROM contact_domain WHERE assigned_by='owner'")}
     counts: dict[str, int] = {}
@@ -184,12 +217,12 @@ def assign(conn, dry_run: bool = False) -> dict:
         norm = normalise(addr)
         if norm in owners or addr in owners:
             continue
-        label, hits, words = score_contact(conn, addr)
+        label, hits, words = score_contact(conn, addr, signals)
         if not label:
             unassigned += 1
             continue
         counts[label] = counts.get(label, 0) + 1
-        pending.append((norm, DOMAINS[label], f"{hits} signals: {words}", "rule",
+        pending.append((norm, domains[label], f"{hits} signals: {words}", "rule",
                         float(hits), time.time()))
 
     # ONE transaction for the whole batch, not one per contact. Each write otherwise
@@ -242,20 +275,21 @@ def apply_to_rows(conn) -> int:
             # the reset-then-apply design above exists to prevent. A one-off UPDATE
             # would not have held: this function resets to NULL on every run.
             cur = conn.execute(f"UPDATE {table} SET account=? WHERE account IS NULL",
-                               (DEFAULT_ACCOUNT,))
+                               (default_account(conn),))
             n += cur.rowcount
     return n
 
 
 def set_domain(conn, address: str, label: str, reason: str = ""):
-    if label not in DOMAINS:
-        raise SystemExit(f"unknown domain {label!r}; one of {list(DOMAINS)}")
+    domains = domains_map(conn)
+    if label not in domains:
+        raise SystemExit(f"unknown domain {label!r}; one of {list(domains)}")
     with conn:
         conn.execute(
             "INSERT OR REPLACE INTO contact_domain (address, account, reason,"
             " assigned_by, score, assigned_at) VALUES (?,?,?,?,?,?)",
-            (normalise(address), DOMAINS[label], reason, "owner", None, time.time()))
-    print(f"  {address} -> {label} ({DOMAINS[label]})  [owner]")
+            (normalise(address), domains[label], reason, "owner", None, time.time()))
+    print(f"  {address} -> {label} ({domains[label]})  [owner]")
 
 
 def report(conn):
@@ -264,8 +298,9 @@ def report(conn):
     by = {}
     for r in rows:
         by.setdefault(r["account"], []).append(dict(r))
+    domains = domains_map(conn)
     for acct, items in sorted(by.items()):
-        label = next((k for k, v in DOMAINS.items() if v == acct), acct)
+        label = next((k for k, v in domains.items() if v == acct), acct)
         print(f"\n  {label}  ({acct})  — {len(items)} contacts")
         for d in items[:8]:
             who = "OWNER" if d["assigned_by"] == "owner" else "rule "
