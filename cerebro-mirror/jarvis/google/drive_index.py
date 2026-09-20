@@ -40,6 +40,7 @@ DB_PATH = os.path.expanduser(os.environ.get("JARVIS_GOOGLE_DB",
                                             "~/jarvis/google/google.db"))
 API = "https://www.googleapis.com/drive/v3"
 PAGE = 200
+DEFAULT_ACCOUNT = os.getenv("JARVIS_MAIL_ACCOUNT", "mnmeyer@gmail.com")
 
 # The fleet watchdog flag. Reading 2,713 PDFs is many hours of CPU, and this fleet's rule
 # is that heavy jobs yield between batches rather than competing with whatever else the
@@ -206,8 +207,14 @@ def index_account(email: str, max_files: int | None = None, page_limit: int = 20
             "q": "trashed=false",
             "orderBy": "modifiedTime desc",
             "pageSize": PAGE,
+            # `parents` IS LOAD-BEARING. Without it the index knows a file's name and
+            # nothing about where the owner filed it — so the one signal he actually
+            # maintains by hand, his folder structure, was the one thing unavailable.
+            # A Drive of 7,385 files is mostly organised: "12-D&D Books", "Campaign World
+            # Books", publisher folders. Guessing at collections from filenames worked but
+            # missed more than half; the folder says it outright.
             "fields": ("nextPageToken,files(id,name,mimeType,modifiedTime,createdTime,"
-                       "size,owners(emailAddress),trashed)"),
+                       "size,owners(emailAddress),trashed,parents)"),
         }
         if page:
             params["pageToken"] = page
@@ -240,8 +247,8 @@ def index_account(email: str, max_files: int | None = None, page_limit: int = 20
                 conn.execute(
                     "INSERT INTO drive_files (id, account, name, mime_type,"
                     " modified_time, created_time, size, owners, trashed, indexable,"
-                    " source, text_state, indexed_at)"
-                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)"
+                    " source, text_state, parents, indexed_at)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
                     " ON CONFLICT(id) DO UPDATE SET"
                     "   account=excluded.account, name=excluded.name,"
                     "   mime_type=excluded.mime_type,"
@@ -249,12 +256,14 @@ def index_account(email: str, max_files: int | None = None, page_limit: int = 20
                     "   created_time=excluded.created_time, size=excluded.size,"
                     "   owners=excluded.owners, trashed=excluded.trashed,"
                     "   indexable=excluded.indexable,"
+                    "   parents=excluded.parents,"
                     "   text_state=COALESCE(drive_files.text_state, excluded.text_state),"
                     "   indexed_at=excluded.indexed_at",
                     (f["id"], email, f.get("name"), mime, f.get("modifiedTime"),
                      f.get("createdTime"), int(f.get("size") or 0),
                      json.dumps([o.get("emailAddress") for o in (f.get("owners") or [])]),
-                     0, 1 if can else 0, "drive", state, time.time()))
+                     0, 1 if can else 0, "drive", state,
+                     json.dumps(f.get("parents") or []), time.time()))
 
             seen += 1
             if can:
@@ -462,6 +471,219 @@ def documents(limit: int | None = None, batch: int = 40, account: str | None = N
     return read
 
 
+# ---------------------------------------------------------------- collections
+# Reference works that live in the Drive but are not the owner's documents.
+#
+# MATCHED ON FILENAME, WHICH IS CRUDE AND IS ENOUGH. The signal here is unusually strong —
+# a file called "D&D 3.5 Ravenloft - Player's Handbook.pdf" needs no content analysis —
+# and the alternative (classifying by reading 900 books) would cost more than the problem
+# it solves. The patterns are deliberately specific: an earlier exploratory search used
+# bare words like "campaign" and "adventure" and swept in things that were not RPGs at
+# all. Anything ambiguous is left as personal, because mislabelling the owner's own
+# document as a game book is the failure that actually matters.
+RPG_PATTERNS = (
+    "d&d", "ad&d", "d20 ed", "d20 system", "dungeons & dragons", "dungeons and dragons",
+    "dungeon master", "dungeon masters guide", "monster manual", "player's handbook",
+    "players handbook", "unearthed arcana", "dragon #", "dungeon #", "dragon magazine",
+    "dragon magazine", "dragon compendium",
+    "ravenloft", "forgotten realms", "eberron", "greyhawk", "planescape", "dragonlance",
+    "spelljammer", "dark sun", "birthright", "mystara", "al-qadim", "nightmare fuel",
+    "pathfinder", "starfinder", "paizo", "tsr ", "arthaus", "sword & sorcery",
+    "green ronin", "alderac", "aeg ", "valar project", "world's largest dungeon",
+    "expedition to", "complete warrior", "complete arcane", "complete divine",
+    "book of erotic fantasy", "creature collection", "relics and rituals",
+    "the making of a mage", "elminster", "drizzt",
+)
+
+
+# AND THE FILENAME IS NOT ALWAYS ENOUGH, which the first run proved: "quoth the raven
+# 05.pdf", "Tome of Secrets.pdf", "Epic Handbook.pdf" and "S00-05 Mists of Mwangi.pdf" (a
+# Pathfinder Society scenario) all pass a filename rule and none of them name a brand. A
+# sample of what stayed untagged was more than half game books.
+#
+# So the CONTENT decides the rest — which is only possible because the crawl indexed it.
+# The bar is three distinct markers in one document. That is deliberately high: a personal
+# document that says "hit points" once is a doctor's note, and mislabelling the owner's own
+# paperwork as a rulebook is the error that would actually cost something.
+RPG_TEXT_MARKERS = (
+    "armor class", "hit points", "saving throw", "dungeon master", "game master",
+    "hit dice", "challenge rating", "spell slot", "ability score", "nonplayer character",
+    "non-player character", "player character", "d20", "experience points",
+    "spellcasting", "initiative order", "adventure path", "grapple check",
+    "prestige class", "base attack bonus",
+)
+RPG_MARKER_THRESHOLD = 3
+
+
+FOLDER_MIME = "application/vnd.google-apps.folder"
+
+
+def tag_folder(root_id: str, collection: str = "rpg", account: str | None = None,
+               dry_run: bool = False) -> dict:
+    """Tag every file beneath a folder, and record the folder tree on the way.
+
+    THE OWNER'S OWN ORGANISATION BEATS ANY HEURISTIC. Guessing collections from filenames
+    caught about half of this library and missed things like "Tome of Secrets" and "S00-05
+    Mists of Mwangi"; reading the text caught the rest but is a guess about subject matter.
+    "12-D&D Books" is a statement of fact by the person who put them there, and it also
+    settles the question the heuristics cannot answer at all — a file called "Heroes of
+    Horror" is a game book if it is in there and something else entirely if it is not.
+
+    Walks by listing each folder's children rather than filtering a flat file list. That
+    is slower and is the only way to be sure: the flat listing missing 7,200 files is
+    what sent us here in the first place.
+    """
+    account = account or DEFAULT_ACCOUNT
+    token = auth.TokenSource(account)
+    conn = db()
+
+    seen_folders: set[str] = set()
+    queue = [root_id]
+    files: list[dict] = []
+    folders: list[str] = []
+    errors: list[str] = []
+
+    while queue:
+        fid = queue.pop()
+        if fid in seen_folders:
+            continue
+        seen_folders.add(fid)
+        page = None
+        while True:
+            params = {"q": f"'{fid}' in parents and trashed=false",
+                      "fields": "nextPageToken,files(id,name,mimeType,parents,size)",
+                      "pageSize": PAGE}
+            if page:
+                params["pageToken"] = page
+            data = api_get(token, "/files", params)
+            if not data:
+                errors.append(fid)
+                break
+            for f in data.get("files", []):
+                if f.get("mimeType") == FOLDER_MIME:
+                    queue.append(f["id"])
+                    folders.append(f["id"])
+                else:
+                    files.append(f)
+            page = data.get("nextPageToken")
+            if not page:
+                break
+        print(f"    {len(seen_folders)} folders walked, {len(files)} files found",
+              flush=True)
+
+    print(f"\n  {len(files)} files beneath the folder, in {len(seen_folders)} folders")
+    if errors:
+        print(f"  {len(errors)} folder(s) could not be listed — NOT covered by this tag")
+
+    if dry_run:
+        for f in files[:15]:
+            print(f"      {f['name'][:66]}")
+        return {"files": len(files), "folders": len(seen_folders), "dry_run": True}
+
+    # Keep the tree we just paid for: parents on every row we touched, so the next
+    # question about folders does not need another walk.
+    with conn:
+        for f in files + [{"id": i} for i in folders]:
+            if "parents" in f:
+                conn.execute("UPDATE drive_files SET parents=? WHERE id=?",
+                             (json.dumps(f.get("parents") or []), f["id"]))
+        for f in files:
+            conn.execute("UPDATE drive_files SET collection=? WHERE id=?",
+                         (collection, f["id"]))
+
+    n = conn.execute("SELECT COUNT(*) FROM drive_files WHERE collection=?",
+                     (collection,)).fetchone()[0]
+    print(f"  tagged: {n} files now in collection {collection!r}")
+    return {"files": len(files), "folders": len(seen_folders), "tagged": n}
+
+
+def _is_rpg(name: str) -> bool:
+    n = (name or "").lower()
+    return any(p in n for p in RPG_PATTERNS)
+
+
+def _rpg_by_content(conn, ids: list[str]) -> set[str]:
+    """Which of these documents read like a rulebook?
+
+    One query, with the marker count summed in SQL — SQLite treats each LIKE as 1 or 0, so
+    this is a single scan per marker rather than a round trip per document.
+    """
+    if not ids:
+        return set()
+    score = " + ".join(f"(body LIKE ?)" for _ in RPG_TEXT_MARKERS)
+    out: set[str] = set()
+    for start in range(0, len(ids), 500):
+        chunk = ids[start:start + 500]
+        marks = ",".join("?" * len(chunk))
+        sql = (f"SELECT file_id FROM document_text WHERE file_id IN ({marks})"
+               f" AND ({score}) >= ?")
+        args = chunk + [f"%{m}%" for m in RPG_TEXT_MARKERS] + [RPG_MARKER_THRESHOLD]
+        out.update(r[0] for r in conn.execute(sql, args))
+    return out
+
+
+def classify(dry_run: bool = False, account: str | None = None) -> dict:
+    """Tag reference collections in the Drive. Today that means the RPG library.
+
+    A TAG, NOT A DELETE — see the `collection` column in schema.sql. The books keep their
+    text, stay searchable and stay in the backup; they are reported and ranked behind
+    personal material so a question about the owner's affairs is not answered out of a
+    rulebook.
+
+    Idempotent and re-runnable: it sets the tag from the filename every time, so a file
+    that is renamed is reclassified rather than accumulating a stale label.
+    """
+    conn = db()
+    where = "WHERE account = ?" if account else ""
+    args = [account] if account else []
+    rows = conn.execute(f"SELECT id, name, collection FROM drive_files {where}",
+                        args).fetchall()
+
+    by_name = {r["id"] for r in rows if _is_rpg(r["name"])}
+    # Everything the filename did not claim, judged on what is actually inside it.
+    unclaimed = [r["id"] for r in rows if r["id"] not in by_name]
+    by_content = _rpg_by_content(conn, unclaimed)
+    is_rpg = by_name | by_content
+
+    to_rpg = [r["id"] for r in rows if r["id"] in is_rpg and r["collection"] != "rpg"]
+    to_personal = [r["id"] for r in rows
+                   if r["id"] not in is_rpg and r["collection"] == "rpg"]
+
+    print(f"  {len(rows)} files scanned")
+    print(f"    {len(by_name)} named like a rulebook")
+    print(f"    {len(by_content)} more read like one (>= {RPG_MARKER_THRESHOLD}"
+          f" markers in the text)")
+    print(f"    {len(to_rpg)} to tag 'rpg', {len(to_personal)} to untag")
+
+    if dry_run:
+        for r in rows:
+            if _is_rpg(r["name"]) and r["collection"] != "rpg":
+                print(f"      rpg      {r['name'][:66]}")
+        return {"tagged": len(to_rpg), "untagged": len(to_personal), "dry_run": True}
+
+    with conn:
+        for chunk_start in range(0, len(to_rpg), 400):
+            chunk = to_rpg[chunk_start:chunk_start + 400]
+            conn.execute(f"UPDATE drive_files SET collection='rpg'"
+                         f" WHERE id IN ({','.join('?' * len(chunk))})", chunk)
+        for chunk_start in range(0, len(to_personal), 400):
+            chunk = to_personal[chunk_start:chunk_start + 400]
+            conn.execute(f"UPDATE drive_files SET collection=NULL"
+                         f" WHERE id IN ({','.join('?' * len(chunk))})", chunk)
+
+    total = conn.execute("SELECT COUNT(*) FROM drive_files WHERE collection='rpg'"
+                         ).fetchone()[0]
+    text = conn.execute("""SELECT COUNT(*), SUM(LENGTH(d.body)) FROM drive_files f
+                           JOIN document_text d ON d.file_id=f.id
+                           WHERE f.collection='rpg'""").fetchone()
+    allt = conn.execute("SELECT SUM(LENGTH(body)) FROM document_text").fetchone()[0] or 1
+    print(f"\n  'rpg' collection: {total} files, {text[0]} with text,"
+          f" {text[1]/1e9:.2f} GB of text")
+    print(f"    that is {100*text[1]/allt:.0f}% of everything indexed")
+    return {"tagged": len(to_rpg), "untagged": len(to_personal),
+            "total_rpg": total, "rpg_with_text": text[0]}
+
+
 def coverage_line(conn, email: str | None = None):
     """One line an operator can act on: how much is left, and what it is made of."""
     d = coverage(conn, email)
@@ -579,6 +801,20 @@ def main(argv: list[str]) -> int:
         acct = next((a for a in argv[2:] if "@" in a), None)
         pages = 0 if "--all-pages" in argv else None
         documents(limit=cap, account=acct, max_pages=pages)
+        return 0
+    if cmd == "tag-folder":
+        # tag-folder <folder-id> [collection] [--dry-run]
+        if len(argv) < 3:
+            raise SystemExit("usage: drive_index.py tag-folder <folder-id>"
+                             " [collection] [--dry-run]")
+        coll = argv[3] if len(argv) > 3 and not argv[3].startswith("--") else "rpg"
+        tag_folder(argv[2], collection=coll, dry_run="--dry-run" in argv)
+        return 0
+    if cmd == "classify":
+        # Tags reference collections (currently the RPG library) so personal material
+        # ranks ahead of it. Never deletes anything.
+        classify(dry_run="--dry-run" in argv,
+                 account=next((a for a in argv[2:] if "@" in a), None))
         return 0
     if cmd == "stats":
         if len(argv) < 3:

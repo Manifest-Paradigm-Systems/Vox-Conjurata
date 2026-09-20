@@ -1521,6 +1521,14 @@ def run_drive(messages: list[dict]):
         if h.get("source") == "lifepacket":
             label = ("PERSONAL RECORD — the owner's own military service file, which "
                      "outranks everything else here")
+        elif (h.get("collection") or ""):
+            # A reference work that merely lives in the same Drive — at present the RPG
+            # library, about 2,350 books and 89% of everything indexed. It is labelled so
+            # the answer can say what it is rather than passing a rulebook off as one of
+            # the owner's documents. These are ranked last, so reaching one means nothing
+            # of his own matched.
+            label = (f"REFERENCE LIBRARY ({h['collection']}) — not one of the owner's "
+                     "documents; a game book stored in the same Drive")
         elif not h.get("read"):
             label = ("Drive document — CONTENTS NOT READ, only the filename is known")
         else:

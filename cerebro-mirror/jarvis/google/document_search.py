@@ -50,13 +50,30 @@ from mail_search import (                                        # noqa: E402
 DB_PATH = os.path.expanduser(os.environ.get("JARVIS_GOOGLE_DB",
                                             "~/jarvis/google/google.db"))
 
-# Which source's hits are read first. The service record outranks the Drive: it is the
-# owner's own military file, it is not reproducible from anywhere else, and when a
-# question is about his service the answer is in there rather than in a scanned receipt.
-SOURCE_ORDER = ("lifepacket", "drive")
-
 _COLS = ("f.id, f.account, f.name, f.mime_type, f.modified_time, f.source, "
-         "f.text_state, f.size")
+         "f.text_state, f.size, f.collection")
+
+# WHAT IS READ FIRST, AND WHY IT IS A LADDER RATHER THAN A SORT.
+#
+# The Drive holds ~2,350 commercial rulebooks — 89% of all the text in this index — and
+# they match almost any word. Ask about a campaign, a dungeon, a dragon or an order and the
+# honest best matches are game books, which is exactly what the owner does not want when
+# the question is about his own affairs. So the tiers come before relevance:
+#
+#   0  the service record    the owner's own military file
+#   1  his own documents     everything untagged — mail, invoices, medical, school
+#   2  tagged collections    reference works that merely live in the same Drive
+#   3  anything else
+#
+# Ranking only reorders WITHIN a tier, so a rulebook can never outrank a personal document
+# by matching better. The books remain searchable — ask in a way that clearly means them
+# and they are right there — they just stop answering questions they were never part of.
+def _tier(row) -> int:
+    if row["source"] == "lifepacket":
+        return 0
+    if row["source"] == "drive":
+        return 2 if (row["collection"] or "") else 1
+    return 3
 
 
 def _shape(row, read: bool) -> dict:
@@ -68,7 +85,7 @@ def _shape(row, read: bool) -> dict:
     return d
 
 
-def _fts_query(conn, match, limit, account, source):
+def _fts_query(conn, match, limit, account, source, scope="all"):
     sql = (f"SELECT {_COLS}, t.body AS body,"
            " snippet(document_fts, 3, '[', ']', ' … ', 16) AS snip,"
            " bm25(document_fts) AS score"
@@ -83,12 +100,16 @@ def _fts_query(conn, match, limit, account, source):
     if source:
         sql += " AND f.source = ?"
         args.append(source)
+    if scope == "personal":
+        sql += " AND f.collection IS NULL"
+    elif scope == "collection":
+        sql += " AND f.collection IS NOT NULL"
     sql += " ORDER BY score LIMIT ?"
     args.append(limit * 4)
     return conn.execute(sql, args).fetchall()
 
 
-def _fts_hits(conn, terms, limit, account=None, source=None):
+def _fts_hits(conn, terms, limit, account=None, source=None, scope="all"):
     """Documents whose CONTENTS match. bm25-ranked within the source.
 
     OR, like mail, and an AND-first variant was tried here and REMOVED. It was added
@@ -104,7 +125,7 @@ def _fts_hits(conn, terms, limit, account=None, source=None):
     a plausible-looking change someone will otherwise re-propose.
     """
     match = " OR ".join(f'"{t}"' for t in terms)
-    return _fts_query(conn, match, limit, account, source)
+    return _fts_query(conn, match, limit, account, source, scope)
 
 
 def _meta_hits(conn, terms, limit, account=None, source=None):
@@ -145,13 +166,26 @@ def search_archive(conn, query: str, account=None, limit: int = 8, source=None
 
     rows, errors = [], []
     failed_tiers = []
-    try:
-        rows += list(_fts_hits(conn, terms, limit, account, source))
-    except sqlite3.Error as exc:
-        # NOT swallowed. The reference implementation in brain/db.py returns [] on a bad
-        # query, which is indistinguishable from "no mail" — and that is exactly how a
-        # broken index comes to look like an empty one.
-        failed_tiers.append(f"full-text tier: {exc}")
+    # PERSONAL MATERIAL AND COLLECTIONS ARE FETCHED SEPARATELY, and this is not a
+    # refinement — it is the difference between the ladder working and not.
+    #
+    # The fetch is capped at `limit * 4` and happens BEFORE the tiers are applied. With
+    # roughly 4,500 rulebooks holding most of the text in this index, a capped fetch for
+    # a word like "rank" returns almost nothing but game books, so the owner's service
+    # records never entered the candidate set and no amount of correct ordering afterwards
+    # could bring them back. Measured: "what is my current rank" answered from a Dungeon
+    # Masters Guide while the service record sat two tiers above it, un-fetched.
+    #
+    # Ordering cannot rescue a query that already excluded the right answer. So each side
+    # gets its own budget, and the tiering below decides what the reader sees first.
+    for scope, label in (("personal", "full-text tier"), ("collection", "collections")):
+        try:
+            rows += list(_fts_hits(conn, terms, limit, account, source, scope))
+        except sqlite3.Error as exc:
+            # NOT swallowed. The reference implementation in brain/db.py returns [] on a
+            # bad query, which is indistinguishable from "no mail" — and that is exactly
+            # how a broken index comes to look like an empty one.
+            failed_tiers.append(f"{label}: {exc}")
 
     try:
         rows += list(_meta_hits(conn, terms, limit, account, source))
@@ -180,14 +214,13 @@ def search_archive(conn, query: str, account=None, limit: int = 8, source=None
         if not _excluded(rules, probe):
             kept.append(r)
 
-    # Ranked WITHIN each source, then concatenated. `_rank` sorts by how well a row
-    # matches the query, so running it across the merged set would interleave a scanned
-    # receipt between two pages of the service record and destroy the ordering that makes
-    # records primary. The tier is the first key; relevance only orders within it.
+    # Ranked WITHIN each tier, then concatenated. `_rank` sorts by how well a row matches
+    # the query, so running it across the merged set would interleave a scanned rulebook
+    # between two pages of the service record and destroy the ordering that makes personal
+    # material primary. The tier is the first key; relevance only orders within it.
     out: list[dict] = []
-    for want in SOURCE_ORDER + ("other",):
-        group = [r for r in kept
-                 if (r["source"] if r["source"] in SOURCE_ORDER else "other") == want]
+    for tier in (0, 1, 2, 3):
+        group = [r for r in kept if _tier(r) == tier]
         if not group:
             continue
         ranked = _rank(group, terms, limit, ("name", "body"))

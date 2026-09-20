@@ -128,9 +128,27 @@ CREATE TABLE IF NOT EXISTS drive_files (
     -- string, and 2,713 PDFs sat in the index recorded as textless rather than unread.
     -- A coverage gap that cannot be seen is a coverage gap nobody fixes.
     text_state    TEXT,
+    -- WHOSE DOCUMENT THIS IS. NULL means the owner's own material — correspondence,
+    -- invoices, medical records, the service record. A non-NULL value names a body of
+    -- reference work that happens to be stored in the same Drive: at present only 'rpg',
+    -- which is roughly 900 tabletop rulebooks and magazine issues and about a third of
+    -- all the text in this index.
+    --
+    -- It is a TAG, NOT A DELETION. The books stay indexed, searchable and backed up; they
+    -- are reported and ranked behind personal material so that a question about the
+    -- owner's affairs is not answered out of a 2004 Dungeon Masters Guide. Dropping the
+    -- text would have been the easy way to make the numbers look better and would have
+    -- thrown away something the owner deliberately keeps.
+    collection    TEXT,
+    -- THE FOLDER(S) THIS FILE IS FILED IN, as a JSON array of ids — Drive allows more
+    -- than one. Nullable and frequently empty: a file shared directly, or in the root,
+    -- has no parent we can see. Kept so that the owner's own organisation is available
+    -- to the index, which is a better signal than anything derived from a filename.
+    parents       TEXT,
     indexed_at    REAL
 );
 CREATE INDEX IF NOT EXISTS idx_drive_account ON drive_files(account, modified_time DESC);
+CREATE INDEX IF NOT EXISTS idx_drive_collection ON drive_files(collection);
 
 CREATE TABLE IF NOT EXISTS document_text (
     file_id    TEXT PRIMARY KEY REFERENCES drive_files(id) ON DELETE CASCADE,
