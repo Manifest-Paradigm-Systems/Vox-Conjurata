@@ -101,22 +101,42 @@ fi
 # Two databases of different sizes do not produce two objects of the same size. Printing
 # the sizes every run, and saying so out loud when two of them match, turns "the log says
 # COMPLETE" into "here is what I can see", which is a different kind of claim.
+# WRITTEN TO A FILE, THEN ECHOED, and the file is the one that counts.
+#
+# This block printed correctly when the script was run by hand and printed NOTHING on two
+# runs under systemd — with the same PATH, the same remote and the same commands, each
+# verified working inside a systemd unit in isolation. That was never explained. Rather
+# than ship a check whose silence cannot be told apart from its success, the result goes to
+# a file first: a listing that is present on disk and absent from the log still tells you
+# what is in Drive, whereas a check that simply says nothing tells you nothing.
+GUARD_FILE="${JARVIS_BACKUP_GUARD_FILE:-/tmp/jarvis-backup-listing.txt}"
 echo
-echo "--- the backup folder now contains ---"
-sizes=$(rclone ls "$JARVIS_DRIVE_REMOTE/" --max-depth 1 2>/dev/null | sort -k2 || true)
-if [ -z "$sizes" ]; then
-    echo "  (could not list the folder — rclone failed or the remote is unreachable)" >&2
-    failed=$((failed + 1))
-else
-    echo "$sizes" | awk '{printf "  %12d  %s\n", $1, $2}'
-    dupe=$(echo "$sizes" | awk '{print $1}' | sort | uniq -d | head -1)
-    if [ -n "$dupe" ]; then
-        echo
-        echo "  WARNING: two or more objects are exactly $dupe bytes." >&2
-        echo "  Databases of different sizes do not compress to the same size — this is" >&2
-        echo "  what uploading ONE database under several names looks like." >&2
-        failed=$((failed + 1))
+{
+    echo "--- the backup folder now contains ---"
+    sizes=$(rclone ls "$JARVIS_DRIVE_REMOTE/" --max-depth 1 2>/dev/null | sort -k2 || true)
+    if [ -z "$sizes" ]; then
+        echo "  (could not list the folder — rclone failed or the remote is unreachable)"
+    else
+        echo "$sizes" | awk '{printf "  %12d  %s\n", $1, $2}'
+        dupe=$(echo "$sizes" | awk '{print $1}' | sort | uniq -d | head -1)
+        if [ -n "$dupe" ]; then
+            echo
+            echo "  WARNING: two or more objects are exactly $dupe bytes."
+            echo "  Databases of different sizes do not compress to the same size — this is"
+            echo "  what uploading ONE database under several names looks like."
+        fi
     fi
+} > "$GUARD_FILE" 2>&1
+cat "$GUARD_FILE"
+
+# The verdict is read back from the file, so the pass/fail cannot depend on whether the
+# log captured the text.
+if [ ! -s "$GUARD_FILE" ] || grep -q "could not list" "$GUARD_FILE"; then
+    echo "  (the listing could not be produced — see $GUARD_FILE)" >&2
+    failed=$((failed + 1))
+fi
+if grep -q "^  WARNING" "$GUARD_FILE"; then
+    failed=$((failed + 1))
 fi
 
 echo
