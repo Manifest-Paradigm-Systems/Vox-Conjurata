@@ -1436,6 +1436,71 @@ def _describe(h: dict, kind: str, labels: dict) -> str:
     return label
 
 
+# ---------------------------------------------------------------- grounding check
+# Let us use? No. Let me write this is as a grounding check for actual claims.
+_BLOOD_RX = re.compile(r"\b(?:A|B|AB|O)\s*(?:\+|-|pos\b|neg\b|positive\b|negative\b)",
+                       re.I)
+_IDENT_RX = re.compile(r"\b\d{5,}\b")
+
+
+def _blood_tokens(text: str) -> set:
+    out = set()
+    for m in _BLOOD_RX.finditer(text or ""):
+        t = m.group(0).lower().replace(" ", "")
+        t = t.replace("positive", "+").replace("negative", "-")
+        t = t.replace("pos", "+").replace("neg", "-")
+        out.add(t[:2] if t[:2] in ("ab",) else t[:1] + t[-1])
+    return out
+
+
+def _unsupported(answer: str, context: str) -> list:
+    """Specific claims in the answer that the supplied material does not contain.
+
+    Deliberately narrow. A checker that cries wolf gets ignored, and then it is worse than
+    nothing — so this looks only for the two shapes that have actually been invented here.
+    """
+    ctx = context or ""
+    bad = []
+    ctx_blood = _blood_tokens(ctx)
+    for t in _blood_tokens(answer):
+        if t not in ctx_blood:
+            bad.append(t.upper())
+    ctx_digits = re.sub(r"\D", "", ctx)
+    for m in _IDENT_RX.finditer(answer or ""):
+        if m.group(0) not in ctx_digits and m.group(0) not in ctx:
+            bad.append(m.group(0))
+    return bad
+
+
+def _answer_grounded(question: str, context: str, sources: list) -> str:
+    """Answer from the material, then make sure the answer stayed inside it.
+
+    ONE RETRY, NOT A LOOP. If the second attempt still asserts something the material does
+    not contain, the honest answer is that it is not on record — so that is what is
+    returned, rather than a third attempt at coaxing the model into behaving.
+    """
+    answer = _local_answer(question, context, sources)
+    unsupported = _unsupported(answer, context)
+    if not unsupported:
+        return answer
+
+    retry = (
+        f"{question}\n\n"
+        f"Your previous answer stated: {', '.join(sorted(set(unsupported))[:5])}. "
+        f"That is NOT in the material below, and the owner has not told you it. "
+        f"Answer again using only what the material contains. If it does not state the "
+        f"thing asked for, say plainly that it is not in the records — do not supply a "
+        f"plausible value, and do not describe what a typical value would be.\n\n"
+        f"(Removing an invented value is the whole job here; keep everything else.)"
+    )
+    answer2 = _local_answer(retry, context, sources)
+    if not _unsupported(answer2, context):
+        return answer2
+    # Still asserting unsupported specifics. Say so rather than pass them on.
+    return ("I could not find that in your records, sir — and I would rather say so than "
+            "give you a value the documents do not support.")
+
+
 def run_ask(messages: list[dict]):
     """Search everything local and answer from the union. Returns (reply, sources, timings).
 
@@ -1517,7 +1582,7 @@ def run_ask(messages: list[dict]):
     context = "\n\n".join(blocks)
 
     t1 = time.time()
-    answer = _local_answer(
+    answer = _answer_grounded(
         f"{question}\n\n(The material below is everything local that matched, strongest "
         f"first. A FACT is already read out of the documents behind it; a document whose "
         f"contents were not read has only its filename. Say which kind you are relying on, "
