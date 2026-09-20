@@ -337,7 +337,15 @@ async def api_models():
     except (httpx.HTTPError, ValueError) as exc:
         return JSONResponse({"error": str(exc)}, status_code=502)
     ids = [m.get("id") for m in data.get("data", []) if m.get("id")]
-    return {"models": ids, "default": "jarvis"}
+    # THE GROUNDED LANE IS THE DEFAULT. "jarvis" is the conversationalist and does no
+    # retrieval at all -- it answers factual questions about the owner from memory and
+    # priors, which is why questions about his own records came back wrong or invented.
+    # "jarvis-ask" searches documents, the curated fact ledger, mail and the calendar,
+    # and cites what it used. Measured with evals/lane_eval.py: the same model scored
+    # ZERO on answerable questions without evidence and answered them correctly with it.
+    # "jarvis" stays in the picker -- it is the right choice for actual conversation --
+    # but it should not be what an unasked question lands on.
+    return {"models": ids, "default": "jarvis-ask"}
 
 
 @app.get("/api/source")
@@ -1261,7 +1269,18 @@ const esc = s => (s || '').replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&
 
 // Persistent by default; incognito is the exception. When on, the brain is
 // told to write nothing — the transcript still lives in this page's memory.
-let MODEL = localStorage.getItem('jarvis.model') || 'jarvis';
+let MODEL = localStorage.getItem('jarvis.model') || 'jarvis-ask';
+// ONE-TIME MIGRATION, because a new default moves nobody on its own: every device
+// that has ever touched the picker already has 'jarvis' written into localStorage,
+// so the fallback above never fires again for them. A stored value equal to the OLD
+// default is not a preference -- it is the old default -- so it is moved once, and a
+// flag remembers that we did it. A deliberate choice of 'jarvis' after this stays.
+if (localStorage.getItem('jarvis.model') === 'jarvis'
+    && !localStorage.getItem('jarvis.model.migrated')) {
+  MODEL = 'jarvis-ask';
+  localStorage.setItem('jarvis.model', MODEL);
+  localStorage.setItem('jarvis.model.migrated', '1');
+}
 let INCOGNITO = localStorage.getItem('jarvis.incognito') === '1';
 // Which conversation this page is in. Minted HERE rather than asked for, so a
 // streaming reply never has to make a round trip to learn its own id. The brain
@@ -1889,7 +1908,7 @@ fetch('/api/models').then(r => r.json()).then(cfg => {
     o.value = m; o.textContent = label[m] || m;
     picker.appendChild(o);
   });
-  if (![...picker.options].some(o => o.value === MODEL)) MODEL = cfg.default || 'jarvis';
+  if (![...picker.options].some(o => o.value === MODEL)) MODEL = cfg.default || 'jarvis-ask';
   picker.value = MODEL;
   picker.onchange = () => { MODEL = picker.value; localStorage.setItem('jarvis.model', MODEL); };
 }).catch(() => {});

@@ -39,7 +39,7 @@ import mail_search
 
 DB_PATH = os.path.expanduser(os.environ.get("JARVIS_GOOGLE_DB",
                                             "~/jarvis/google/google.db"))
-DEFAULT_ACCOUNT = os.environ.get("JARVIS_MAIL_ACCOUNT", "mnmeyer@gmail.com")
+DEFAULT_ACCOUNT = os.environ.get("JARVIS_MAIL_ACCOUNT", "unconfigured@invalid")
 
 # Fail closed, loudly. A service that starts without a token and serves anyway is
 # worse than one that refuses to start, because nothing looks wrong.
@@ -430,6 +430,31 @@ async def documents_stats():
         finally:
             conn.close()
     return {"sources": await run_in_threadpool(_query)}
+
+
+@app.get("/accounts", dependencies=[Depends(require_token)])
+async def accounts():
+    """Which mailboxes exist, and what each one is FOR — label, not address.
+
+    The brain needs this to say WHOSE records a hit came from. Every search route already
+    returns `account` on every row, but an address is not an answer: with four mailboxes
+    the useful sentence is "that is in the family account", not "that is in
+    <someone>@gmail.com". The label is the one the accounts table already carries and the
+    owner already uses.
+
+    Read from the database rather than hardcoded, for the same reason the addresses were
+    moved out of `domains.py`: this list grows, and the source of truth is the table.
+    """
+    def _query():
+        conn = _conn()
+        try:
+            rows = conn.execute("SELECT email, label, purpose FROM accounts"
+                                " ORDER BY rowid").fetchall()
+            return {r["email"]: {"label": r["label"], "purpose": r["purpose"]}
+                    for r in rows}
+        finally:
+            conn.close()
+    return {"accounts": await run_in_threadpool(_query)}
 
 
 if __name__ == "__main__":
