@@ -160,12 +160,40 @@ def run(cmd: list[str], timeout: int = 600) -> tuple[str, str | None]:
 
 
 # ---------------------------------------------------------------- images
-def image_text(path: str, max_pages: int | None = None) -> tuple[str, str, str | None]:
+def _join(pages: list[str], mark_pages: bool) -> str:
+    """Join per-page text, optionally labelling each page.
+
+    Page labels are not decoration. A service record is 21 pages in one file and the
+    answer to "when did I separate" is on one of them; "[page 7]" is the difference
+    between a citation someone can check and "somewhere in this document". The markers
+    are also counted by `read_document` to answer "how long is this".
+    """
+    if not mark_pages:
+        return "\n\n".join(p for p in pages if p).strip()
+    return "\n\n".join(f"[page {i}]\n\n{p}" if p else f"[page {i}]\n\n(no text)"
+                       for i, p in enumerate(pages, 1)).strip()
+
+
+def _imagemagick() -> str:
+    """ImageMagick 7 renamed `convert` to `magick`. Take whichever exists, newest first."""
+    if have("magick"):
+        return "magick"
+    return "convert"
+
+
+def image_text(path: str, max_pages: int | None = None,
+               mark_pages: bool = False) -> tuple[str, str, str | None]:
     """OCR one image, EVERY FRAME of it if it is a multi-frame TIFF.
 
-    tesseract reads frame 1 only, silently. That silence is the whole problem this
-    function exists to not have, so the frame count is read first and each frame is
-    rendered on its own.
+    tesseract reads frame 1 only and does not say so — a 22-frame DD-4 packet OCR'd as
+    its cover sheet. The frame count is therefore read first and each frame is rendered
+    on its own.
+
+    (A 1-bit bilevel G4 TIFF was suspected of a second failure here and was NOT one:
+    measured against the rendered PNG, raw and converted agree character-for-character at
+    every segmentation mode. The apparent difference was `--psm`, which is handled in
+    `_ocr_one`. Worth recording, because "the old TIFF format confused it" was a
+    satisfying explanation and a wrong one.)
     """
     if OCR_ENGINE == "off":
         return "", "", "unavailable:ocr-disabled"
@@ -178,27 +206,28 @@ def image_text(path: str, max_pages: int | None = None) -> tuple[str, str, str |
     limit = frames if not max_pages else min(frames, max_pages)
     out: list[str] = []
     first_err: str | None = None
-    tmp = tempfile.mkdtemp(prefix="tifocr-")
+    tmp = tempfile.mkdtemp(prefix="imgocr-")
     try:
         for i in range(limit):
             png = os.path.join(tmp, f"frame-{i:04d}.png")
-            _, err = run(["convert", f"{path}[{i}]", "-background", "white",
-                          "-alpha", "remove", "-alpha", "off", png])
-            if err or not os.path.exists(png):
-                first_err = first_err or err or f"frame:{i}"
+            _, cerr = run([_imagemagick(), f"{path}[{i}]", "-background", "white",
+                           "-alpha", "remove", "-alpha", "off", png])
+            if cerr or not os.path.exists(png):
+                first_err = first_err or cerr or f"render:frame{i}"
+                out.append("")
                 continue
             text, err = _ocr_one(png)
             if err:
                 first_err = first_err or err
-            if text:
-                out.append(text)
+            # Every frame is appended, including the ones that yielded nothing, so that
+            # [page N] keeps counting frames rather than renumbering around a blank one.
+            out.append(text or "")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
-    if not out:
+    if not any(out):
         return "", "", first_err
-    body = "\n\n".join(out)
-    return body, f"ocr:{OCR_ENGINE}", None
+    return _join(out, mark_pages), f"ocr:{OCR_ENGINE}", None
 
 
 def _frame_count(path: str) -> int:
@@ -222,13 +251,34 @@ def _frame_count(path: str) -> int:
     return 1
 
 
+# Page segmentation modes to try, in order, stopping at the first that returns text.
+#
+# 3 is tesseract's default — full automatic segmentation — and is right for ordinary
+# pages. But it returns NOTHING, with exit 0, for some layouts: the 1974 dependent birth
+# certificate in the service record is 22% ink and came back empty at 3, 4 and 11 while 6
+# read it cleanly. Because the exit code is 0, that was indistinguishable from a blank
+# page — a records document silently recorded as having no text, which is the exact
+# failure this module exists to remove.
+#
+# 6 assumes a single uniform block of text. It is wrong for a two-column page, which is
+# why it is a fallback rather than the default: a mode that reads *something* on a
+# document the automatic pass could not place is better than reporting nothing, and the
+# cost is one extra tesseract run only on pages that produced no text at all.
+PSM_LADDER = ("3", "6", "4")
+
+
 def _ocr_one(path: str) -> tuple[str, str | None]:
     if OCR_ENGINE == "eyes":
         return _ocr_eyes(path)
-    text, err = run(["tesseract", path, "stdout", "-l", "eng", "--psm", "3"])
-    if err and not text:
-        return "", err
-    return text.strip(), None
+    last_err: str | None = None
+    for psm in PSM_LADDER:
+        text, err = run(["tesseract", path, "stdout", "-l", "eng", "--psm", psm])
+        if err and not text:
+            return "", err            # the tool itself failed — a different thing
+        if text.strip():
+            return text.strip(), None
+        last_err = None
+    return "", last_err
 
 
 def _ocr_eyes(path: str) -> tuple[str, str | None]:
@@ -267,12 +317,24 @@ def _ocr_eyes(path: str) -> tuple[str, str | None]:
 
 
 # ---------------------------------------------------------------- pdfs
-def pdf_text(path: str, max_pages: int | None = None) -> tuple[str, str, str | None]:
-    """Text from a PDF: the text layer if it has one, OCR of the pages if it does not."""
+def pdf_text(path: str, max_pages: int | None = None,
+             mark_pages: bool = False) -> tuple[str, str, str | None]:
+    """Text from a PDF: the text layer if it has one, OCR of the pages if it does not.
+
+    `pdftotext` emits the whole document at once, so its output cannot be split per page
+    without a second pass — and that is why a text-layer PDF gets no page markers below
+    one call. The OCR branch, which is where the scanned records live, does have them.
+    """
     text, err = run(["pdftotext", "-layout", "-q", path, "-"])
     if err:
         return "", "", err
     if len(text.strip()) > MIN_TEXT:
+        if mark_pages and "\f" in text:
+            # pdftotext separates pages with a form feed. Splitting on it costs nothing
+            # and turns "somewhere in this 21-page file" into "[page 7]" — the same
+            # guarantee the OCR branch gives, and without it a text-layer PDF would
+            # report as one page however long it is.
+            return _join(text.split("\f"), True), "pdftotext", None
         return text.strip(), "pdftotext", None
 
     if OCR_ENGINE == "off":
@@ -296,11 +358,10 @@ def pdf_text(path: str, max_pages: int | None = None) -> tuple[str, str, str | N
             t, e = _ocr_one(os.path.join(tmp, p))
             if e:
                 first_err = first_err or e
-            if t:
-                out.append(t)
-        if not out:
+            out.append(t or "")
+        if not any(out):
             return "", "", first_err
-        return "\n\n".join(out).strip(), f"ocr:{OCR_ENGINE}", None
+        return _join(out, mark_pages), f"ocr:{OCR_ENGINE}", None
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -384,7 +445,8 @@ def plain_text(path: str) -> tuple[str, str, str | None]:
 
 # ---------------------------------------------------------------- the one entry point
 def extract_path(path: str, mime: str = "", max_pages: int | None = None,
-                 ocr: bool = True) -> tuple[str, str, str | None]:
+                 ocr: bool = True, mark_pages: bool = False
+                 ) -> tuple[str, str, str | None]:
     """Text from a file on disk. The only function callers need."""
     mime = (mime or "").lower()
     ext = os.path.splitext(path)[1].lower()
@@ -405,11 +467,11 @@ def extract_path(path: str, mime: str = "", max_pages: int | None = None,
             mime = "text/plain"
 
     if mime in PDF_MIMES:
-        return pdf_text(path, max_pages)
+        return pdf_text(path, max_pages, mark_pages)
     if mime.startswith(IMAGE_PREFIX) or ext in IMAGE_EXT:
         if not ocr:
             return "", "", "unavailable:ocr-disabled"
-        return image_text(path, max_pages)
+        return image_text(path, max_pages, mark_pages)
     if mime in OFFICE_MIMES:
         return office_text(path)
     if mime in HTML_MIMES:
@@ -426,8 +488,8 @@ def extract_path(path: str, mime: str = "", max_pages: int | None = None,
 
 
 def extract_bytes(data: bytes, mime: str = "", name: str = "",
-                  max_pages: int | None = None, ocr: bool = True
-                  ) -> tuple[str, str, str | None]:
+                  max_pages: int | None = None, ocr: bool = True,
+                  mark_pages: bool = False) -> tuple[str, str, str | None]:
     """Text from bytes in memory — what a download gives you.
 
     Writes to a temp file first. The alternative is a second copy of every rung of the
@@ -441,7 +503,7 @@ def extract_bytes(data: bytes, mime: str = "", name: str = "",
         path = os.path.join(tmp, "content" + suffix)
         with open(path, "wb") as fh:
             fh.write(data)
-        return extract_path(path, mime, max_pages, ocr)
+        return extract_path(path, mime, max_pages, ocr, mark_pages)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
