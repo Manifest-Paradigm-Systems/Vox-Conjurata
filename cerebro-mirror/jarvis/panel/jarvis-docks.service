@@ -11,6 +11,9 @@ WorkingDirectory=/var/home/admin/jarvis/panel
 Environment=JARVIS_BRAIN_URL=http://127.0.0.1:8092
 Environment=JARVIS_VIZ_URL=http://127.0.0.1:8790
 Environment=JARVIS_BUS_DIR=/var/home/admin/jarvis/viz-bus
+# The mail archive, so a citation in an answer can be opened. Same token the brain
+# uses; this file is 0600 and holds JARVIS_MAIL_TOKEN and JARVIS_MAIL_ACCOUNT.
+EnvironmentFile=/var/home/admin/.config/jarvis/mail/mail.env
 ExecStart=/var/home/admin/jarvis/.venv/bin/uvicorn panel:app --host 0.0.0.0 --port 8093
 Restart=on-failure
 RestartSec=3

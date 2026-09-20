@@ -30,6 +30,10 @@ from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse, FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 
 BRAIN_URL = os.getenv("JARVIS_BRAIN_URL", "http://127.0.0.1:8092")
+# The archive, for the source links. Same service the brain calls; the panel reaches
+# it directly so a citation can be opened without a round trip through the model.
+MAIL_URL = os.getenv("JARVIS_MAIL_URL", "http://127.0.0.1:7870")
+MAIL_TOKEN = os.getenv("JARVIS_MAIL_TOKEN", "").strip()
 VIZ_URL = os.getenv("JARVIS_VIZ_URL", "http://127.0.0.1:8790")
 BUS_DIR = os.getenv("JARVIS_BUS_DIR", "/var/home/admin/jarvis/viz-bus")
 # The Android shell is published here so a phone can install or update it
@@ -296,6 +300,44 @@ async def api_models():
         return JSONResponse({"error": str(exc)}, status_code=502)
     ids = [m.get("id") for m in data.get("data", []) if m.get("id")]
     return {"models": ids, "default": "jarvis"}
+
+
+@app.get("/api/source")
+async def api_source(id: str):
+    """The archived text behind a citation.
+
+    Every fetching model already returns its sources as `mail:<id>` or `doc:<id>`, and
+    until now nothing rendered them — so answers cited [1][2] against a list the reader
+    could not see. This is the other end of that: given the id from a citation, return
+    the text it refers to.
+
+    SERVED FROM THE ARCHIVE, NOT FROM GOOGLE. A link that opened Gmail or Drive would
+    work for two of the corpora and fail for the one that matters most — the service
+    records are not Drive files and have no URL to open. Reading the local copy works for
+    all of them, and it means opening a citation does not tell Google which document the
+    owner was reading.
+    """
+    if not MAIL_TOKEN:
+        return JSONResponse(
+            {"error": "JARVIS_MAIL_TOKEN is not set on the panel — the source links "
+                      "cannot read the archive"}, status_code=503)
+    kind, _, ref = id.partition(":")
+    if kind == "mail":
+        path, params = "/mail/read", {"id": ref}
+    elif kind == "doc":
+        path, params = "/documents/read", {"id": ref}
+    else:
+        return JSONResponse({"error": f"unknown source kind {kind!r}"}, status_code=400)
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=5.0)) as c:
+            r = await c.get(f"{MAIL_URL}{path}", params=params,
+                            headers={"Authorization": f"Bearer {MAIL_TOKEN}"})
+    except httpx.HTTPError as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=502)
+    if r.status_code != 200:
+        return JSONResponse({"error": f"HTTP {r.status_code}: {r.text[:160]}"},
+                            status_code=r.status_code)
+    return r.json()
 
 
 @app.get("/api/voices")
@@ -734,6 +776,23 @@ LIVE_PAGE = r"""<!doctype html>
   .m { margin-bottom:10px; }
   .m .who { color:var(--dim); font-size:11px; letter-spacing:.1em; }
   .m.you .who { color:var(--warn); } .m.jarvis .who { color:var(--accent); }
+  /* The citation list. Deliberately quiet and small: it is evidence, not the answer. */
+  .src { margin-top:8px; display:flex; flex-direction:column; gap:3px;
+         border-left:2px solid var(--line); padding-left:8px; }
+  .src a { font-size:12px; color:var(--dim); text-decoration:none;
+           overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .src a:hover { color:var(--accent); }
+  .src a b { color:var(--accent); font-weight:600; }
+  #srcview { position:fixed; inset:0; background:rgba(5,7,10,.86); display:none;
+             z-index:60; padding:24px; }
+  #srcview.open { display:block; }
+  #srcview .box { max-width:900px; margin:0 auto; background:var(--panel);
+                  border:1px solid var(--line); border-radius:8px; height:100%;
+                  display:flex; flex-direction:column; overflow:hidden; }
+  #srcview header { border-bottom:1px solid var(--line); }
+  #srcview .meta { color:var(--dim); font-size:12px; padding:8px 16px; }
+  #srcview pre { flex:1; overflow:auto; margin:0; padding:16px; font:12px/1.6 inherit;
+                 white-space:pre-wrap; word-break:break-word; }
   .m.system { color:var(--dim); font-style:italic; }
 
   #approval { display:none; margin:0 16px 14px; padding:12px; border:1px solid var(--warn);
@@ -752,6 +811,13 @@ LIVE_PAGE = r"""<!doctype html>
 <iframe id="face" allow="autoplay; microphone"></iframe>
 <div id="stateChip">idle</div>
 <a id="teamLink" href="/team/" title="What the dev team is working on — plans, items, and the option buttons" style="position:fixed;top:calc(58px + env(safe-area-inset-top));right:12px;z-index:60;font:12px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em;color:var(--accent);text-decoration:none;border:1px solid var(--accent);border-radius:8px;padding:7px 11px;background:rgba(11,16,22,.92);box-shadow:0 0 14px rgba(57,208,255,.22);text-transform:uppercase">◆ team</a>
+
+<div id="srcview"><div class="box">
+  <header><h1 id="srcTitle">source</h1><span class="spacer"></span>
+    <button id="srcClose">close</button></header>
+  <div class="meta" id="srcMeta"></div>
+  <pre id="srcBody"></pre>
+</div></div>
 
 <div id="sheet">
   <div id="handle" title="Close"><span></span></div>
@@ -1184,13 +1250,69 @@ function setState(s) {
                                : (s.startsWith('think') || s.startsWith('transcri')) ? 'thinking'
                                : s === 'speaking' ? 'speaking' : 'idle'})}).catch(()=>{});
 }
-function say(who, text) {
+function say(who, text, sources) {
   const d = document.createElement('div');
   d.className = 'm ' + who;
-  d.innerHTML = '<div class="who">' + who.toUpperCase() + '</div><div>' + esc(text) + '</div>';
+  let html = '<div class="who">' + who.toUpperCase() + '</div><div>' + esc(text) + '</div>';
+  // The numbered list the reply's [1][2] refer to. Without this the citations point at
+  // nothing the reader can see, which is how "I found one recent email mentioning CVS"
+  // arrived with no way to check it.
+  if (sources && sources.length) {
+    html += '<div class="src">' + sources.map((s, i) => {
+      const t = esc(s.title || '(untitled)');
+      return '<a href="#" data-src="' + esc(s.url || '') + '" data-i="' + (i + 1) + '">'
+           + '<b>[' + (i + 1) + ']</b> ' + t + '</a>';
+    }).join('') + '</div>';
+  }
+  d.innerHTML = html;
   $('log').appendChild(d);
   $('log').scrollTop = $('log').scrollHeight;
 }
+/* ---- source viewer ---------------------------------------------------- */
+// Clicking a citation opens the archived text it refers to. Delegated from #log, so it
+// keeps working for every message say() renders, including ones repainted from an older
+// conversation.
+async function openSource(url) {
+  const [kind, ref] = (url || '').split(':');
+  if (!kind || !ref) return;
+  $('srcTitle').textContent = kind === 'mail' ? 'email' : 'document';
+  $('srcMeta').textContent = 'loading…';
+  $('srcBody').textContent = '';
+  $('srcview').classList.add('open');
+  try {
+    const r = await fetch('/api/source?id=' + encodeURIComponent(url));
+    const d = await r.json();
+    if (!r.ok || d.error) {
+      $('srcMeta').textContent = d.error || ('could not open (' + r.status + ')');
+      return;
+    }
+    if (kind === 'mail') {
+      $('srcTitle').textContent = d.subject || '(no subject)';
+      $('srcMeta').textContent = [d.date, d.from_addr || d.from].filter(Boolean).join(' · ');
+      $('srcBody').textContent = d.body || '(this message has no indexed body)';
+    } else {
+      $('srcTitle').textContent = d.name || '(unnamed)';
+      const bits = [d.source, d.pages ? d.pages + ' page(s)' : '',
+                    d.collection ? d.collection + ' collection' : '',
+                    d.account].filter(Boolean);
+      $('srcMeta').textContent = bits.join(' · ');
+      $('srcBody').textContent = d.body || '(contents not read)';
+    }
+  } catch (err) {
+    $('srcMeta').textContent = 'could not open: ' + err;
+  }
+}
+$('log').addEventListener('click', ev => {
+  const a = ev.target.closest('a[data-src]');
+  if (!a) return;
+  ev.preventDefault();
+  openSource(a.getAttribute('data-src'));
+});
+$('srcClose').onclick = () => $('srcview').classList.remove('open');
+$('srcview').addEventListener('click', ev => {
+  if (ev.target.id === 'srcview') $('srcview').classList.remove('open');
+});
+
 function openSheet(open) {
   sheetOpen = (open === undefined) ? !sheetOpen : open;
   $('sheet').classList.toggle('open', sheetOpen);
@@ -1593,7 +1715,7 @@ async function ask(text, vision) {
   history.push({role:'user', content:text});
   let reply = '';
   const speaker = new Speaker();
-  let voiceChanged = null, media = null;
+  let voiceChanged = null, media = null, sources = null;
 
   try {
     const r = await fetchWithTimeout('/api/chat', {method:'POST',
@@ -1621,6 +1743,7 @@ async function ask(text, vision) {
         try { d = JSON.parse(payload); } catch (err) { continue; }
         if (d.media) { media = d.media; continue; }
         if (d.voice) { voiceChanged = d.voice; continue; }
+        if (d.sources) { sources = d.sources; continue; }
         const piece = d.choices && d.choices[0] && d.choices[0].delta
                       ? (d.choices[0].delta.content || '') : '';
         if (!piece) continue;
@@ -1640,7 +1763,7 @@ async function ask(text, vision) {
   reply = reply.trim();
   console.log('jarvis: reply chars=' + reply.length);
   if (!reply) { setState('idle'); return; }
-  say('jarvis', reply);
+  say('jarvis', reply, sources);
   history.push({role:'assistant', content:reply});
   if (history.length > 24) history = history.slice(-24);
   lastSpoken = reply;
