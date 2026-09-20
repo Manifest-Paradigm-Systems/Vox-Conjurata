@@ -30,31 +30,29 @@ from __future__ import annotations
 import base64
 import json
 import os
-import re
-import shutil
 import sqlite3
 import subprocess
 import sys
-import tempfile
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
-import zipfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import auth     # noqa: E402
-import control  # noqa: E402
+import auth        # noqa: E402
+import control     # noqa: E402
+import ocr_ladder  # noqa: E402
 
 DB_PATH = os.path.expanduser(os.environ.get("JARVIS_GOOGLE_DB",
                                             "~/jarvis/google/google.db"))
 API = "https://gmail.googleapis.com/gmail/v1/users/me"
 REQUEST_DELAY = float(os.getenv("JARVIS_REQUEST_DELAY", "0.08"))
 
-OCR_ENGINE = os.getenv("JARVIS_OCR", "tesseract")      # tesseract | eyes | off
-EYES_URL = os.getenv("JARVIS_EYES_URL", "http://192.168.0.67:8084")
+# The OCR settings themselves live in ocr_ladder.py now — including the engine choice
+# and the page cap. Only the display copy is kept, so `stats` can report what the ladder
+# will actually use without importing a private constant out of it.
+OCR_ENGINE = ocr_ladder.OCR_ENGINE                     # tesseract | eyes | off
 MAX_BYTES = int(os.getenv("JARVIS_ATTACHMENT_MAX_MB", "25")) * 1024 * 1024
-OCR_MAX_PAGES = int(os.getenv("JARVIS_OCR_MAX_PAGES", "20"))
 
 PDF = "application/pdf"
 DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -102,127 +100,23 @@ def download(token: str, message_id: str, remote_id: str) -> bytes:
 
 
 # ---------------------------------------------------------------- extraction
-def _run(cmd: list[str], timeout: int = 300) -> str:
-    try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-        return r.stdout or ""
-    except (subprocess.SubprocessError, OSError):
-        return ""
+# The ladder lives in ocr_ladder.py. This module used to carry its own copy — a third
+# copy, after drive_index.py — and each grew its own version of the same bug: a missing
+# binary became an empty string, and an empty string meant "nothing readable here". A
+# host without poppler therefore recorded every scanned IEP and specialist letter as a
+# document with no text in it, and said nothing. One ladder now, and it returns a reason.
 
+def extract(mime: str, data: bytes) -> tuple[str, str, str | None]:
+    """(text, source, error) for one attachment.
 
-def pdf_to_text(path: str) -> tuple[str, str]:
-    """(text, source). Falls back to OCR when the PDF has no text layer, which is what a
-    scanned document is — and scanned documents are exactly what arrives from schools and
-    clinics."""
-    text = _run(["pdftotext", "-layout", "-q", path, "-"])
-    if len(text.strip()) > 40:
-        return text.strip(), "pdftotext"
-
-    # No text layer. Rasterise the first pages and OCR them.
-    if OCR_ENGINE == "off":
-        return "", ""
-    tmp = tempfile.mkdtemp(prefix="pdfocr-")
-    try:
-        _run(["pdftoppm", "-r", "200", "-png", "-l", str(OCR_MAX_PAGES), path,
-              os.path.join(tmp, "page")])
-        pages = sorted(f for f in os.listdir(tmp) if f.endswith(".png"))
-        out = []
-        for p in pages[:OCR_MAX_PAGES]:
-            t = ocr_file(os.path.join(tmp, p))
-            if t:
-                out.append(t)
-        return "\n\n".join(out).strip(), f"ocr:{OCR_ENGINE}" if out else ""
-    finally:
-        shutil.rmtree(tmp, ignore_errors=True)
-
-
-def office_to_text(path: str) -> tuple[str, str]:
-    """A .docx/.xlsx is a zip of XML. No dependency, no OCR, exact text."""
-    try:
-        with zipfile.ZipFile(path) as z:
-            parts = [n for n in z.namelist()
-                     if re.match(r"word/document\.xml|xl/sharedStrings\.xml|"
-                                 r"ppt/slides/slide\d+\.xml", n)]
-            chunks = []
-            for name in sorted(parts):
-                xml = z.read(name).decode("utf-8", "replace")
-                xml = re.sub(r"(?i)</w:p>|</a:p>|<w:tab/>", "\n", xml)
-                txt = re.sub(r"<[^>]+>", " ", xml)
-                import html as _html
-                chunks.append(_html.unescape(txt))
-            return "\n".join(chunks).strip(), "office-xml"
-    except Exception:                                       # noqa: BLE001
-        return "", ""
-
-
-def ocr_file(path: str) -> str:
-    """OCR one image. tesseract locally, or the eyes on cerebro when asked."""
-    if OCR_ENGINE == "off":
-        return ""
-    if OCR_ENGINE == "eyes":
-        return _ocr_eyes(path)
-    return _run(["tesseract", path, "stdout", "-l", "eng", "--psm", "3"]).strip()
-
-
-def _ocr_eyes(path: str) -> str:
-    """MiniCPM-V on cerebro. Better on screenshots and awkward photos; far slower."""
-    try:
-        with open(path, "rb") as fh:
-            b64 = base64.b64encode(fh.read()).decode()
-        payload = {
-            "model": "vision",
-            "messages": [{"role": "user", "content": [
-                {"type": "text", "text": "Transcribe ALL text in this image exactly. "
-                                         "If there is no text, describe briefly."},
-                {"type": "image_url",
-                 "image_url": {"url": f"data:image/png;base64,{b64}"}}]}],
-            "max_tokens": 800,
-        }
-        req = urllib.request.Request(f"{EYES_URL}/v1/chat/completions",
-                                     data=json.dumps(payload).encode(),
-                                     headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=300) as r:
-            d = json.loads(r.read())
-        return (d["choices"][0]["message"]["content"] or "").strip()
-    except Exception as exc:                                # noqa: BLE001
-        print(f"      (eyes failed: {type(exc).__name__})")
-        return ""
-
-
-def image_to_text(path: str) -> tuple[str, str]:
-    t = ocr_file(path)
-    return t, f"ocr:{OCR_ENGINE}" if t else ""
-
-
-def extract(mime: str, data: bytes) -> tuple[str, str]:
-    """(text, source). Empty text means 'nothing readable here', which is normal."""
+    Empty text with `error is None` means the attachment was read and holds no text.
+    Empty text with an error means we could not read it — and that is the difference
+    between a row that says "done" and a row that says "try me again when the tool is
+    installed". Reporting the second as the first is what this module used to do.
+    """
     if not data:
-        return "", ""
-    suffix = {"application/pdf": ".pdf", DOCX: ".docx"}.get(mime, "")
-    if not suffix:
-        if mime.startswith(("image/",)):
-            suffix = "." + (mime.split("/")[-1].split("+")[0] or "png")
-        elif mime.startswith(ZIP_OFFICE):
-            suffix = ".zip"
-        elif mime.startswith("text/"):
-            return data.decode("utf-8", "replace").strip(), "text"
-        else:
-            return "", ""
-
-    tmp = tempfile.mkdtemp(prefix="att-")
-    try:
-        path = os.path.join(tmp, "f" + suffix)
-        with open(path, "wb") as fh:
-            fh.write(data)
-        if mime == PDF:
-            return pdf_to_text(path)
-        if mime == DOCX or mime.startswith(ZIP_OFFICE):
-            return office_to_text(path)
-        if mime.startswith("image/"):
-            return image_to_text(path)
-        return "", ""
-    finally:
-        shutil.rmtree(tmp, ignore_errors=True)
+        return "", "", None
+    return ocr_ladder.extract_bytes(data, mime)
 
 
 # ---------------------------------------------------------------- passes
@@ -305,7 +199,19 @@ def run(limit: int | None = None):
             print(f"    ! {a['filename'][:40]}: {exc}")
             continue
 
-        text, source = extract(a["mime_type"], data)
+        text, source, error = extract(a["mime_type"], data)
+        if error:
+            # WE COULD NOT READ IT — so it is not done. `extracted` stays 0 and the next
+            # pass picks it up again, while the reason is written where an operator will
+            # find it. Marking this row extracted=1 would be the original bug wearing a
+            # progress bar: a missing tool recorded permanently as "nothing readable".
+            with conn:
+                conn.execute("UPDATE attachments SET text_source=? WHERE id=?",
+                             (error, a["id"]))
+            failed += 1
+            print(f"    ! {a['filename'][:40]}: {error}")
+            continue
+
         with conn:
             conn.execute("UPDATE attachments SET extracted=1, text_source=?,"
                          " indexed_at=? WHERE id=?", (source, time.time(), a["id"]))
@@ -448,7 +354,14 @@ def mms_run(limit=None, account=None):
             empty += 1
             continue
 
-        text, source = extract(p["content_type"], data)
+        text, source, error = extract(p["content_type"], data)
+        if error:
+            # Same rule as the attachment pass: a failed read is not an empty one, and it
+            # is counted as failed so it is retried rather than written off as nothing.
+            failed += 1
+            if failed <= 5:
+                print(f"    ! {p['address']}: {error}")
+            continue
         pending.append((p["id"], p["account"], p["address"], source, text))
         if text:
             done += 1

@@ -23,33 +23,23 @@ Usage:
 
 from __future__ import annotations
 
-import io
 import json
 import os
-import re
-import shutil
 import sqlite3
-import subprocess
 import sys
-import tempfile
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
-import zipfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import auth  # noqa: E402
+import auth         # noqa: E402
+import ocr_ladder   # noqa: E402
 
 DB_PATH = os.path.expanduser(os.environ.get("JARVIS_GOOGLE_DB",
                                             "~/jarvis/google/google.db"))
 API = "https://www.googleapis.com/drive/v3"
 PAGE = 200
-
-# PDFs and scans go through poppler and tesseract rather than a Python library, because
-# those are what this host actually has. See text_from_pdf.
-OCR_ENGINE = os.getenv("JARVIS_OCR", "tesseract")
-OCR_MAX_PAGES = int(os.getenv("JARVIS_OCR_MAX_PAGES", "20"))
 
 # What we can actually turn into words. Everything else gets a metadata row and is never
 # fetched — which is where the terabytes would otherwise go.
@@ -64,12 +54,32 @@ DOWNLOADABLE = {
     "application/pdf": "download:pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
         "download:docx",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+        "download:xlsx",
     "text/plain": "download:text",
     "text/markdown": "download:text",
     "text/csv": "download:text",
+    # HTML and EPUB were being skipped as "unknown MIME", which is a different thing from
+    # "media with no text in it". There are 117 HTML and 309 EPUB files in this Drive —
+    # both are pure text and both cost nothing to read.
+    "text/html": "download:html",
+    "application/epub+zip": "download:epub",
 }
+
+# SCANS ARE RECORDS. `image/` used to sit in the exclusion list below, which meant 1,037
+# JPEG and PNG files were given a metadata row and never looked inside — on a Drive whose
+# service records include a scanned DA photo and whole packets photographed page by page.
+# A photograph of a page of a document is a page of a document.
+#
+# The cost is real and worth naming: OCR is the slowest thing here by an order of
+# magnitude, and the Drive has more images than PDFs. That is why the catch-up pass is
+# its own resumable command (`documents`) rather than part of the incremental listing
+# walk — see the module docstring.
+IMAGE_PREFIX = "image/"
+
 # Deliberately excluded, and this list is the whole reason a "many GB" Drive is tractable.
-SKIP_PREFIXES = ("video/", "audio/", "image/", "application/zip", "application/x-tar",
+# 743 audio files, and the archives, are the bulk of the bytes and none of the meaning.
+SKIP_PREFIXES = ("video/", "audio/", "application/zip", "application/x-tar",
                  "application/x-7z", "application/vnd.rar", "application/x-rar")
 
 
@@ -112,97 +122,61 @@ def api_get(token, path: str, params: dict | None = None, raw: bool = False,
 
 
 # ---------------------------------------------------------------- text extraction
-def text_from_pdf(data: bytes) -> str:
-    """Text from a PDF, via poppler, falling back to OCR for scans.
+# The ladder lives in ocr_ladder.py, not here. This module used to carry its own copy of
+# it, and attachment_index.py carried a third — which is how the same bug (a missing
+# binary collapsing into "this document has no text") came to exist in two places with
+# two different explanations. One ladder, many callers.
+#
+# It returns THREE values now, and the third is the point:
+#
+#     (text, source, error)   error is None  -> we looked, nothing is there
+#                             error is set   -> we could not look, and this is why
+#
+# The caller stores that third value on the row (see `text_state` in schema.sql), so a
+# Drive full of unreadable scans can never again be mistaken for a Drive with nothing in
+# it. That mistake is the reason this module was rewritten.
 
-    THIS USED TO USE pypdf, WHICH IS NOT INSTALLED ON THIS HOST. The import failed, the
-    except branch returned an empty string, and every PDF in the Drive was recorded as
-    having no text — 326 of them: invoices, plumbing estimates, an MRI report. No error
-    appeared anywhere, and it looked exactly like a Drive full of scanned images.
 
-    `pdftotext` is installed, is what attachment_index.py already uses, and needs no Python
-    dependency. An empty string must mean "this document has no text", never "I could not
-    look" — so a missing tool now surfaces instead of being swallowed.
+def extract(token: str, file_id: str, mime: str,
+            max_pages: int | None = None) -> tuple[str, str, str | None]:
+    """(text, source, error) for one Drive file.
+
+    Empty text with `error is None` means the file was read and holds no text. Empty text
+    with an error means we could not read it — and the caller records which, because the
+    two used to be indistinguishable and that is how a Drive came to look empty.
     """
-    if not data:
-        return ""
-    tmp = tempfile.mkdtemp(prefix="drvpdf-")
-    try:
-        path = os.path.join(tmp, "f.pdf")
-        with open(path, "wb") as fh:
-            fh.write(data)
-        text = _run(["pdftotext", "-layout", "-q", path, "-"])
-        if len(text.strip()) > 40:
-            return text.strip()
-
-        # No text layer — a scan. Same fallback the attachment pass uses, for the same
-        # reason: the documents that matter most arrive off a scanner.
-        if OCR_ENGINE == "off":
-            return ""
-        _run(["pdftoppm", "-r", "200", "-png", "-l", str(OCR_MAX_PAGES), path,
-              os.path.join(tmp, "page")])
-        pages = sorted(f for f in os.listdir(tmp) if f.endswith(".png"))
-        out = []
-        for p in pages[:OCR_MAX_PAGES]:
-            t = _run(["tesseract", os.path.join(tmp, p), "stdout", "-l", "eng",
-                      "--psm", "3"])
-            if t.strip():
-                out.append(t.strip())
-        return "\n\n".join(out).strip()
-    finally:
-        shutil.rmtree(tmp, ignore_errors=True)
-
-
-def _run(cmd: list[str], timeout: int = 300) -> str:
-    try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-        return r.stdout or ""
-    except (subprocess.SubprocessError, OSError):
-        return ""
-
-
-def text_from_docx(data: bytes) -> str:
-    """A .docx is a zip of XML. No dependency needed."""
-    try:
-        with zipfile.ZipFile(io.BytesIO(data)) as z:
-            xml = z.read("word/document.xml").decode("utf-8", "replace")
-    except Exception:                                       # noqa: BLE001
-        return ""
-    xml = re.sub(r"(?i)</w:p>", "\n", xml)
-    text = re.sub(r"<[^>]+>", "", xml)
-    import html as _html
-    return _html.unescape(text).strip()
-
-
-def extract(token: str, file_id: str, mime: str) -> tuple[str, str]:
-    """(text, source). Empty text means 'not indexable', which is normal and not an error."""
     if mime in EXPORTS:
         export_as, source = EXPORTS[mime]
         data = api_get(token, f"/files/{file_id}/export",
                        {"mimeType": export_as}, raw=True)
         if not data:
-            return "", ""
-        return data.decode("utf-8", "replace").strip(), source
+            # Google refused or the file is not exportable. Not "empty": unread.
+            return "", "", "unavailable:export"
+        return data.decode("utf-8", "replace").strip(), source, None
 
-    if mime in DOWNLOADABLE:
-        source = DOWNLOADABLE[mime]
+    if mime in DOWNLOADABLE or mime.startswith(IMAGE_PREFIX):
         data = api_get(token, f"/files/{file_id}", {"alt": "media"}, raw=True)
         if not data:
-            return "", ""
-        if mime == "application/pdf":
-            return text_from_pdf(data), source
-        if mime.endswith("wordprocessingml.document"):
-            return text_from_docx(data), source
-        return data.decode("utf-8", "replace").strip(), source
+            return "", "", "unavailable:download"
+        # The ladder decides: text layer, else rasterise and OCR, else frames for a
+        # multi-frame TIFF. This module no longer owns any of that.
+        return ocr_ladder.extract_bytes(data, mime, file_id, max_pages=max_pages)
 
-    return "", ""
+    # A type we never fetch. The caller stores "skipped" rather than "empty" — the row
+    # is honest about being a directory entry and nothing more.
+    return "", "", None
 
 
 def indexable(mime: str) -> int:
-    if mime in EXPORTS or mime in DOWNLOADABLE:
-        return 1
+    """Can this MIME be turned into words? `SKIP_PREFIXES` is checked first so a
+    surprising subtype inside a skipped family (image/svg inside nothing, say) cannot
+    slip past on the image branch below."""
     if mime.startswith(SKIP_PREFIXES):
         return 0
+    if mime in EXPORTS or mime in DOWNLOADABLE:
+        return 1
+    if mime.startswith(IMAGE_PREFIX):
+        return 1
     return 0
 
 
@@ -253,19 +227,35 @@ def index_account(email: str, max_files: int | None = None, page_limit: int = 20
             # The slow work belongs outside the transaction. Two inserts then take
             # microseconds, and the lock is a shared resource held briefly rather than a
             # private one held for the length of a download.
-            text, source = ("", "")
+            text, source, error = ("", "", None)
             if can:
-                text, source = extract(token, f["id"], mime)
+                text, source, error = extract(token, f["id"], mime)
+
+            # Three outcomes, and they are recorded differently on purpose:
+            #   ok                    we read it and there was text
+            #   empty                 we read it and there genuinely was none
+            #   unavailable:<why>     we could not read it — the tool was missing
+            # Only the middle one is an answer. Reporting the third as the second is the
+            # bug this whole change exists to kill.
+            if not can:
+                state = "skipped"
+            elif error:
+                state = error
+            elif text:
+                state = "ok"
+            else:
+                state = "empty"
 
             with conn:
                 conn.execute(
                     "INSERT OR REPLACE INTO drive_files (id, account, name, mime_type,"
                     " modified_time, created_time, size, owners, trashed, indexable,"
-                    " indexed_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                    " source, text_state, indexed_at)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (f["id"], email, f.get("name"), mime, f.get("modifiedTime"),
                      f.get("createdTime"), int(f.get("size") or 0),
                      json.dumps([o.get("emailAddress") for o in (f.get("owners") or [])]),
-                     0, 1 if can else 0, time.time()))
+                     0, 1 if can else 0, "drive", state, time.time()))
                 if can and text:
                     conn.execute(
                         "INSERT OR REPLACE INTO document_text (file_id, account, body,"
@@ -304,31 +294,77 @@ def index_account(email: str, max_files: int | None = None, page_limit: int = 20
         if not page or (max_files and seen >= max_files):
             break
 
-    print(f"\ndone: {seen} files seen, {indexed} indexed, {skipped} skipped "
-          f"(no text, or a type we do not fetch)")
+    print(f"\ndone: {seen} files seen, {indexed} indexed, {skipped} without text")
     return seen
+
+
+def coverage(conn, email: str | None = None, source: str | None = None) -> dict:
+    """How much of what we hold can actually be READ. Shared by `stats` and /health.
+
+    This is the number that was invisible for weeks. "7,385 files" reads like coverage;
+    the honest figure is the `unread` and `unavailable` lines below it, and the whole
+    point of `text_state` is that they can be printed at all.
+    """
+    where, args = [], []
+    if email:
+        where.append("account = ?")
+        args.append(email)
+    if source:
+        where.append("source = ?")
+        args.append(source)
+    clause = (" WHERE " + " AND ".join(where)) if where else ""
+    row = conn.execute(f"""
+        SELECT COUNT(*) n,
+               SUM(CASE WHEN text_state = 'ok'      THEN 1 ELSE 0 END) read,
+               SUM(CASE WHEN text_state = 'empty'   THEN 1 ELSE 0 END) empty,
+               SUM(CASE WHEN text_state IS NULL     THEN 1 ELSE 0 END) untouched,
+               SUM(CASE WHEN text_state = 'skipped' THEN 1 ELSE 0 END) skipped,
+               SUM(CASE WHEN text_state LIKE 'unavailable%' OR text_state LIKE '%:%'
+                        THEN 1 ELSE 0 END) unavailable
+        FROM drive_files{clause}
+    """, args).fetchone()
+    d = {k: (row[k] or 0) for k in row.keys()}
+    # `ok` counts rows we read text from; document_text is the authority on that, since a
+    # row can be marked ok and then have its text pruned. Both are reported.
+    d["with_text"] = conn.execute(
+        "SELECT COUNT(*) FROM document_text d JOIN drive_files f ON f.id = d.file_id"
+        + (clause.replace("account", "f.account").replace("source", "f.source")
+           if clause else ""), args).fetchone()[0]
+    d["unread"] = d["n"] - d["with_text"]
+    return d
 
 
 def stats(email: str):
     conn = db()
-    row = conn.execute("""
-        SELECT COUNT(*) n,
-               SUM(indexable) idx,
-               SUM(CASE WHEN indexable=0 THEN 1 ELSE 0 END) skipped,
-               MIN(modified_time) oldest, MAX(modified_time) newest
-        FROM drive_files WHERE account=?
-    """, (email,)).fetchone()
-    have = conn.execute("SELECT COUNT(*) c FROM document_text WHERE account=?",
-                        (email,)).fetchone()["c"]
-    if not row or not row["n"]:
+    d = coverage(conn, email)
+    if not d["n"]:
         print(f"  {email}: nothing indexed yet")
         return
-    d = dict(row)
+    rng = conn.execute("SELECT MIN(modified_time), MAX(modified_time) FROM drive_files"
+                       " WHERE account=?", (email,)).fetchone()
     print(f"  {email}")
-    print(f"    files seen     : {d['n']}")
-    print(f"    with text      : {have}")
-    print(f"    skipped (no text / media / archive): {d['skipped'] or 0}")
-    print(f"    modified range : {(d['oldest'] or '')[:10]} .. {(d['newest'] or '')[:10]}")
+    print(f"    rows           : {d['n']}")
+    print(f"    with text      : {d['with_text']}")
+    print(f"    unread         : {d['unread']}")
+    print(f"      not attempted: {d['untouched']}")
+    print(f"      no text      : {d['empty']}")
+    print(f"      unavailable  : {d['unavailable']}   <- a missing tool, not an empty file")
+    print(f"      not fetched  : {d['skipped']}   (media, archives)")
+    print(f"    modified range : {(rng[0] or '')[:10]} .. {(rng[1] or '')[:10]}")
+    # Which MIME types make up the unread pile — the actionable half. "2,715 unread" is a
+    # worry; "2,713 of them PDFs, and poppler is missing" is a fix.
+    rows = conn.execute("""
+        SELECT f.mime_type, COUNT(*) n FROM drive_files f
+        LEFT JOIN document_text d ON d.file_id = f.id
+        WHERE f.account = ? AND d.file_id IS NULL AND f.text_state != 'skipped'
+        GROUP BY f.mime_type ORDER BY n DESC LIMIT 8
+    """, (email,)).fetchall()
+    for r in rows:
+        print(f"      {r['n']:>6}  {r['mime_type']}")
+    src = conn.execute("""SELECT source, COUNT(*) n FROM drive_files WHERE account=?
+                          GROUP BY source ORDER BY n DESC""", (email,)).fetchall()
+    if len(src) > 1:
+        print("    by source      : " + ", ".join(f"{r['source']}={r['n']}" for r in src))
 
 
 def main(argv: list[str]) -> int:

@@ -1,0 +1,55 @@
+# The OCR image — poppler + tesseract, for cerebro.
+#
+# WHY A CONTAINER AND NOT `rpm-ostree install poppler-utils tesseract-ocr`.
+# That command works, and is faster. It also reboots cerebro to complete, taking down
+# the brain (8092), mail-api (7870), the docks panel (8093) and the devteam loop — to
+# install two command-line tools. Cerebro is rpm-ostree, so there is no way to add a
+# package without a new deployment; podman is already how everything else here ships.
+# See [[fleet-packaging-policy]].
+#
+# It runs `--network=none`. Nothing in this image needs the network — poppler and
+# tesseract are entirely local — and this is the pass that reads the owner's medical,
+# military and family records. A container that cannot reach anything is one less thing
+# to have to trust. See the same reasoning in attachment_index.py's docstring.
+#
+# Build once, by hand, the same way the verify image is built:
+#
+#     podman build -t localhost/jarvis-ocr -f sandbox/Containerfile.ocr sandbox/
+#
+# tesseract-ocr-eng only: every document here is English, and the language packs are
+# tens of megabytes each.
+FROM docker.io/library/python:3.12-slim
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+        poppler-utils \
+        tesseract-ocr \
+        tesseract-ocr-eng \
+        imagemagick \
+ && rm -rf /var/lib/apt/lists/*
+
+# Multi-frame TIFFs need frame extraction, and tesseract reads frame 1 only. Pillow
+# iterates frames reliably where ImageMagick's `convert` warns its way through
+# 1994-vintage TIFF tags; both are present so the driver can fall back.
+RUN pip install --no-cache-dir Pillow
+
+# BOTH FILES ARE COPIED, AND THE CONTEXT IS THE REPO ROOT, NOT THIS DIRECTORY.
+# ocr_ladder.py lives in google/ because it is called by the indexers that run on the
+# host; the driver lives here because it only ever runs inside the image. Copying the
+# ladder out of google/ into sandbox/ would give it two homes and let them drift — which
+# is precisely the failure this refactor removed. So the build context is the parent of
+# both directories:
+#
+#     podman build -t localhost/jarvis-ocr -f sandbox/Containerfile.ocr .
+#
+# The driver is a thin stdin/stdout wrapper that imports the ladder, so the container and
+# the host run identical extraction code and cannot disagree about what "unreadable"
+# means.
+COPY google/ocr_ladder.py /usr/local/bin/ocr_ladder.py
+COPY sandbox/ocr_driver.py /usr/local/bin/ocr_driver.py
+RUN chmod +x /usr/local/bin/ocr_driver.py
+
+# The work list arrives on stdin and the whole result leaves on stdout. Inputs are
+# mounted read-only at /in. No writes outside the container.
+WORKDIR /in
+ENTRYPOINT ["python3", "/usr/local/bin/ocr_driver.py"]

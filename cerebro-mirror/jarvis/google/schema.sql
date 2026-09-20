@@ -115,6 +115,19 @@ CREATE TABLE IF NOT EXISTS drive_files (
     -- those by MIME type is what turns a multi-GB Drive into a readable corpus.
     indexable     INTEGER DEFAULT 1,
     status        TEXT DEFAULT 'active',
+    -- WHERE THIS ROW CAME FROM. 'drive' is the Drive crawl; 'lifepacket' is the Army
+    -- service record, which is not a Drive file at all but needs the same document_text,
+    -- the same FTS and the same read path. Rather than relax the foreign key on
+    -- document_text — which SQLite cannot do without rebuilding a 990 MB table — the
+    -- records wear a drive_files row. Every count that reports "files" must split on
+    -- this column, or importing 174 documents silently inflates the Drive total.
+    source        TEXT DEFAULT 'drive',
+    -- WHY THERE IS NO TEXT, when there is none. NULL means not yet attempted; 'ok' and
+    -- 'empty' mean we looked and there was nothing; 'unavailable:<tool>' means we could
+    -- not look. This column exists because the last two used to be the same empty
+    -- string, and 2,713 PDFs sat in the index recorded as textless rather than unread.
+    -- A coverage gap that cannot be seen is a coverage gap nobody fixes.
+    text_state    TEXT,
     indexed_at    REAL
 );
 CREATE INDEX IF NOT EXISTS idx_drive_account ON drive_files(account, modified_time DESC);
@@ -123,7 +136,9 @@ CREATE TABLE IF NOT EXISTS document_text (
     file_id    TEXT PRIMARY KEY REFERENCES drive_files(id) ON DELETE CASCADE,
     account    TEXT NOT NULL,
     body       TEXT NOT NULL,
-    source     TEXT             -- export:text | export:pdf | download:pdf | download:docx
+    -- HOW the text was obtained, named by ocr_ladder.py: pdftotext | ocr:tesseract |
+    -- ocr:eyes | office-xml | html | epub | text | export:text | export:csv | ...
+    source     TEXT
 );
 
 CREATE VIRTUAL TABLE IF NOT EXISTS document_fts USING fts5(
