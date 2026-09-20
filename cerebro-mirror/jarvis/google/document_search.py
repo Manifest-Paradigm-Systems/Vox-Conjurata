@@ -224,8 +224,18 @@ def stats(conn) -> dict:
                    SUM(CASE WHEN f.text_state IS NULL THEN 1 ELSE 0 END) untouched
             FROM drive_files f LEFT JOIN document_text d ON d.file_id = f.id
             WHERE f.source = ?""", (source,)).fetchone()
-        out[source or "drive"] = {k: (row[k] or 0) for k in row.keys()}
-        out[source or "drive"]["unread"] = row["n"] - row["with_text"]
+        key = source or "drive"
+        out[key] = {k: (row[k] or 0) for k in row.keys()}
+        # `unread` is "fetchable and not yet read" — NOT every row without text. Media,
+        # archives and folders have no text to get, and counting them as unread made
+        # /health report 6,471 on a Drive where the real figure was 6. A number that
+        # cannot be acted on stops being read, which is how the original gap hid.
+        out[key]["unread"] = conn.execute(
+            "SELECT COUNT(*) FROM drive_files f"
+            " LEFT JOIN document_text d ON d.file_id = f.id"
+            " WHERE d.file_id IS NULL AND f.indexable = 1 AND f.source = ?",
+            (key,)).fetchone()[0]
+        out[key]["not_fetchable"] = row["n"] - row["with_text"] - out[key]["unread"]
     return out
 
 

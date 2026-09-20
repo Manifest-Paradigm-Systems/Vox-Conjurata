@@ -309,8 +309,16 @@ def documents(limit: int | None = None, batch: int = 40, account: str | None = N
     minutes at a time.
     """
     conn = db()
+    # ANYTHING THAT IS NOT A FINISHED ANSWER IS WORTH ANOTHER TRY. This selected only
+    # `text_state IS NULL OR LIKE 'unavailable%'`, which silently excluded every failure
+    # it had recorded as `timeout:<tool>` or `failed:<tool>` — so a file that timed out
+    # once was never retried, while the message printed at the end of the run promised
+    # that "unreadable files ... will be retried". It was true for some of them.
+    #
+    # 'ok' and 'empty' are answers and are left alone; 'skipped' is a decision about the
+    # file type. Everything else is an unfinished attempt.
     where = ("indexable = 1 AND trashed = 0 AND status = 'active'"
-             " AND (text_state IS NULL OR text_state LIKE 'unavailable%')")
+             " AND (text_state IS NULL OR text_state NOT IN ('ok', 'empty', 'skipped'))")
     args: list = []
     if account:
         where += " AND account = ?"
@@ -341,7 +349,7 @@ def documents(limit: int | None = None, batch: int = 40, account: str | None = N
         if want <= 0:
             break
         rows = conn.execute(
-            f"SELECT id, account, name, mime_type FROM drive_files WHERE {where}"
+            f"SELECT id, account, name, mime_type, size FROM drive_files WHERE {where}"
             f" ORDER BY modified_time DESC LIMIT ?", args + [want]).fetchall()
         if not rows:
             break
@@ -353,26 +361,62 @@ def documents(limit: int | None = None, batch: int = 40, account: str | None = N
                 acct = r["account"]
                 if acct not in tokens:
                     tokens[acct] = auth.TokenSource(acct)
+                mime = r["mime_type"] or ""
+                # GOOGLE-NATIVE FILES ARE EXPORTED, NOT DOWNLOADED. A Doc, Sheet or Slide
+                # has no bytes to fetch; asking for them returns 403 "Only files with
+                # binary content can be downloaded. Use Export with Docs Editors files."
+                # The listing walk used to go through extract(), which knew this, and this
+                # pass originally went straight to the download endpoint — so the three
+                # files it could not read were exactly the Google-native ones. Those are,
+                # in this module's own words, "usually the most valuable things in a
+                # Drive", and they cost nothing to index.
                 try:
-                    data = api_get(tokens[acct], f"/files/{r['id']}",
-                                   {"alt": "media"}, raw=True)
+                    if mime in EXPORTS:
+                        export_as, _ = EXPORTS[mime]
+                        data = api_get(tokens[acct], f"/files/{r['id']}/export",
+                                       {"mimeType": export_as}, raw=True)
+                    else:
+                        data = api_get(tokens[acct], f"/files/{r['id']}",
+                                       {"alt": "media"}, raw=True)
                 except SystemExit as exc:                 # a dead token, not a bad file
                     print(f"  ! {acct}: {exc}")
                     data = None
                 if not data:
+                    # A ZERO-BYTE FILE IS EMPTY, NOT UNREADABLE. Two of the entries here
+                    # are Army documents — DA_1380_CPT_MEYER and a USCENTCOM order — with
+                    # `size: 0` in Drive's own metadata and `canDownload: true`. They are
+                    # stubs somebody's sync left behind: the entry exists, the content does
+                    # not. Recording that as a failed download made a permanent, retried-
+                    # forever error out of what is simply an empty file, and it put two of
+                    # the owner's military documents on a list of things that "will be
+                    # retried" for no reason. Drive told us the size; believe it.
+                    zero = (r["size"] or 0) == 0
+                    state = "empty" if zero else "unavailable:download"
                     with conn:
-                        conn.execute("UPDATE drive_files SET text_state='unavailable:download'"
-                                     " WHERE id=?", (r["id"],))
-                    unavailable += 1
+                        conn.execute("UPDATE drive_files SET text_state=? WHERE id=?",
+                                     (state, r["id"]))
+                    if zero:
+                        empty += 1
+                    else:
+                        unavailable += 1
                     continue
                 # The staged name carries the real extension: the ladder picks its rung
                 # from the extension when the MIME is generic, and some Drive PDFs are
-                # served as application/octet-stream.
-                ext = os.path.splitext(r["name"] or "")[1] or ".bin"
+                # served as application/octet-stream. An exported Doc arrives as text, so
+                # the extension follows the EXPORT type rather than the Drive MIME.
+                if mime in EXPORTS:
+                    export_as = EXPORTS[mime][0]
+                    ext = {"text/plain": ".txt", "text/csv": ".csv",
+                           "application/vnd.google-apps.script+json": ".json"}.get(
+                               export_as, ".txt")
+                else:
+                    ext = os.path.splitext(r["name"] or "")[1] or ".bin"
                 path = os.path.join(stage, f"{i:05d}{ext}")
                 with open(path, "wb") as fh:
                     fh.write(data)
-                items.append((r["id"], path, r["mime_type"] or ""))
+                # The export's MIME, so the ladder reads it as the text it now is.
+                items.append((r["id"], path,
+                              EXPORTS[mime][0] if mime in EXPORTS else mime))
 
             results = ocr_ladder.extract_many(items, max_pages=max_pages)
         finally:
@@ -421,7 +465,9 @@ def documents(limit: int | None = None, batch: int = 40, account: str | None = N
 def coverage_line(conn, email: str | None = None):
     """One line an operator can act on: how much is left, and what it is made of."""
     d = coverage(conn, email)
-    print(f"  coverage: {d['with_text']} read / {d['n']} rows — {d['unread']} unread")
+    print(f"  coverage: {d['with_text']} read · {d['unread']} unread ·"
+          f" {d['not_fetchable']} not fetchable (media, archives, folders)"
+          f" — {d['n']} rows")
     if d["unread"]:
         top = conn.execute("""
             SELECT mime_type, COUNT(*) n FROM drive_files f
@@ -441,30 +487,43 @@ def coverage(conn, email: str | None = None, source: str | None = None) -> dict:
     """
     where, args = [], []
     if email:
-        where.append("account = ?")
+        where.append("f.account = ?")
         args.append(email)
     if source:
-        where.append("source = ?")
+        where.append("f.source = ?")
         args.append(source)
     clause = (" WHERE " + " AND ".join(where)) if where else ""
     row = conn.execute(f"""
         SELECT COUNT(*) n,
-               SUM(CASE WHEN text_state = 'ok'      THEN 1 ELSE 0 END) read,
-               SUM(CASE WHEN text_state = 'empty'   THEN 1 ELSE 0 END) empty,
-               SUM(CASE WHEN text_state IS NULL     THEN 1 ELSE 0 END) untouched,
-               SUM(CASE WHEN text_state = 'skipped' THEN 1 ELSE 0 END) skipped,
-               SUM(CASE WHEN text_state LIKE 'unavailable%' OR text_state LIKE '%:%'
+               SUM(CASE WHEN f.text_state = 'ok'      THEN 1 ELSE 0 END) read,
+               SUM(CASE WHEN f.text_state = 'empty'   THEN 1 ELSE 0 END) empty,
+               SUM(CASE WHEN f.text_state IS NULL     THEN 1 ELSE 0 END) untouched,
+               SUM(CASE WHEN f.text_state = 'skipped' THEN 1 ELSE 0 END) skipped,
+               SUM(CASE WHEN f.text_state LIKE 'unavailable%' OR f.text_state LIKE '%:%'
                         THEN 1 ELSE 0 END) unavailable
-        FROM drive_files{clause}
+        FROM drive_files f{clause}
     """, args).fetchone()
     d = {k: (row[k] or 0) for k in row.keys()}
-    # `ok` counts rows we read text from; document_text is the authority on that, since a
-    # row can be marked ok and then have its text pruned. Both are reported.
+
+    # UNREAD MEANS "WE COULD READ IT AND HAVE NOT", AND NOTHING ELSE.
+    #
+    # This was `n - with_text`, which counted the 3,756 audio files, folders and archives
+    # as unread — so /health reported "6,471 unread" on a Drive where the real number was
+    # 6, and the crawl looked permanently unfinished. A number that lumps "we chose not to"
+    # in with "we could not" is the same failure this column was invented to prevent, one
+    # level up: it makes an honest gap look like an ongoing problem, and an ongoing problem
+    # stops being read.
+    #
+    # `text_state` distinguishes them for rows we have touched; this counts what is left.
     d["with_text"] = conn.execute(
         "SELECT COUNT(*) FROM document_text d JOIN drive_files f ON f.id = d.file_id"
-        + (clause.replace("account", "f.account").replace("source", "f.source")
-           if clause else ""), args).fetchone()[0]
-    d["unread"] = d["n"] - d["with_text"]
+        + clause, args).fetchone()[0]
+    d["unread"] = conn.execute(
+        "SELECT COUNT(*) FROM drive_files f"
+        " LEFT JOIN document_text d ON d.file_id = f.id"
+        " WHERE d.file_id IS NULL AND f.indexable = 1"
+        + (" AND " + " AND ".join(where) if where else ""), args).fetchone()[0]
+    d["not_fetchable"] = d["n"] - d["with_text"] - d["unread"]
     return d
 
 
