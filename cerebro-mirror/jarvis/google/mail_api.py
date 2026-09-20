@@ -34,6 +34,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 
+import document_search
 import mail_search
 
 DB_PATH = os.path.expanduser(os.environ.get("JARVIS_GOOGLE_DB",
@@ -108,17 +109,21 @@ async def health():
         conn = _conn()
         try:
             n = conn.execute("SELECT COUNT(*) c FROM messages").fetchone()["c"]
-            return n, _freshness(conn)
+            # Documents coverage rides on the health line deliberately. "2,713 PDFs
+            # unread" is the single most useful number about this index, and a number
+            # nobody looks at is how a coverage gap survived for weeks unnoticed.
+            return n, _freshness(conn), document_search.stats(conn)
         finally:
             conn.close()
 
     try:
-        n, fresh = await run_in_threadpool(_probe)
+        n, fresh, docs = await run_in_threadpool(_probe)
     except sqlite3.Error as exc:
         return JSONResponse(
             {"status": "degraded", "db": DB_PATH,
              "error": f"{type(exc).__name__}: {exc}"}, status_code=503)
-    return {"status": "ok", "db": DB_PATH, "messages": n, "fresh_as_of": fresh}
+    return {"status": "ok", "db": DB_PATH, "messages": n, "fresh_as_of": fresh,
+            "documents": docs}
 
 
 # --------------------------------------------------------------- search
@@ -354,6 +359,77 @@ async def calendar_search(q: str = Query(..., min_length=1),
     return {"source": "archive", "query": q, "count": len(events),
             "today": time.strftime("%A %-d %B %Y", time.localtime(now_ms / 1000)),
             "results": events, "error": None}
+
+
+# --------------------------------------------------------------- documents
+# Served from THIS service rather than a second one. Same database, same token, same
+# loopback bind, same venv — the precedent and its reasoning are already written down
+# above for the calendar routes, and the name `mail-api` was already narrower than the
+# job it does before documents were added.
+
+@app.get("/documents/search", dependencies=[Depends(require_token)])
+async def documents_search(q: str = Query(..., min_length=1),
+                           account: str | None = Query(default=None),
+                           limit: int = Query(default=8, ge=1, le=50),
+                           source: str | None = Query(
+                               default=None, pattern="^(drive|lifepacket)$")):
+    """Search the Drive and the service record.
+
+    `live` is always "unsupported": unlike mail there is no API that reads inside a PDF,
+    so this can only be as good as the crawl. It is stated rather than omitted so a
+    thinner-than-expected answer is not mistaken for a missing fallback.
+    """
+    def _query():
+        conn = _conn()
+        try:
+            return document_search.search_archive(conn, q, account=account, limit=limit,
+                                                  source=source)
+        finally:
+            conn.close()
+
+    try:
+        hits, error = await run_in_threadpool(_query)
+    except sqlite3.Error as exc:
+        return JSONResponse(
+            {"error": "archive_unavailable", "detail": f"{type(exc).__name__}: {exc}",
+             "hint": "the index could not be read; this does NOT mean nothing matches"},
+            status_code=503)
+    return {"source": "archive", "live": "unsupported", "query": q, "count": len(hits),
+            "results": hits, "error": error}
+
+
+@app.get("/documents/read", dependencies=[Depends(require_token)])
+async def documents_read(id: str = Query(..., min_length=1)):
+    """One document's full text, with its page count."""
+    def _query():
+        conn = _conn()
+        try:
+            return document_search.read_document(conn, id)
+        finally:
+            conn.close()
+
+    try:
+        d = await run_in_threadpool(_query)
+    except sqlite3.Error as exc:
+        return JSONResponse({"error": "archive_unavailable",
+                             "detail": f"{type(exc).__name__}: {exc}"}, status_code=503)
+    if not d:
+        raise HTTPException(status_code=404, detail="no such document")
+    if d.get("excluded"):
+        raise HTTPException(status_code=403, detail="excluded by an owner rule")
+    return d
+
+
+@app.get("/documents/stats", dependencies=[Depends(require_token)])
+async def documents_stats():
+    """Coverage per source. The unread count is the honest one — "7,385 files" is not."""
+    def _query():
+        conn = _conn()
+        try:
+            return document_search.stats(conn)
+        finally:
+            conn.close()
+    return {"sources": await run_in_threadpool(_query)}
 
 
 if __name__ == "__main__":

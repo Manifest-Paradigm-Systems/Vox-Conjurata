@@ -72,6 +72,11 @@ MAIL_MODEL_NAME = "jarvis-mail"
 # answer different questions, but it is the same service and the same token —
 # see run_calendar().
 CALENDAR_MODEL_NAME = "jarvis-calendar"
+# The Drive and the service record, from the local index and the same service
+# as mail. Until now NOTHING read the document tables: drive_index.py wrote
+# document_text and document_fts and no code ever opened them, so 7,385 Drive
+# files and the owner's Army service record were stored and unanswerable.
+DRIVE_MODEL_NAME = "jarvis-drive"
 SEARXNG_URL = os.getenv("SEARXNG_URL", "http://127.0.0.1:8888/search")
 WIKI_URL = os.getenv("JARVIS_WIKI_URL", "http://127.0.0.1:8090")
 SEARCH_RESULTS = int(os.getenv("JARVIS_SEARCH_RESULTS", "6"))
@@ -1464,6 +1469,93 @@ def run_mail(messages: list[dict]):
     return answer, framed, timings
 
 
+def _doc_get(path: str, params: dict):
+    """One documents call. Returns (payload, error) — never a bare empty result.
+
+    `_cal_get` is already generic — it prefixes MAIL_URL and returns (payload, error) —
+    so this is a named alias rather than a second client. It exists so the documents
+    lane does not read as though it were calling the calendar. Same service, same
+    token, same port.
+    """
+    return _cal_get(path, params)
+
+
+def run_drive(messages: list[dict]):
+    """Answer from the Drive and the service record. Returns (reply, sources, timings).
+
+    THE LABELS CARRY THE WEIGHT HERE, not the prose. Two things about this corpus are
+    not visible in the text of a hit and both change what an honest answer is:
+
+      * a `lifepacket` hit is the owner's own military service record — the highest
+        authority in the index, and not reproducible from anywhere else;
+      * a hit with `read` false is a document whose NAME matched and whose contents
+        were never read (2,713 PDFs, because this host had no poppler). That is a much
+        weaker answer, and the model must not fill the gap by inventing what is inside.
+
+    Both are stated as facts in the material rather than as instructions about how to
+    answer. The same reasoning as gather_plan_context: an instruction competes with a
+    prior and loses, evidence does not.
+    """
+    question = next((m.get("content") or "" for m in reversed(messages)
+                     if m.get("role") == "user"), "").strip()
+    if not question:
+        return "I did not catch what to look for, sir.", [], {}
+    emit("web_start", query=question[:200], where="drive")
+
+    t0 = time.time()
+    payload, err = _doc_get("/documents/search", {"q": question, "limit": 8})
+    search_s = time.time() - t0
+    if err:
+        # Say which failure it was. An unreachable index must never read as an empty one.
+        emit("mail_error", query=question[:120], error=err[:200])
+        return (f"I could not read the document index just now, sir — {err[:140]}. "
+                "That is not the same as there being no matching document.",
+                [], {"search": round(search_s, 2)})
+
+    hits = payload.get("results") or []
+    if not hits:
+        return ("I looked, sir — nothing in your Drive or your service record matches "
+                "that.", [], {"search": round(search_s, 2)})
+
+    def block(i: int, h: dict) -> str:
+        if h.get("source") == "lifepacket":
+            label = ("PERSONAL RECORD — the owner's own military service file, which "
+                     "outranks everything else here")
+        elif not h.get("read"):
+            label = ("Drive document — CONTENTS NOT READ, only the filename is known")
+        else:
+            label = "Drive document"
+        return (f"[{i+1}] {label}\n"
+                f"File: {h.get('name','')}\n"
+                f"Date: {(h.get('modified_time') or '')[:10]}\n"
+                f"{(h.get('snippet') or '')[:400]}")
+
+    context = "\n\n".join(block(i, h) for i, h in enumerate(hits))
+    # `_local_answer` numbers its sources from `title`/`url`; a document has no URL, so
+    # the file id stands in — stable, and what a follow-up read would use.
+    framed = [{"title": (h.get("name") or "(unnamed)")[:90],
+               "url": f"doc:{h.get('id','')}",
+               "snippet": (h.get("snippet") or "")[:200]} for h in hits]
+
+    unread = sum(1 for h in hits if not h.get("read"))
+    note = ""
+    if any(h.get("source") == "lifepacket" for h in hits):
+        note += (" Some of this is from the owner's own military service record, which "
+                 "is the authority for anything it covers.")
+    if unread:
+        note += (f" {unread} of these has not had its contents read, so only the "
+                 "filename is known — say so rather than describing what is inside.")
+
+    t1 = time.time()
+    answer = _local_answer(
+        f"{question}\n\n(Answering from the local document index.{note})",
+        context, framed)
+    timings = {"search": round(search_s, 2), "answer": round(time.time() - t1, 2),
+               "total": round(search_s + time.time() - t1, 2), "results": len(hits)}
+    emit("mail_done", query=question[:120], source="documents", count=len(hits))
+    return answer, framed, timings
+
+
 def _cal_get(path: str, params: dict):
     """One calendar call. Returns (payload, error) — never a bare empty result."""
     if not MAIL_TOKEN:
@@ -1723,6 +1815,7 @@ async def models():
         {"id": WIKI_MODEL_NAME, "object": "model", "created": now, "owned_by": "jarvis"},
         {"id": MAIL_MODEL_NAME, "object": "model", "created": now, "owned_by": "jarvis"},
         {"id": CALENDAR_MODEL_NAME, "object": "model", "created": now, "owned_by": "jarvis"},
+        {"id": DRIVE_MODEL_NAME, "object": "model", "created": now, "owned_by": "jarvis"},
     ]}
 
 
@@ -1972,7 +2065,8 @@ async def chat_completions(request: Request):
     wiki = WIKI_MODEL_NAME in requested
     mail = MAIL_MODEL_NAME in requested
     calendar = CALENDAR_MODEL_NAME in requested
-    fetching = web or news or wiki or mail or calendar
+    drive = DRIVE_MODEL_NAME in requested
+    fetching = web or news or wiki or mail or calendar or drive
     conversational = (DIRECTOR_MODEL_NAME not in requested) and not fetching
     sess = session_for(messages, body.get("conversation"))
     # A photo the panel attached to this turn: the context block /vision composed
@@ -2008,6 +2102,8 @@ async def chat_completions(request: Request):
             return run_mail(messages)
         if calendar:
             return run_calendar(messages)
+        if drive:
+            return run_drive(messages)
         return run_web(messages)
 
     if not stream:

@@ -41,6 +41,11 @@ DB_PATH = os.path.expanduser(os.environ.get("JARVIS_GOOGLE_DB",
 API = "https://www.googleapis.com/drive/v3"
 PAGE = 200
 
+# The fleet watchdog flag. Reading 2,713 PDFs is many hours of CPU, and this fleet's rule
+# is that heavy jobs yield between batches rather than competing with whatever else the
+# machine has been asked to do.
+SUSPEND = os.getenv("JARVIS_SUSPEND_FILE", "/tmp/cinematome-suspend")
+
 # What we can actually turn into words. Everything else gets a metadata row and is never
 # fetched — which is where the terabytes would otherwise go.
 EXPORTS = {
@@ -298,6 +303,147 @@ def index_account(email: str, max_files: int | None = None, page_limit: int = 20
     return seen
 
 
+def documents(limit: int | None = None, batch: int = 40, account: str | None = None,
+              max_pages: int | None = None):
+    """Read the CONTENTS of files whose text we never got.
+
+    A SEPARATE PASS FROM index_account(), deliberately. That walks the Drive listing
+    newest-first and re-downloads every file it already holds — there is no early exit on
+    known ids — so folding OCR into it would re-fetch 7,385 files in order to read 2,713.
+    This selects from the DATABASE instead: resumable by construction, and it never
+    downloads a file whose text it already has.
+
+    It picks up rows in `text_state IS NULL` (never attempted) and any row recorded as
+    `unavailable:*` (attempted, but the tool was missing). It does NOT re-read rows marked
+    `ok` or `empty` — those two are answers, and re-reading them every run is how a
+    catch-up pass becomes a nightly re-crawl.
+
+    Extraction happens BEFORE the transaction opens, in batches. The two crawler deaths
+    documented in index_account() were both a download-and-OCR running while holding the
+    write lock; `busy_timeout` on the other side cannot survive a writer that holds it for
+    minutes at a time.
+    """
+    conn = db()
+    where = ("indexable = 1 AND trashed = 0 AND status = 'active'"
+             " AND (text_state IS NULL OR text_state LIKE 'unavailable%')")
+    args: list = []
+    if account:
+        where += " AND account = ?"
+        args.append(account)
+
+    total = conn.execute(f"SELECT COUNT(*) c FROM drive_files WHERE {where}",
+                         args).fetchone()["c"]
+    if not total:
+        print("  nothing unread — every indexable file has been attempted")
+        return 0
+    print(f"  {total} file(s) to read")
+
+    tokens: dict[str, auth.TokenSource] = {}
+    read = empty = unavailable = 0
+    done = 0
+    import shutil as _shutil
+    import tempfile as _tempfile
+
+    while True:
+        if os.path.exists(SUSPEND):
+            print(f"  SUSPENDED — {SUSPEND} exists. Re-run to continue;"
+                  " finished files are already written.")
+            break
+        want = min(batch, limit - done) if limit else batch
+        if want <= 0:
+            break
+        rows = conn.execute(
+            f"SELECT id, account, name, mime_type FROM drive_files WHERE {where}"
+            f" ORDER BY modified_time DESC LIMIT ?", args + [want]).fetchall()
+        if not rows:
+            break
+
+        stage = _tempfile.mkdtemp(prefix="drvdoc-")
+        items = []
+        try:
+            for i, r in enumerate(rows):
+                acct = r["account"]
+                if acct not in tokens:
+                    tokens[acct] = auth.TokenSource(acct)
+                try:
+                    data = api_get(tokens[acct], f"/files/{r['id']}",
+                                   {"alt": "media"}, raw=True)
+                except SystemExit as exc:                 # a dead token, not a bad file
+                    print(f"  ! {acct}: {exc}")
+                    data = None
+                if not data:
+                    with conn:
+                        conn.execute("UPDATE drive_files SET text_state='unavailable:download'"
+                                     " WHERE id=?", (r["id"],))
+                    unavailable += 1
+                    continue
+                # The staged name carries the real extension: the ladder picks its rung
+                # from the extension when the MIME is generic, and some Drive PDFs are
+                # served as application/octet-stream.
+                ext = os.path.splitext(r["name"] or "")[1] or ".bin"
+                path = os.path.join(stage, f"{i:05d}{ext}")
+                with open(path, "wb") as fh:
+                    fh.write(data)
+                items.append((r["id"], path, r["mime_type"] or ""))
+
+            results = ocr_ladder.extract_many(items, max_pages=max_pages)
+        finally:
+            _shutil.rmtree(stage, ignore_errors=True)
+
+        for r in rows:
+            if r["id"] not in results:
+                continue
+            text, source, error = results[r["id"]]
+            if error:
+                state = error
+                unavailable += 1
+            elif text:
+                state = "ok"
+                read += 1
+            else:
+                state = "empty"
+                empty += 1
+            with conn:
+                conn.execute("UPDATE drive_files SET text_state=?, indexed_at=?"
+                             " WHERE id=?", (state, time.time(), r["id"]))
+                if text:
+                    conn.execute(
+                        "INSERT OR REPLACE INTO document_text (file_id, account, body,"
+                        " source) VALUES (?,?,?,?)", (r["id"], r["account"], text, source))
+                    conn.execute("DELETE FROM document_fts WHERE file_id=?", (r["id"],))
+                    conn.execute(
+                        "INSERT INTO document_fts (file_id, account, name, body)"
+                        " VALUES (?,?,?,?)",
+                        (r["id"], r["account"], r["name"], text[:400000]))
+
+        done += len(rows)
+        print(f"    {done}/{total}: {read} read, {empty} empty, {unavailable} unavailable",
+              flush=True)
+        if len(rows) < want:
+            break
+
+    print(f"\ndone: {read} read, {empty} with no text, {unavailable} unreadable")
+    if unavailable:
+        print("  unreadable files keep their reason and will be retried — they are not"
+              " recorded as empty")
+    coverage_line(conn, account)
+    return read
+
+
+def coverage_line(conn, email: str | None = None):
+    """One line an operator can act on: how much is left, and what it is made of."""
+    d = coverage(conn, email)
+    print(f"  coverage: {d['with_text']} read / {d['n']} rows — {d['unread']} unread")
+    if d["unread"]:
+        top = conn.execute("""
+            SELECT mime_type, COUNT(*) n FROM drive_files f
+            LEFT JOIN document_text t ON t.file_id = f.id
+            WHERE t.file_id IS NULL AND f.indexable = 1
+            GROUP BY mime_type ORDER BY n DESC LIMIT 4""").fetchall()
+        for r in top:
+            print(f"      {r['n']:>6}  {r['mime_type']}")
+
+
 def coverage(conn, email: str | None = None, source: str | None = None) -> dict:
     """How much of what we hold can actually be READ. Shared by `stats` and /health.
 
@@ -377,6 +523,15 @@ def main(argv: list[str]) -> int:
             raise SystemExit("usage: drive_index.py run <email> [max_files]")
         cap = int(argv[3]) if len(argv) > 3 else None
         index_account(argv[2], max_files=cap)
+        return 0
+    if cmd == "documents":
+        # The catch-up pass. No account or file count required: it reads the database for
+        # what is missing, so re-running it after an interruption continues rather than
+        # starting over.
+        cap = int(argv[2]) if len(argv) > 2 and argv[2].isdigit() else None
+        acct = next((a for a in argv[2:] if "@" in a), None)
+        pages = 0 if "--all-pages" in argv else None
+        documents(limit=cap, account=acct, max_pages=pages)
         return 0
     if cmd == "stats":
         if len(argv) < 3:

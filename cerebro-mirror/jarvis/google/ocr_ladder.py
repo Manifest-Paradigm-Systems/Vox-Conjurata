@@ -520,20 +520,30 @@ def _suffix_for(mime: str) -> str:
 # ---------------------------------------------------------------- batched container
 def extract_many(items: list[tuple], max_pages: int | None = None
                  ) -> dict[tuple, tuple[str, str, str | None]]:
-    """Extract many files in ONE container run. items = [(key, path, mime), ...].
+    """Extract many files at once. items = [(key, path, mime), ...].
 
-    Used on a host with no poppler and no tesseract (cerebro). Everything is staged
-    into one directory and mounted read-only, because starting a container per file
-    costs more than the OCR does: ~0.4 s each against a tesseract pass of about the
-    same, so a per-file container would double the wall clock of a 2,713-file crawl
-    for nothing.
+    ONE ENTRY POINT FOR BOTH HOSTS. Where the tools are installed (Workhorse) this runs
+    them in-process, one file at a time. Where they are not (cerebro) it stages
+    everything into a single directory and makes ONE container run for the batch —
+    because a podman start is ~0.4 s, about what a tesseract pass costs, so a container
+    per file would double the wall clock of a 2,713-file crawl and buy nothing.
 
-    Returns {key: (text, source, error)}. If the container is unavailable, every key
-    comes back with `unavailable:container` — which the caller will store as
-    "unread", not as "empty", because that distinction is the reason this module exists.
+    Returns {key: (text, source, error)}. If neither route is available, every key comes
+    back with `unavailable:container` — which the caller stores as "unread", never as
+    "empty", because that distinction is the reason this module exists.
     """
     results: dict[tuple, tuple[str, str, str | None]] = {}
     if not items:
+        return results
+
+    # Native first: if this host can read the formats itself, there is nothing a
+    # container would add except latency.
+    if have("pdftotext") or OCR_ENGINE == "eyes":
+        for key, path, mime in items:
+            try:
+                results[key] = extract_path(path, mime, max_pages)
+            except Exception as exc:                              # noqa: BLE001
+                results[key] = ("", "", f"extract:{type(exc).__name__}")
         return results
 
     if not container_available():

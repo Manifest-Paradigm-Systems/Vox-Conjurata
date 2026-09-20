@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS records_facts (
     source_name    TEXT,        -- its filename, so an answer can name it
     sourced        INTEGER,     -- 1 = the value appears in that document's text
     evidence_date  TEXT,        -- the LATEST document in the corpus that supports it
+    evidence_count INTEGER,     -- how many documents support it (the stable-fact judge)
     is_current     INTEGER DEFAULT 0,
     rebuilt_at     REAL
 );
@@ -133,17 +134,18 @@ def rebuild() -> int:
             corpus.append(((when or "")[:10], _norm(body), re.sub(r"\D", "", body)))
     corpus.sort(key=lambda t: t[0])
 
-    def evidence_date(value: str) -> str | None:
-        """The latest document date on which this value appears ANYWHERE in the record."""
+    def evidence(value: str) -> tuple[str | None, int]:
+        """(latest document date supporting this value, how many documents support it)."""
         v = _norm(value)
         dv = re.sub(r"\D", "", value or "")
         if len(v) < 3:
-            return None
-        latest = None
+            return None, 0
+        latest, count = None, 0
         for when, body_n, body_d in corpus:
             if v in body_n or (len(dv) >= 6 and dv in body_d):
                 latest = when            # corpus is sorted, so the last hit is the latest
-        return latest
+                count += 1
+        return latest, count
 
     rows = []
     for r in life.execute("SELECT * FROM profile_data_history ORDER BY domain_id, key_name"):
@@ -155,24 +157,33 @@ def rebuild() -> int:
         sourced = None
         if body is not None:
             sourced = 1 if appears_in(r["value"], body) else 0
+        ev_date, ev_count = evidence(r["value"])
         rows.append({
             "domain": r["domain_id"], "key": r["key_name"], "value": r["value"],
             "eff": eff, "file_id": file_id,
             "name": (src["original_name"] if src else None),
             "sourced": sourced,
-            "evidence": evidence_date(r["value"]),
+            "evidence": ev_date, "evidence_count": ev_count,
         })
 
-    # Rule 2: current is decided by WHERE THE VALUE IS LAST EVIDENCED, not by when its row
-    # was written and not by the row's own document date.
+    # Rule 2: current is decided by WHAT THE RECORD SHOWS, and how that is judged depends
+    # on whether the fact is one that CHANGES.
     #
-    # The narrower rule — latest document date among the ledger's own rows — was tried
-    # first and got the owner's rank wrong. It answered CPT, taking a 2016-09-05 amendment
-    # whose OCR contains both ranks, while a promotion order in the same corpus makes MAJ
-    # effective 13 JUN 2016 and every amendment from 2017 onward repeats MAJ. The ledger
-    # simply had no rank row from those later documents, so "latest row's date" could not
-    # see them. Asking instead "which value does the RECORD support most recently" answers
-    # MAJ, which is what the paperwork says.
+    # Both known errors in the original ledger came from getting this wrong in opposite
+    # directions, and neither fixed the other:
+    #
+    #   rank        is temporal. CPT until a promotion order makes MAJ effective
+    #               13 JUN 2016. Recency is the right judge — the latest evidence wins.
+    #               The original ledger answered CPT because `is_current` was write order.
+    #   home_city   is constant. Ten documents say PEYTON, CO; exactly one says PETON —
+    #               a 2025 scan our own OCR misread, which the extractor then copied
+    #               faithfully. Recency is the WRONG judge here: it picks the one bad
+    #               read because it is the most recent document. Agreement is the right
+    #               judge.
+    #
+    # So a date-like fact is ranked by its latest evidence, and a stable fact by how many
+    # documents support it. Getting either rule wrong produces a confident wrong answer,
+    # which is why the distinction is written down rather than tuned.
     best: dict[tuple, dict] = {}
     for row in rows:
         k = (row["domain"], row["key"])
@@ -187,11 +198,11 @@ def rebuild() -> int:
         conn.executemany("""
             INSERT INTO records_facts (account, domain, key_name, value, effective_date,
                                        source_file_id, source_name, sourced, evidence_date,
-                                       is_current, rebuilt_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                                       evidence_count, is_current, rebuilt_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
             [(ACCOUNT, r["domain"], r["key"], r["value"], r["eff"], r["file_id"],
-              r["name"], r["sourced"], r["evidence"], r["current"], time.time())
-             for r in rows])
+              r["name"], r["sourced"], r["evidence"], r["evidence_count"], r["current"],
+              time.time()) for r in rows])
 
     cur = sum(1 for r in rows if r["current"])
     unsourced = sum(1 for r in rows if r["sourced"] == 0)
@@ -204,16 +215,34 @@ def rebuild() -> int:
     return len(rows)
 
 
-def _rank(row: dict) -> tuple:
-    """Higher wins.
+# Facts that CHANGE over a career, where the most recent evidence is the truth.
+# Everything else is treated as constant, where agreement across documents is the truth.
+#
+# The test is not "is this a date" but "does a later document supersede an earlier one".
+# A rank, a unit and a clearance are all superseded by the next order; a name, a date of
+# birth and a home address are not — a later document that disagrees with ten earlier
+# ones is far more likely to be a bad scan than a move nobody recorded.
+TEMPORAL_KEYS = {
+    "rank", "member_rank", "grade", "unit", "unit_location", "station_number",
+    "duty_station", "security_clearance", "specialty_code", "tour_length",
+    "demob_station", "order_number", "revision_date", "revoked_date", "revoked_order",
+}
 
-    A value the record supports wins over one it does not, and among supported values the
-    most recently evidenced wins. A fact with no supporting document anywhere sorts below
-    every fact that has one — which is the whole point: `home_city = "Peton"` appears in
-    no document, and it must not outrank a value that does.
+
+def _rank(row: dict) -> tuple:
+    """Higher wins. The ordering flips on whether the key is temporal — see the comment
+    at the call site, which is where both directions of this have already gone wrong once.
+
+    A value no document supports sorts below every value that has one: an unevidenced
+    claim must never outrank an evidenced one, whatever its date.
     """
-    return (1 if row["evidence"] else 0, row["evidence"] or "",
-            row["sourced"] or 0, 1 if row["file_id"] else 0)
+    if row["key"] in TEMPORAL_KEYS:
+        return (1 if row["evidence"] else 0, row["evidence"] or "",
+                row["evidence_count"], row["sourced"] or 0,
+                1 if row["file_id"] else 0)
+    return (1 if row["evidence"] else 0, row["evidence_count"],
+            row["evidence"] or "", row["sourced"] or 0,
+            1 if row["file_id"] else 0)
 
 
 def report() -> None:
@@ -234,21 +263,17 @@ def report() -> None:
     print()
     print("=== where the two answers that mattered landed ===")
     for key in ("rank", "home_city"):
-        row = conn.execute("""SELECT value, effective_date, evidence_date, sourced,
-                                     source_name
-                              FROM records_facts WHERE key_name=? AND is_current=1""",
-                           (key,)).fetchone()
-        if row:
-            print(f"  {key:<10s} = {row['value']:<12s} "
-                  f"(row date={row['effective_date'] or 'none'}, "
-                  f"last evidenced={row['evidence_date'] or 'NOWHERE'}, "
-                  f"from={(row['source_name'] or 'no document')[:40]})")
-        others = conn.execute("""SELECT value, evidence_date FROM records_facts
-                                 WHERE key_name=? AND is_current=0
-                                 ORDER BY evidence_date DESC""", (key,)).fetchall()
-        for o in others[:5]:
-            print(f"      superseded: {o['value']:<12s} last evidenced "
-                  f"{o['evidence_date'] or 'nowhere'}")
+        print(f"  {key}  (judged by {'latest evidence' if key in TEMPORAL_KEYS else 'agreement'})")
+        for r in conn.execute("""
+                SELECT value, evidence_date, evidence_count, sourced, source_name, is_current
+                FROM records_facts WHERE key_name=?
+                ORDER BY is_current DESC, evidence_count DESC LIMIT 5""", (key,)):
+            tag = "CURRENT " if r["is_current"] else "         "
+            print(f"    {tag}{r['value']:<12s} in {r['evidence_count'] or 0:>3} document(s),"
+                  f" last {(r['evidence_date'] or 'nowhere'):<10s}"
+                  f" sourced={r['sourced']}")
+            if r["source_name"]:
+                print(f"                row from: {r['source_name'][:58]}")
 
 
 def main(argv: list[str]) -> int:

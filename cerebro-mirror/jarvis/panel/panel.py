@@ -1720,7 +1720,9 @@ fetch('/api/models').then(r => r.json()).then(cfg => {
   if (cfg.error) return;
   const picker = $('modelPicker');
   const label = {jarvis: 'kunou', 'jarvis-director': 'director (r1)',
-                 'jarvis-web': 'web search', 'jarvis-news': 'news', 'jarvis-wiki': 'wiki'};
+                 'jarvis-web': 'web search', 'jarvis-news': 'news', 'jarvis-wiki': 'wiki',
+                 'jarvis-mail': 'mail archive', 'jarvis-calendar': 'calendar',
+                 'jarvis-drive': 'documents + service record'};
   (cfg.models || []).forEach(m => {
     const o = document.createElement('option');
     o.value = m; o.textContent = label[m] || m;

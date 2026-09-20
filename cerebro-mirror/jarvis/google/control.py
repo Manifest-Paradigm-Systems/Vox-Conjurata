@@ -29,7 +29,7 @@ import time
 
 DB_PATH = os.path.expanduser(os.environ.get("JARVIS_GOOGLE_DB",
                                             "~/jarvis/google/google.db"))
-STREAMS = ("gmail", "sms", "calls", "calendar", "drive", "attachments")
+STREAMS = ("gmail", "sms", "calls", "calendar", "drive", "records", "attachments")
 
 # The stream says which TABLE, the account says which MAILBOX — the same two axes
 # that were conflated in `matching_rows`. They were conflated here too: the count
@@ -38,13 +38,17 @@ STREAMS = ("gmail", "sms", "calls", "calendar", "drive", "attachments")
 # every stream reported 0 — a status command that lied, in the reassuring
 # direction, about the one thing it exists to answer. Each stream counts its own
 # table, and the noun goes with the table so the line reads true.
+# (table, noun, extra WHERE). The WHERE matters because `records` lives in drive_files
+# alongside the Drive crawl: without it, importing 174 service documents would show up as
+# 174 more Drive files and the Drive line would quietly stop meaning what it says.
 STREAM_TABLES = {
-    "gmail":       ("messages",        "messages"),
-    "sms":         ("sms",             "messages"),
-    "calls":       ("calls",           "calls"),
-    "calendar":    ("calendar_events", "events"),
-    "drive":       ("drive_files",     "files"),
-    "attachments": ("attachments",     "attachments"),
+    "gmail":       ("messages",        "messages", None),
+    "sms":         ("sms",             "messages", None),
+    "calls":       ("calls",           "calls",    None),
+    "calendar":    ("calendar_events", "events",   None),
+    "drive":       ("drive_files",     "files",    "source = 'drive'"),
+    "records":     ("drive_files",     "documents", "source = 'lifepacket'"),
+    "attachments": ("attachments",     "attachments", None),
 }
 
 
@@ -121,6 +125,75 @@ def add_exclusion(conn, stream: str, kind: str, value: str, reason: str = ""):
             (stream, kind, value, reason, time.time()))
 
 
+# ---------------------------------------------------------------- what each stream IS
+# One description per stream, read by BOTH the preview and the purge. They must not be
+# able to disagree, because they did: `matching_rows` was hardcoded to `messages` and
+# `purge` deleted only mail tables, so `forget --stream drive` printed a list of Drive
+# files and then erased the owner's email. A destructive command that previews one thing
+# and deletes another is worse than one that does nothing, and the fix is that there is
+# only one description of what a stream is.
+#
+# `tables` is the purge order: children before parents, so nothing is orphaned on the way
+# through. `text` is (table, foreign key, body column) for a `contains` match.
+STREAM_SPEC = {
+    "gmail": {
+        "table": "messages", "account": "account", "label": "subject",
+        "address": ("from_addr", "to_addrs"), "thread": "thread_id",
+        "time": "internal_date", "unit": "ms",
+        "text": ("message_text", "message_id", "body"),
+        "tables": [("message_fts", "message_id"), ("message_text", "message_id"),
+                   ("attachments", "message_id"), ("messages", "id")],
+    },
+    "drive": {
+        "table": "drive_files", "account": "account", "label": "name",
+        "address": None, "thread": None, "time": "modified_time", "unit": "iso",
+        "text": ("document_text", "file_id", "body"), "filter": "source = 'drive'",
+        "tables": [("document_fts", "file_id"), ("document_text", "file_id"),
+                   ("drive_files", "id")],
+    },
+    # The service record, kept distinct from the Drive crawl so "erase my DD-214" does not
+    # also erase the Drive, and vice versa.
+    "records": {
+        "table": "drive_files", "account": "account", "label": "name",
+        "address": None, "thread": None, "time": "modified_time", "unit": "iso",
+        "text": ("document_text", "file_id", "body"), "filter": "source = 'lifepacket'",
+        "tables": [("document_fts", "file_id"), ("document_text", "file_id"),
+                   ("drive_files", "id")],
+    },
+    "sms": {
+        "table": "sms", "account": None, "label": "body",
+        "address": ("address",), "thread": "thread_id", "time": "ts", "unit": "ms",
+        "text": ("sms", "id", "body"),
+        "tables": [("sms_fts", "sms_id"), ("sms", "id")],
+    },
+    "calls": {
+        "table": "calls", "account": None, "label": "number",
+        "address": ("number",), "thread": None, "time": "ts", "unit": "ms",
+        "text": None,
+        "tables": [("calls", "id")],
+    },
+    "calendar": {
+        "table": "calendar_events", "account": "account", "label": "summary",
+        "address": None, "thread": None, "time": "start_ts", "unit": "ms",
+        "text": ("calendar_events", "id", "description"),
+        "tables": [("event_attendees", "event_id"), ("calendar_events", "id")],
+    },
+    "attachments": {
+        "table": "attachments", "account": "account", "label": "filename",
+        "address": None, "thread": None, "time": None, "unit": "ms",
+        "text": ("attachment_text", "attachment_id", "body"),
+        "tables": [("attachment_text", "attachment_id"), ("attachments", "id")],
+    },
+}
+
+
+def _spec(stream: str) -> dict:
+    if stream not in STREAM_SPEC:
+        raise SystemExit(f"forget does not know the stream {stream!r}; "
+                         f"one of {tuple(STREAM_SPEC)}")
+    return STREAM_SPEC[stream]
+
+
 def matching_rows(conn, stream: str, kind: str, value: str, account: str | None = None):
     """The rows an exclusion would remove. Shared by the dry run and the real thing, so
     the preview cannot disagree with what actually happens.
@@ -130,25 +203,51 @@ def matching_rows(conn, stream: str, kind: str, value: str, account: str | None 
     "personal" — so every exclusion quietly matched nothing and reported success. Two
     separate things: the stream says which TABLE, the account says which MAILBOX.
     """
-    q = "SELECT id, account, from_addr, subject, internal_date FROM messages WHERE 1=1"
+    spec = _spec(stream)
+    table = spec["table"]
+    q = f"SELECT id, {spec['label']} AS label"
+    q += f", {spec['account']} AS account" if spec["account"] else ", NULL AS account"
+    q += f", {'COALESCE(' + spec['time'] + ', 0)' if spec['time'] else '0'} AS when_ts"
+    q += f" FROM {table} WHERE 1=1"
     args: list = []
-    if account:
-        q += " AND (account=? OR account IN (SELECT email FROM accounts WHERE label=?))"
+    if spec.get("filter"):
+        q += f" AND {spec['filter']}"
+    if account and spec["account"]:
+        q += (f" AND ({spec['account']}=? OR {spec['account']} IN"
+              f" (SELECT email FROM accounts WHERE label=?))")
         args += [account, account]
     if kind == "address":
-        # covers both directions: anything to or from this address
-        q += " AND (lower(from_addr) LIKE ? OR lower(to_addrs) LIKE ?)"
-        args += [f"%{value.lower()}%", f"%{value.lower()}%"]
+        if not spec["address"]:
+            # A stream with no address column cannot match one. Saying so beats a LIKE
+            # against a column that is not there, which is an OperationalError at best
+            # and the wrong table at worst.
+            raise SystemExit(f"the {stream} stream has no address to match")
+        like = " OR ".join(f"lower({c}) LIKE ?" for c in spec["address"])
+        q += f" AND ({like})"
+        args += [f"%{value.lower()}%"] * len(spec["address"])
     elif kind == "contains":
-        q += (" AND id IN (SELECT message_id FROM message_text WHERE lower(body) LIKE ?)")
+        if not spec["text"]:
+            raise SystemExit(f"the {stream} stream has no text to search")
+        t_table, t_key, t_body = spec["text"]
+        q += (f" AND id IN (SELECT {t_key} FROM {t_table}"
+              f" WHERE lower({t_body}) LIKE ?)")
         args.append(f"%{value.lower()}%")
     elif kind == "between":
+        if not spec["time"]:
+            raise SystemExit(f"the {stream} stream has no date to match a range against")
         lo, hi = value.split("..")
-        q += " AND internal_date BETWEEN ? AND ?"
-        args += [int(time.mktime(time.strptime(lo, "%Y-%m-%d")) * 1000),
-                 int(time.mktime(time.strptime(hi, "%Y-%m-%d")) * 1000)]
+        if spec["unit"] == "ms":
+            q += f" AND {spec['time']} BETWEEN ? AND ?"
+            args += [int(time.mktime(time.strptime(lo, "%Y-%m-%d")) * 1000),
+                     int(time.mktime(time.strptime(hi, "%Y-%m-%d")) * 1000)]
+        else:
+            # Drive stores RFC3339 text, which sorts correctly as a string.
+            q += f" AND {spec['time']} BETWEEN ? AND ?"
+            args += [f"{lo}T00:00:00", f"{hi}T23:59:59"]
     elif kind == "thread":
-        q += " AND thread_id=?"
+        if not spec["thread"]:
+            raise SystemExit(f"the {stream} stream has no threads")
+        q += f" AND {spec['thread']}=?"
         args.append(value)
     elif kind == "id":
         q += " AND id=?"
@@ -158,8 +257,13 @@ def matching_rows(conn, stream: str, kind: str, value: str, account: str | None 
     return conn.execute(q, args).fetchall()
 
 
-def purge(conn, rows) -> int:
-    """Remove the rows from every table that holds their content."""
+def purge(conn, rows, stream: str = "gmail") -> int:
+    """Remove the rows from every table that holds their content, for THAT stream.
+
+    The stream is required now rather than assumed. It was assumed, and the assumption
+    was `messages` — so the drive preview showed files and the drive purge deleted mail.
+    """
+    spec = _spec(stream)
     ids = [r["id"] for r in rows]
     if not ids:
         return 0
@@ -167,10 +271,8 @@ def purge(conn, rows) -> int:
         chunk = ids[chunk_start:chunk_start + 500]
         marks = ",".join("?" * len(chunk))
         with conn:
-            conn.execute(f"DELETE FROM message_fts WHERE message_id IN ({marks})", chunk)
-            conn.execute(f"DELETE FROM message_text WHERE message_id IN ({marks})", chunk)
-            conn.execute(f"DELETE FROM attachments WHERE message_id IN ({marks})", chunk)
-            conn.execute(f"DELETE FROM messages WHERE id IN ({marks})", chunk)
+            for table, key in spec["tables"]:
+                conn.execute(f"DELETE FROM {table} WHERE {key} IN ({marks})", chunk)
     return len(ids)
 
 
@@ -195,13 +297,20 @@ def forget(stream: str, kind: str, value: str, reason: str, yes: bool,
         print("  so a future crawl does not put them back.")
         return 0
 
-    n = purge(conn, rows)
+    n = purge(conn, rows, stream)
     add_exclusion(conn, stream, kind, value, reason)
     with conn:
         conn.execute("INSERT INTO actions (ts, kind, detail, ok) VALUES (?,?,?,?)",
                      (time.time(), "forget",
                       f"{n} rows erased; rule: {stream}/{kind}={value}; {reason}", 1))
-    print(f"\n  erased {n} message(s) and recorded the rule — a re-crawl will skip them.")
+    print(f"\n  erased {n} row(s) from the {stream} stream and recorded the rule"
+          " — a re-crawl will skip them.")
+    if stream == "records":
+        # The service record's source of record is the filesystem, not this index. A
+        # purge here holds only until someone re-runs the import, and saying so is
+        # cheaper than a deletion that quietly undoes itself.
+        print("  NOTE: the service record re-imports from LifePacket's raw_documents/."
+              " To erase it for good, remove the source files too.")
     return n
 
 
@@ -211,8 +320,9 @@ def status():
     print("\n  streams")
     for s in STREAMS:
         p = is_paused(conn, s)
-        table, noun = STREAM_TABLES[s]
-        n = conn.execute(f"SELECT COUNT(*) c FROM {table}").fetchone()["c"]
+        table, noun, where = STREAM_TABLES[s]
+        q = f"SELECT COUNT(*) c FROM {table}" + (f" WHERE {where}" if where else "")
+        n = conn.execute(q).fetchone()["c"]
         note = ""
         row = conn.execute("SELECT note FROM controls WHERE key=?", (f"pause:{s}",)).fetchone()
         if row and row["note"]:
