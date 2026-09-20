@@ -471,6 +471,59 @@ def start_job(target: str, task: str) -> str:
     return job_id
 
 
+# Carries no retrieval value in a request. Kept short on purpose: a false
+# negative costs a lookup, a false positive costs precision.
+_PLAN_NOISE = {
+    "what", "when", "where", "which", "with", "this", "that", "have", "need",
+    "want", "like", "please", "about", "could", "would", "should", "make",
+    "move", "change", "sort", "handle", "arrange", "email", "call", "tell",
+    "them", "they", "their", "from", "into", "over", "next", "last", "time",
+}
+
+
+def gather_plan_context(request: str, limit: int = 5) -> str:
+    """What is actually on record about a request, for the director to plan against.
+
+    The director was INVENTING. Asked to plan a dental reschedule it produced
+    "SmileCare Dental" and a (555) 123-4567 number, neither of which exists in
+    anything the house holds. That is not a prompt failure and not malice: it had
+    nothing to plan against, so it filled the gap — the same shape as the actor
+    confidently reporting a date it had never been told. And the same fix: supply
+    the material instead of instructing it not to make things up. An instruction
+    competes with a prior and loses; evidence does not.
+
+    Returns a short block of on-record facts with enough provenance that the
+    planner can tell a fact from a blank, or "" when nothing is on record — which
+    is itself information the plan should carry.
+    """
+    words = [w for w in re.findall(r"[A-Za-z]{4,}", request or "")
+             if w.lower() not in _PLAN_NOISE]
+    if not words:
+        return ""
+
+    lines: list[str] = []
+    # The longest word is the likeliest name or place; matching every word would
+    # drag in half the calendar on "appointment".
+    probe = max(words, key=len).lower()
+
+    cal, _ = _cal_get("/calendar/search", {"q": probe, "limit": limit})
+    for e in (cal or {}).get("results") or []:
+        lines.append(f"- calendar: {e['when']} — {e['summary']}"
+                     + (f" (at {e['location']})" if e.get("location") else "")
+                     + (f" with {e['attendees']}" if e.get("attendees") else ""))
+
+    mail, _ = find_mail(probe, limit)
+    for m in (mail or {}).get("results") or []:
+        lines.append(f"- mail: {m.get('date', '')} from {m.get('from', '')} — "
+                     f"{m.get('subject', '')}: {(m.get('snippet') or '')[:160]}")
+
+    if not lines:
+        return ("NOTHING ON RECORD matched this request. That is a fact about the "
+                "request, not a licence to fill the gap.")
+    return ("WHAT IS ON RECORD (the only specifics you have — anything not listed "
+            "here is unknown to you):\n" + "\n".join(lines))
+
+
 def escalate(request: str, sess: dict) -> str:
     """Hand a multi-step request to the DIRECTOR LANE, in the background.
 
@@ -498,10 +551,27 @@ def escalate(request: str, sess: dict) -> str:
 
     def run():
         try:
+            # Retrieve BEFORE the director runs and hand it the result. This is
+            # what stops it inventing: it plans against what is on record, and is
+            # told plainly that anything absent is unknown rather than free to be
+            # guessed at. The instruction is the second half of the fix and works
+            # only because the first half is there.
+            evidence = gather_plan_context(request)
+            content = request
+            if evidence:
+                content = (
+                    f"{request}\n\n{evidence}\n\n"
+                    "Plan using ONLY the specifics listed above. Do not invent names, "
+                    "phone numbers, addresses, times, account numbers or clinic names. "
+                    "If a step needs a detail you have not been given, the step is to "
+                    "FIND IT OUT — say where it would come from — not to assume it. A "
+                    "plausible-looking invention is worse than a blank, because the "
+                    "human cannot tell it apart from something real.")
+
             async def _ask():
                 agent = build_director(sess)
                 reply = await agent.ask(
-                    to_ag2_messages([{"role": "user", "content": request}], sess,
+                    to_ag2_messages([{"role": "user", "content": content}], sess,
                                     conversational=False))
                 text = getattr(reply, "content", None)
                 if callable(text):
