@@ -6,6 +6,7 @@ from .receipt import generate_rent_receipt
 import fitz  # PyMuPDF
 import shutil
 
+
 def prepare(input_pdf_path: str, form_data: dict, output_pdf_path: str) -> None:
     """
     Prepare a PDF for signature by filling form fields, adding signature fields,
