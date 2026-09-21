@@ -442,9 +442,16 @@ def index_account(email: str, max_messages: int | None = None, page_limit: int =
 
     # Newest first: if this is interrupted — and it will be — the part that exists is
     # the part he is most likely to ask about.
+    #
+    # A BOUNDED ("recent") RUN ALWAYS STARTS AT THE NEWEST — it must not resume from the
+    # saved cursor. That cursor is a page token, and each run advances it one page DEEPER
+    # into the mailbox, so resuming from it made every hourly recent run walk further from
+    # the top and never see new mail. mnmeyer (100k messages) went two days stale that way
+    # while cheerfully reporting "100 messages indexed" — of old mail. The cursor is the
+    # FULL walk's resume point; that is the pass that is meant to be resumable.
     state = conn.execute("SELECT * FROM sync_state WHERE account=? AND stream='gmail'",
                          (email,)).fetchone()
-    page = state["cursor"] if state and state["cursor"] else None
+    page = None if max_messages else (state["cursor"] if state and state["cursor"] else None)
 
     seen = 0
     skipped = 0
@@ -513,15 +520,31 @@ def index_account(email: str, max_messages: int | None = None, page_limit: int =
 
         page = (data or {}).get("nextPageToken")
         conn.commit()
-        with conn:
-            conn.execute(
-                "INSERT INTO sync_state (account, stream, cursor, last_run, last_ok, note)"
-                " VALUES (?,?,?,?,?,?)"
-                " ON CONFLICT(account, stream) DO UPDATE SET"
-                " cursor=excluded.cursor, last_run=excluded.last_run,"
-                " last_ok=excluded.last_ok, note=excluded.note",
-                (email, "gmail", page, time.time(), time.time(),
-                 f"{seen} indexed this run"))
+        if max_messages:
+            # Bounded run: record that it ran, but leave `cursor` EXACTLY as it is — that
+            # value is the full walk's resume point, and moving it here is the bug
+            # described at the top of this function. The ON CONFLICT branch deliberately
+            # omits `cursor`, so whatever the full walk stored survives untouched; the
+            # INSERT branch only applies when no row exists yet.
+            with conn:
+                conn.execute(
+                    "INSERT INTO sync_state (account, stream, cursor, last_run, last_ok, note)"
+                    " VALUES (?,?,NULL,?,?,?)"
+                    " ON CONFLICT(account, stream) DO UPDATE SET"
+                    " last_run=excluded.last_run, last_ok=excluded.last_ok,"
+                    " note=excluded.note",
+                    (email, "gmail", time.time(), time.time(),
+                     f"{seen} indexed this run"))
+        else:
+            with conn:
+                conn.execute(
+                    "INSERT INTO sync_state (account, stream, cursor, last_run, last_ok, note)"
+                    " VALUES (?,?,?,?,?,?)"
+                    " ON CONFLICT(account, stream) DO UPDATE SET"
+                    " cursor=excluded.cursor, last_run=excluded.last_run,"
+                    " last_ok=excluded.last_ok, note=excluded.note",
+                    (email, "gmail", page, time.time(), time.time(),
+                     f"{seen} indexed this run"))
         pages += 1
         print(f"  page {pages}: {seen} messages indexed"
               + ("" if page else "  — reached the end of the mailbox"))
