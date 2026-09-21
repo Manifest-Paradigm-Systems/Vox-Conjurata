@@ -745,6 +745,29 @@ LIVE_PAGE = r"""<!doctype html>
   #pendingLabel { flex:1; min-width:0; font-size:12px; color:var(--dim); }
   #pendingX { flex:0 0 auto; padding:6px 11px; }
 
+  /* The caption: the live conversation, floating over the face just above the bar.
+     The sheet keeps the full history — this is the glanceable layer, so it FADES TO
+     INVISIBLE after a quiet spell rather than sitting on the visualization forever.
+     It fades by opacity only and stays in the DOM, so the next turn fades back in
+     instead of popping, and `pointer-events:none` keeps it from swallowing taps
+     meant for the face or the bar underneath it. */
+  #caption { position:fixed; left:14px; right:14px; z-index:2; pointer-events:none;
+             bottom:calc(84px + env(safe-area-inset-bottom));
+             max-height:38vh; overflow:hidden; padding:10px 14px; border-radius:14px;
+             background:var(--panel); backdrop-filter:blur(14px);
+             border:1px solid var(--line);
+             display:flex; flex-direction:column; gap:7px;
+             opacity:0; transition:opacity .5s ease; }
+  #caption.on { opacity:1; }
+  /* A photo waiting to be sent already occupies this spot, so step over it rather
+     than stacking two panels on the same anchor. */
+  #pending.open ~ #caption { bottom:calc(146px + env(safe-area-inset-bottom)); }
+  #caption .c { font-size:13px; line-height:1.5; }
+  #caption .c .who { font-size:10px; letter-spacing:.14em; color:var(--dim);
+                     text-transform:uppercase; }
+  #caption .c.you .who { color:var(--accent); }
+  #caption .c.jarvis .who { color:var(--ok); }
+
   /* Send appears only when there is something to send — a transcript that just
      landed, or something you typed. Hidden otherwise, so the bar stays short. */
   #sendBtn { display:none; width:44px; height:44px; flex:0 0 auto; padding:0;
@@ -908,6 +931,8 @@ LIVE_PAGE = r"""<!doctype html>
   <span id="pendingLabel">Tap to identify this — or type a question and press enter</span>
   <button id="pendingX" title="Remove">×</button>
 </div>
+
+<div id="caption"></div>
 
 <div id="bar">
   <button id="attachBtn" title="Attach an image">+</button>
@@ -1324,6 +1349,40 @@ function say(who, text, sources) {
   d.innerHTML = html;
   $('log').appendChild(d);
   $('log').scrollTop = $('log').scrollHeight;
+  // Reopening an old conversation replays every turn through here; the caption is for
+  // what is happening NOW, so it stays quiet during a repaint.
+  if (!repainting) showCaption(who, text);
+}
+
+/* ---- caption ----------------------------------------------------------- */
+// The live conversation, floating over the face. The sheet is where you scroll back;
+// this is the glanceable layer, and it fades to INVISIBLE after CAPTION_FADE_MS of
+// quiet so it never permanently covers the visualization. It fades by opacity and
+// stays in the DOM, so the next turn fades back in rather than popping.
+const CAPTION_FADE_MS = 30000;
+const CAPTION_KEEP = 4;              // turns held here; the sheet has the full history
+let captionTimer = null;
+let repainting = false;              // true while renderTranscript() replays a conversation
+
+function showCaption(who, text) {
+  const box = $('caption');
+  const d = document.createElement('div');
+  d.className = 'c ' + who;
+  d.innerHTML = '<div class="who">' + esc(who) + '</div><div>' + esc(text) + '</div>';
+  box.appendChild(d);
+  // Keep the panel short — it is a glance, not a transcript. Oldest turns drop off
+  // the top; the sheet still has every one of them.
+  while (box.children.length > CAPTION_KEEP) box.removeChild(box.firstChild);
+  box.classList.add('on');
+  clearTimeout(captionTimer);
+  captionTimer = setTimeout(() => box.classList.remove('on'), CAPTION_FADE_MS);
+}
+
+function clearCaption() {
+  clearTimeout(captionTimer);
+  const box = $('caption');
+  box.innerHTML = '';
+  box.classList.remove('on');
 }
 /* ---- source viewer ---------------------------------------------------- */
 // Clicking a citation opens the archived text it refers to. Delegated from #log, so it
@@ -1385,11 +1444,16 @@ $('chatBtn').onclick = () => openSheet();
 // the file that empties #log, and it has to stay that way or the two get out of
 // step.
 function renderTranscript(turns) {
-  $('log').innerHTML = '';
-  history = [];
-  for (const t of turns) {
-    say(t.role === 'user' ? 'you' : 'jarvis', t.content);
-    history.push({role: t.role, content: t.content});
+  repainting = true;
+  try {
+    $('log').innerHTML = '';
+    history = [];
+    for (const t of turns) {
+      say(t.role === 'user' ? 'you' : 'jarvis', t.content);
+      history.push({role: t.role, content: t.content});
+    }
+  } finally {
+    repainting = false;
   }
   if (history.length > 24) history = history.slice(-24);
 }
@@ -1411,6 +1475,7 @@ function newChat() {
   setConvo(newConvoId());
   $('log').innerHTML = '';
   history = [];
+  clearCaption();
   closeConvos();
 }
 
