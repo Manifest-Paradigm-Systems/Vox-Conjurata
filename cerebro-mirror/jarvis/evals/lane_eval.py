@@ -250,6 +250,12 @@ def ask(base: str, model: str, system: str, question: str,
         "messages": [{"role": "system", "content": system},
                      {"role": "user", "content": question}],
         "stream": False, "max_tokens": 300, "temperature": 0.0,
+        # An eval must not write to the store it measures. Without this every
+        # question is persisted to conversations.db as a two-turn session, which
+        # pollutes conversation recall and — once the memory worker is live —
+        # feeds the model's own answers, including the INVENTED ones this eval is
+        # built to provoke, into the facts table. `ephemeral` makes record() a no-op.
+        "ephemeral": True,
     }).encode()
     req = urllib.request.Request(f"{base}/v1/chat/completions", data=body,
                                  headers={"Content-Type": "application/json"})
