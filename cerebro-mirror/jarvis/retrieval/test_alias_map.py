@@ -18,31 +18,26 @@ def test_pay_entry_base_date_maps_to_pebd():
     assert "pebd" in result
     assert "pay_entry_base_date" not in result
 
-
 def test_unknown_term_passes_through_unchanged():
     # An unknown term should pass through expand() unchanged
     input_terms = ["unknown_term"]
     result = expand(input_terms)
     assert result == input_terms
 
-
 def test_lookup_is_case_insensitive():
     # Lookup should be case-insensitive
     result = keys_for("DUTY_STATION")
     assert "duty_location" in result
-
 
 def test_lookup_is_whitespace_insensitive():
     # Lookup should be whitespace-insensitive
     result = keys_for("  home_address  ")
     assert "home_street" in result
 
-
 def test_multi_word_phrase_matches_as_phrase():
     # Multi-word phrase should match as a phrase
     result = keys_for("pay entry base date")
     assert "pebd" in result
-
 
 def test_duplicate_mappings_deduped():
     # Two different input phrases that map to the same key should not duplicate that key
@@ -54,7 +49,6 @@ def test_duplicate_mappings_deduped():
     # Should not contain duplicates
     assert len(result) == 2
 
-
 def test_expand_does_not_mutate_input():
     # expand() should not mutate its input list
     input_terms = ["mos", "home_address"]
@@ -62,25 +56,21 @@ def test_expand_does_not_mutate_input():
     expand(input_terms)
     assert input_terms == original_input
 
-
 def test_passthrough_unknown():
     # an unknown term passes through expand() unchanged
     input_terms = ["unknown_term"]
     result = expand(input_terms)
     assert result == input_terms
 
-
 def test_case_insensitive():
     # keys_for("DUTY_STATION") includes "duty_location"
     result = keys_for("DUTY_STATION")
     assert "duty_location" in result
 
-
 def test_multiword_phrase():
     # keys_for("pay entry base date") includes "pebd"
     result = keys_for("pay entry base date")
     assert "pebd" in result
-
 
 def test_expand_dedup():
     # expand(["mos", "military occupational specialty"]) yields each key exactly once, no duplicates
@@ -89,10 +79,60 @@ def test_expand_dedup():
     assert result.count("occupation_code") == 1
     assert len(result) == 2
 
-
 def test_input_not_mutated():
     # expand() does not mutate the list it is given
     input_terms = ["mos", "home_address"]
     original_input = input_terms.copy()
     expand(input_terms)
     assert input_terms == original_input
+
+def test_passthrough_unknown():
+    # an unknown term passes through expand() unchanged
+    assert expand(["unknown_term"]) == ["unknown_term"]
+
+def test_case_insensitive():
+    # "duty_location" in keys_for("DUTY STATION")
+    assert "duty_location" in keys_for("DUTY STATION")
+
+def test_multiword_phrase():
+    # "pebd" in keys_for("pay entry base date")
+    assert "pebd" in keys_for("pay entry base date")
+
+def test_expand_dedup():
+    # out = expand(["mos", "mos"]); out.count("occupation") == 1 and out.count("occupation_code") == 1
+    out = expand(["mos", "mos"])
+    assert out.count("occupation") == 1
+    assert out.count("occupation_code") == 1
+
+def test_input_not_mutated():
+    # src = ["mos", "home address"]; expand(src); src is unchanged
+    src = ["mos", "home address"]
+    original = src.copy()
+    expand(src)
+    assert src == original
+
+def test_passthrough_unknown():
+    # an unknown term passes through expand() unchanged
+    assert expand(["unknown_term"]) == ["unknown_term"]
+
+def test_case_insensitive():
+    # "duty_location" in keys_for("DUTY STATION")
+    assert "duty_location" in keys_for("DUTY STATION")
+
+def test_multiword_phrase():
+    # "pebd" in keys_for("pay entry base date")
+    assert "pebd" in keys_for("pay entry base date")
+
+def test_expand_dedup():
+    # out = expand(["mos", "mos"]); out.count("occupation") == 1 and out.count("occupation_code") == 1
+    out = expand(["mos", "mos"])
+    assert out.count("occupation") == 1
+    assert out.count("occupation_code") == 1
+
+
+def test_input_not_mutated():
+    # src = ["mos", "home address"]; expand(src); src is unchanged
+    src = ["mos", "home address"]
+    original = src.copy()
+    expand(src)
+    assert src == original

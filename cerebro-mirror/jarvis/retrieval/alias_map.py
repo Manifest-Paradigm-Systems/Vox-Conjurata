@@ -45,12 +45,11 @@ def expand(terms) -> List[str]:
     for term in terms:
         if not isinstance(term, str):
             continue
-        # Add original term if not already present
         if term not in seen:
             result.append(term)
             seen.add(term)
-        # Add expanded keys
-        for key in keys_for(term):
+        keys = ALIAS_MAP.get(term, [])
+        for key in keys:
             if key not in seen:
                 result.append(key)
                 seen.add(key)
