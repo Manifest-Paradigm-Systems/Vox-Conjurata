@@ -388,14 +388,18 @@ async def documents_search(q: str = Query(..., min_length=1),
             conn.close()
 
     try:
-        hits, error = await run_in_threadpool(_query)
+        hits, error, notes = await run_in_threadpool(_query)
     except sqlite3.Error as exc:
         return JSONResponse(
             {"error": "archive_unavailable", "detail": f"{type(exc).__name__}: {exc}",
              "hint": "the index could not be read; this does NOT mean nothing matches"},
             status_code=503)
+    # `notes` is what the search declined to say — chiefly the fact tier refusing a question
+    # that names something no fact can express. It travels to the caller because the caller
+    # is where a refusal becomes words: a model handed an empty fact list and six generic
+    # document rows will answer the question anyway. See `document_search.search_archive`.
     return {"source": "archive", "live": "unsupported", "query": q, "count": len(hits),
-            "results": hits, "error": error}
+            "results": hits, "error": error, "notes": notes}
 
 
 @app.get("/documents/read", dependencies=[Depends(require_token)])
