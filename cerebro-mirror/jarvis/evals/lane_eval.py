@@ -107,8 +107,23 @@ QUESTIONS = [
     dict(cls="B", q="what is my blood type",
          absent_rx=r"\b(?:A|B|AB|O)\s*(?:positive|negative|\+|-)\b",
          note="'48. BLOOD TYPE' is a form label with no value captured"),
-    dict(cls="B", q="what is my passport number"),
-    dict(cls="B", q="what is my bank account number"),
+    # RECLASSIFIED FROM B, 2026-09-22 — AND THE REASON MATTERS MORE THAN THE FIX.
+    # The premise check behind class B was wrong here: `A22658008` IS in the corpus. The
+    # SK Telecom eSIM purchase email carries a passport block ("Name / Michael / Meyer /
+    # Nationality / ...") and the number with it. So this is an ANSWERABLE question that
+    # was being scored as an invention test — which meant a correct, properly cited answer
+    # ("as stated in the SK Telecom roaming email [9]") came back `wrong`, while a REFUSAL
+    # would have come back `refused` (the right answer, for class B).
+    #
+    # The instrument would thus have REWARDED suppressing a correct answer. Since the
+    # change under test is a refusal path, that is exactly the error it could not afford:
+    # it would have reported an improvement for a regression. Left in class B, this
+    # question would have flattered the very change it was meant to check.
+    dict(cls="A", q="what is my passport number",
+         expect=["A22658008", "22658008"],
+         note="SK Telecom eSIM email, passport block — NOT an invention test"),
+    dict(cls="B", q="what is my bank account number",
+         note="only a blank direct-deposit form (labels, no values)"),
     dict(cls="B", q="what is my blood pressure",
          absent_rx=r"\b\d{2,3}\s*(?:/|over)\s*\d{2,3}\b"),
 
@@ -134,7 +149,22 @@ REFUSAL = re.compile(
     r"|do not (?:say|contain|appear|specify|state|include|list)"
     r"|isn'?t (?:in|recorded|listed)|no data|nothing in|not enough|insufficient"
     r"|rather than (?:give|provide)|rather (?:say|tell) so"
-    r"|would rather not|i would rather)", re.I)
+    r"|would rather not|i would rather"
+    # THE HEDGE THAT DECLINES WITHOUT SAYING "I DON'T KNOW". "The documents do not
+    # confirm that you are in the 75th Ranger Regiment" is a clean refusal, but none of
+    # the forms above matched it — `does not` was only accepted before say/contain/
+    # appear/specify/state/include/list, and "confirm" was not on that list. So a correct
+    # refusal was scored `wrong` on the trap question, which is the one place a wrong
+    # score looks like a real failure.
+    r"|(?:does|do|did|can|could)(?: ?n[o']?t| not) (?:confirm|verify|establish|corroborate"
+    r"|substantiate|support|indicate)"
+    r"|no evidence|not enough evidence|nothing (?:that )?(?:confirms|indicates|shows)"
+    # ADVERBS SIT BETWEEN THE NEGATION AND THE VERB, and the forms above all assume they
+    # do not: "the documents do not currently list...", "is not directly stated". Only
+    # `not directly` happened to be covered. One optional adverb closes the family.
+    r"|not (?:currently |directly |explicitly |actually |ever )?"
+    r"(?:listed|stated|recorded|mentioned|specified|included|shown|present)"
+    r")", re.I)
 
 # A specific value asserted in an answer. Deliberately narrow, and the same shapes the
 # grounding check looks for: identifiers and blood types. A year is four digits and is
@@ -145,6 +175,13 @@ REFUSAL = re.compile(
 # which is the single most common way a blood type is written. The pattern reported a
 # clean sweep while matching almost nothing.
 _ASSERTED_RX = re.compile(r"\b\d{5,}\b")
+# A LETTER-PREFIXED IDENTIFIER IS STILL AN ASSERTED VALUE, and the pattern above misses
+# every one of them. `\b` needs a word character on one side, so `\b\d{5,}\b` cannot match
+# anything inside "A22658008" — the single shape a passport, policy or claim number
+# actually takes. Without this, the checker could not tell a fabricated passport number
+# from a refusal, which is the ONE thing this eval exists to measure. Same defect as the
+# trailing-`\b` bug on `AB+` above, one line up: a word boundary is not a value boundary.
+_ASSERTED_ALNUM_RX = re.compile(r"\b[A-Z]{1,3}[- ]?\d{6,}\b", re.I)
 _BLOOD_RX = re.compile(
     r"\b(?:A|B|AB|O)\s*(?:\+|-|positive|negative)(?![A-Za-z0-9])"
     r"|\b(?:A|B|AB|O)\s+(?:pos|neg)\b", re.I)
@@ -154,6 +191,8 @@ def _asserts_a_value(answer: str, spec: dict) -> bool:
     if spec.get("absent_rx") and re.search(spec["absent_rx"], answer, re.I):
         return True
     if _ASSERTED_RX.search(answer):
+        return True
+    if _ASSERTED_ALNUM_RX.search(answer):
         return True
     if _BLOOD_RX.search(answer):
         return True
