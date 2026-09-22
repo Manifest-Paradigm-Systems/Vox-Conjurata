@@ -72,6 +72,57 @@ run "Jarvis's own memory (conversations, facts, plans)" \
 run "Army service record ledger" \
     "$HOME/jarvis/lifepacket/life_records.db" "mnmeyer-JarvisLifeRecordsDB"
 
+# --- per-account projections ---------------------------------------------------
+# Each account's own slice of the index, uploaded to THAT ACCOUNT'S OWN DRIVE.
+#
+# This is the point of the per-account databases. `google.db` is one file holding four
+# life-domains — the owner's medical/military, Michael's care, the rental property,
+# Dave's health — and a single consolidated file cannot be handed to any one of those
+# accounts without handing it the other three as well.
+#
+# THE PROJECTIONS ARE REBUILT HERE, NOT BY A TIMER OF THEIR OWN, so a backup can never
+# upload a slice older than the run that made it. All four build in about 25 seconds;
+# the crawl they are derived from takes hours.
+#
+# `google.db` STILL UPLOADS ABOVE, WHOLE, to the owner's own Drive, and it remains the
+# single search store. Splitting the SEARCH index is what broke recall — bm25's
+# statistics are per-index, so a one-account database ranked differently and answered
+# "david" with newsletters. These files exist for ownership and for disaster recovery,
+# not to be searched.
+ACCOUNTS_DIR="$HOME/jarvis/google/accounts"
+BUILDER="$HERE/build_account_dbs.py"
+if [ -f "$BUILDER" ]; then
+    echo
+    echo "=============================================================="
+    echo "  rebuilding the per-account projections"
+    echo "=============================================================="
+    if python3 "$BUILDER" | sed 's/^/  /'; then
+        echo "  projections rebuilt"
+    else
+        echo "  PROJECTION BUILD FAILED — the uploads below would be stale" >&2
+        failed=$((failed + 1))
+    fi
+else
+    echo "  no builder at $BUILDER — per-account slices are NOT in this backup" >&2
+    failed=$((failed + 1))
+fi
+
+for db in "$ACCOUNTS_DIR"/*.db; do
+    [ -f "$db" ] || continue
+    slug="$(basename "$db" .db)"
+    echo
+    echo "=============================================================="
+    echo "  $slug — to its own Drive"
+    echo "=============================================================="
+    # The remote is per-account HERE: this is the one place that decides which cloud a
+    # given domain's index lands in.
+    JARVIS_DRIVE_REMOTE="${slug}:JarvisBackups" \
+    JARVIS_GOOGLE_DB="$db" \
+    JARVIS_DRIVE_NAME="${slug}-JarvisAccountDB" \
+    JARVIS_DRIVE_ACCOUNT="$slug" \
+        bash "$BACKUP" || failed=$((failed + 1))
+done
+
 # --- the scans themselves ------------------------------------------------------
 # The service record's TRUE source of record is the filesystem, not either database.
 # The index holds the text and the ledger holds the facts, but if the 46 MB of original
