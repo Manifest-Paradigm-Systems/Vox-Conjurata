@@ -230,7 +230,6 @@ def _fact_hits(conn, terms, limit, account=None):
     out = []
     for _weight, _ev, r in scored[:limit]:
         src = "unsourced" if r["sourced"] == 0 else ("no source document" if not r["source_file_id"] else "")
-        note = f"  [{src}]" if src else ""
         out.append({
             # A FACT NEEDS ITS OWN ID, WITH THE DOCUMENT NAMED SEPARATELY. Several facts
             # routinely come from one document — `date_of_birth` and `date_of_rank` are
@@ -251,9 +250,17 @@ def _fact_hits(conn, terms, limit, account=None):
             "size": 0,
             "collection": None,
             "body": r["value"],
-            "snip": f"{r['key_name']} = {r['value']}"
+            # THE MARKER LEADS, IT DOES NOT TRAIL. It used to be appended after the document
+            # count, where it was measurably ignored: handed "blood_type = …, (0
+            # document(s))  [no source document]", the model still answered "your blood
+            # type is …, recorded in your medical files" — in 4 of 4 runs. The marker was
+            # not missing from the prompt; it was sitting after the claim instead of before
+            # it. Leading the line puts the warning in the same breath as the assertion,
+            # and means it cannot be lost to the 400-character cut the lane applies here.
+            "snip": (f"[{src.upper()}] " if src else "")
+                    + f"{r['key_name']} = {r['value']}"
                     + (f", from {r['source_name'][:60]}" if r["source_name"] else "")
-                    + f" ({r['evidence_count']} document(s)){note}",
+                    + f" ({r['evidence_count']} document(s))",
             "score": 0.0,
             "read": True,
         })
@@ -429,7 +436,11 @@ def search_archive(conn, query: str, account=None, limit: int = 8, source=None
     # the query, so running it across the merged set would interleave a scanned rulebook
     # between two pages of the service record and destroy the ordering that makes personal
     # material primary. The tier is the first key; relevance only orders within it.
-    out: list[dict] = []
+    # The tier NUMBER travels with its rows. The allocation below needs to know which
+    # group is tier 0, and position alone will not say: a query with no fact hits starts
+    # its list at tier 1, so `tiers[0]` would be the lifepacket tier wearing the fact
+    # tier's exemption.
+    tiers: list[tuple[int, list]] = []
     for tier in (0, 1, 2, 3, 4):
         group = [r for r in kept if _tier(r) == tier]
         if not group:
@@ -438,8 +449,56 @@ def search_archive(conn, query: str, account=None, limit: int = 8, source=None
         # how many query terms appear in it as substrings — the very count that ranked the
         # station number above the passport answer — so re-ranking the fact tier here would
         # undo the fix. Every other tier is still ordered by it.
-        ranked = group if tier == 0 else _rank(group, terms, limit, ("name", "body"))
-        for r in ranked:
+        tiers.append((tier, group if tier == 0 else _rank(group, terms, limit, ("name", "body"))))
+
+    # EVERY TIER THAT MATCHED GETS ONE ROW BEFORE ANY TIER GETS ITS SECOND.
+    #
+    # Concatenating and then truncating to `limit` does not merely REORDER the tiers — it
+    # ERASES the ones below the cut. A tier holding `limit` or more rows consumes every
+    # slot, and the tiers beneath it become unreachable at any rank, however good they are.
+    # The fetches above already give each side its own budget, so those rows exist; this
+    # loop was the only thing discarding them.
+    #
+    # Measured on the live index at limit 6: "mos" returned 6 lifepacket rows and NONE of
+    # the 15 drive rows that match it; "when did i enlist" returned 6 and none of 24. The
+    # same queries at limit 40 return 25/15 and 16/24 — the material was always there, and
+    # the cut was the whole defect.
+    #
+    # The floor is ONE row, not `limit // len(tiers)`. Tier order still carries meaning —
+    # the owner's own records outrank a scanned rulebook — and one slot is enough for a
+    # lower tier to be SEEN. Equal shares would let a weak tier compete, which is a
+    # different change with a different justification.
+    #
+    # TIER 0 IS NOT COMPETING FOR ITS SLOTS, IT ALREADY OWNS THEM. The fact tier is the
+    # owner's own records — the one tier that is not a document at all — and a floor
+    # granted to the tiers below it is paid for out of its window. The A/B caught the
+    # price: `duty_location` sat at rank 4 for "where is my duty station" and the floors
+    # pushed it out of a six-slot window entirely, 77 fact hits -> 76 across the 81 fact
+    # questions. That is a worse trade than it looks, because a displaced fact is not a
+    # reordered result, it is an answer the model never sees.
+    #
+    # Exempting it costs the starvation fix nothing, and that is measured, not assumed:
+    # over the same 81 questions the fact tier never occupies more than 4 of the 6 slots,
+    # and the two cases this patch exists for — "mos", "when did i enlist" — have no fact
+    # tier at all. Where the fact tier does fill the window, the rows it displaces are its
+    # own candidates, which is the priority the ladder already asserts.
+    alloc = [1] * len(tiers)
+    if tiers and tiers[0][0] == 0:
+        alloc[0] = min(len(tiers[0][1]), limit)
+    spare = limit - sum(alloc)
+    for i in range(len(tiers)):
+        if tiers[i][0] == 0:
+            continue
+        if spare <= 0:
+            break
+        take = min(len(tiers[i][1]) - 1, spare)
+        if take > 0:
+            alloc[i] += take
+            spare -= take
+
+    out: list[dict] = []
+    for (_tier_no, ranked), take in zip(tiers, alloc):
+        for r in ranked[:take]:
             read = bool((r["body"] or "").strip())
             out.append(_shape(r, read))
     notes = [f"facts withheld: {fact_refusal}"] if fact_refusal else []

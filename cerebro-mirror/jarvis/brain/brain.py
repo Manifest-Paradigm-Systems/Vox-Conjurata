@@ -1585,7 +1585,15 @@ def run_ask(messages: list[dict]):
                        "url": f"doc:{ref}",
                        "snippet": (h.get("snippet") or "")[:200]})
 
-    payload, merr = find_mail(question, limit=4)
+    # FIVE, NOT FOUR, AND THE FIFTH SLOT IS THE WHOLE POINT. The retriever ranks the message
+    # that answers "what is my mother's maiden name" at position FIVE. At four it sits one
+    # slot below the cut and is never retrieved at all; at five it comes back with the
+    # answer in its snippet. The three rows ranked ABOVE it match only because they contain
+    # the query phrase inside ANTI-PHISHING ADVICE — "never give out … mother's maiden name"
+    # — so they are the phrase the question is made of, not the answer to it, and they will
+    # always outrank the real thing on a lexical match. Measured on the live index:
+    # limit=4 returns four rows, none of them the answer; limit=5 returns it.
+    payload, merr = find_mail(question, limit=5)
     if merr:
         errors.append(f"mail: {merr}")
     for h in ((payload or {}).get("results") or []):
