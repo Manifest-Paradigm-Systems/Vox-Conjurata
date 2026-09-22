@@ -461,21 +461,116 @@ def inline_context(workspace: str, detail: str) -> str:
 
 # ------------------------------------------------------------------ apply + verify
 
-def _public_names(source: str) -> set[str]:
-    """Top-level function and class names — the file's visible surface."""
+_PATH_RE = re.compile(r"[A-Za-z_][\w./-]*\.(?:py|pdf|txt|json|md)\b")
+
+# Verbs that ask something OF a file. `own` is deliberately absent: "RETRIEVAL:V-10 owns
+# test_eval_baseline.py" is a DELEGATION — it names who does own the file — and counting
+# it as a claim would make the delegating item a claimant of a file it is handing away.
+_CLAIM_VERB = re.compile(
+    r"\b(?:edit|create|write|rewrite|modify|patch|append|extend|fix|update|add|delete|"
+    r"remove|replace|rename|split|merge)\b", re.I)
+
+
+def _same_file(named: str, rel: str) -> bool:
+    """Do two spellings name the same file?
+
+    They have to be compared, because plan RETRIEVAL spells one file three ways: V-04
+    writes `alias_map.py`, V-01/02/03 write `var/home/admin/jarvis/retrieval/alias_map.py`,
+    and the coder's file list carries whichever the model emitted. Comparing the strings
+    literally — `rel in named_paths(detail)` — makes whether a file counts as CONTESTED
+    depend on that spelling, and contested is what decides whether the clobber guard
+    applies to it at all. A spec that wrote the bare name silently switched the guard off
+    for a file four other items were editing.
+
+    Matching is suffix-at-a-boundary, so a bare name matches any path ending in it. Two
+    same-named files in different directories would both match; that only ever makes a
+    file look contested, which keeps the guard ON, which is the safe direction.
+    """
+    named = (named or "").strip("/")
+    rel = (rel or "").strip("/")
+    if not named or not rel:
+        return False
+    if named == rel:
+        return True
+    return named.endswith("/" + rel) or rel.endswith("/" + named)
+
+
+def _named_any(text: str, rel: str) -> bool:
+    """Does this text name that file, in any spelling?"""
+    return any(_same_file(m.group(0).rstrip(".,;:"), rel)
+               for m in _PATH_RE.finditer(text or ""))
+
+
+def _claimed_paths(text: str) -> set:
+    """Paths this text asks something OF. A verb claims the path NEAREST to it.
+
+    'Add a mapping in alias_map.py for pay_entry_base_date to pebd to satisfy
+    test_alias_map.py's test_pay_entry_base_date_maps_to_pebd' holds one verb, `Add`, and
+    two paths. The verb targets alias_map.py, the path right after it. The second path
+    sits on the far side of the first and has no verb of its own, so it is named to
+    LOCATE alias_map.py, not to ask anything of itself. Attaching verbs by distance
+    instead — any verb within N characters — instead catches that stray `Add` and reports
+    a claim on a file nobody was asking about.
+    """
+    text = text or ""
+    hits = [(m.start(), m.group(0).rstrip(".,;:")) for m in _PATH_RE.finditer(text)]
+    claimed: set = set()
+    for pos, path in hits:
+        verb = None
+        for verb_match in _CLAIM_VERB.finditer(text, 0, pos):
+            verb = verb_match
+        if verb is None:
+            continue
+        if any(verb.end() <= other < pos for other, _ in hits):
+            continue                    # another path stands between the verb and this one
+        claimed.add(path)
+    return claimed
+
+
+def _surface(source: str):
+    """Top-level names, module-level tables with their values, and definition counts.
+
+    The original check looked only at names. Everything that actually went wrong on plan
+    RETRIEVAL lived in the other two. A `LABEL_VARIANTS` table is not a FunctionDef, so it
+    was invisible — an item marked `verified` had its table replaced while the item still
+    read verified, and a re-verify was the only thing that could have caught it. And a
+    name defined twice is a name defined ONCE as far as a set is concerned, so appending a
+    "corrected" second definition looked identical to correcting the first.
+
+    Constant VALUES are kept so that a rename can be told from a loss. A lost name whose
+    value reappears verbatim under a new name has been renamed, and telling the writer to
+    "write the complete file including those" is not advice anyone can follow while
+    renaming — a refusal nobody can satisfy wedges the item instead of correcting it.
+
+    Returns None if the source will not parse. An unreadable file is not evidence of
+    damage, and refusing to write over one would be a false refusal.
+    """
     try:
         tree = ast.parse(source)
     except (SyntaxError, ValueError):
-        return set()
-    return {n.name for n in tree.body
-            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))}
+        return None
+    names, counts, consts = set(), {}, {}
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.add(node.name)
+            counts[node.name] = counts.get(node.name, 0) + 1
+        elif isinstance(node, ast.Assign):
+            value = (ast.get_source_segment(source, node.value) or "").strip()
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    consts[target.id] = value
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            consts[node.target.id] = (
+                ast.get_source_segment(source, node.value) or "").strip() if node.value else ""
+    return names, consts, counts
+
 
 
 def check_no_clobber(full_path: str, new_source: str, owned: bool = False) -> str | None:
-    """Would writing this remove something the file already provides?
+    """Would writing this remove something the file already provides, or define it twice?
 
-    `owned` says the writing item is the only one in its plan that names this file, so
-    the file is its deliverable and a rewrite is the item doing its job.
+    `owned` says the writing item is the only one in its plan that names this file, so the
+    file is its deliverable and a rewrite is the item doing its job.
 
     This is the fix for the failure that cost us four verified items. Two work items can
     name the same file — and when the second writes the whole file, it silently deletes
@@ -487,23 +582,68 @@ def check_no_clobber(full_path: str, new_source: str, owned: bool = False) -> st
     faithfully is the same bet that just lost. Refusing the write and saying exactly what
     would be lost is deterministic, and it turns a silent deletion into a repair the
     director can actually act on.
+
+    A name defined twice is refused even for the file's owner, because ownership is not
+    the question. Both of plan RETRIEVAL's text files were damaged this way, and V-05's
+    own specification describes it from the inside: "another appended a second copy of the
+    functions, and because Python uses the LAST definition the old broken code kept
+    winning." The write that broke it was 3033 -> 3897 bytes and this guard watched it
+    land, because the name set was unchanged — the same names, defined twice each. What
+    protected the item in the end was prose in the specification ("Every name below is
+    deliberate", "do not append it to the existing file"), which is the director routing
+    around a blind guard by hand. This check does mechanically what that paragraph asked
+    for: each name exactly once.
     """
+    new = _surface(new_source)
+    if new is not None:
+        repeated = sorted(n for n, c in new[2].items() if c > 1)
+        if repeated:
+            return (f"this write defines {', '.join(repeated)} more than once. Python keeps "
+                    f"the LAST definition, so the earlier ones never run — the file would "
+                    f"look correct while the old code executed. Define each name exactly "
+                    f"once, in one complete file.")
     if owned:
         return None
     try:
         with open(full_path, encoding="utf-8", errors="replace") as fh:
-            had = _public_names(fh.read())
+            existing = fh.read()
     except OSError:
         return None
-    if not had:
+    had = _surface(existing)
+    if had is None or new is None:
         return None
-    lost = had - _public_names(new_source)
-    if lost:
-        return (f"this write would REMOVE {', '.join(sorted(lost))} from "
-                f"{os.path.basename(full_path)}, which another item put there and which "
-                f"is still being verified. Write the complete file — including those — "
-                f"or target a different file.")
-    return None
+    had_names, had_consts, _ = had
+    new_names, new_consts, _ = new
+    if not had_names and not had_consts:
+        return None
+
+    name = os.path.basename(full_path)
+    lost_names = sorted(had_names - new_names)
+    gone = {n: had_consts[n] for n in had_consts if n not in new_consts}
+    appeared = {n: v for n, v in new_consts.items() if n not in had_consts}
+    renamed = {n: v for n, v in gone.items() if v and v in appeared.values()}
+    lost_consts = sorted(set(gone) - set(renamed))
+    if not (lost_names or lost_consts or renamed):
+        return None
+
+    parts = []
+    if lost_names:
+        parts.append("function/class " + ", ".join(lost_names))
+    if lost_consts:
+        parts.append("module-level table " + ", ".join(lost_consts))
+    message = ""
+    if parts:
+        message = (f"this write would REMOVE {' and '.join(parts)} from {name}, which the "
+                   f"file already provides. Write the complete file — including those — "
+                   f"or target a different file.")
+    if renamed:
+        pairs = ", ".join(f"{old} -> {new}" for old, v in sorted(renamed.items())
+                          for new, other in sorted(appeared.items()) if other == v)
+        tail = (f" It also renames {pairs}. If that rename is intended, keep the old name "
+                f"bound as well (a line `old = new`) so the other item working in this file "
+                f"keeps importing; if it is not intended, keep the original name.")
+        message = (message + tail) if message else tail.strip()
+    return message
 
 
 def apply_files(workspace: str, files: list, log, owned=None) -> list[str]:
@@ -1274,32 +1414,67 @@ def verify_runs_unrelated_file(command: str, detail: str) -> str | None:
     return None
 
 
+def _field(row, name: str) -> str:
+    """A text column from a work_items row, or "". sqlite3.Row has no .get()."""
+    try:
+        return row[name] or ""
+    except (IndexError, KeyError, TypeError):
+        return ""
+
+
+def _claims(item, rel: str) -> bool:
+    """Is this item ABOUT the file? Three ways to be, and no fourth.
+
+    - the TITLE names it. All ten of plan RETRIEVAL's titles open with the file they act
+      on ('test_alias_map.py: pass-through, case, multi-word, de-dup'), which makes the
+      title the plan's own statement of ownership — better evidence than prose, because
+      it is one line and the director writes it deliberately;
+    - the DETAIL asks something of it ('Edit alias_map.py', 'add a test to it');
+    - the VERIFY exercises it — a dependency the item cannot deny.
+
+    A mention is not a claim, and neither is a delegation. V-09's detail contains
+    "RETRIEVAL:V-10 owns test_eval_baseline.py", which names V-10 as the owner of a file
+    V-09 is handing over — reading that as V-09's own claim would make V-09 a claimant of
+    the file it is giving away.
+    """
+    if _named_any(_field(item, "title"), rel):
+        return True
+    if _named_any(_field(item, "verify"), rel):
+        return True
+    return any(_same_file(p, rel) for p in _claimed_paths(_field(item, "detail")))
+
+
 def sole_owner(conn, item, rel_path: str) -> bool:
     """Is this file uncontested — named by no item in the plan other than this one?
 
-    The clobber guard protects against two items naming one file, where the second
-    write silently deletes the first's work. That failure keeps its protection exactly.
+    The clobber guard protects against two items naming one file, where the second write
+    silently deletes the first's work. That failure keeps its protection exactly.
 
     What it must NOT do is stop an item repairing its own work. A file no other item
-    names has no other claimant, so refusing the write protects nobody. VISUAL2:JV-006
+    claims has no other claimant, so refusing the write protects nobody. VISUAL2:JV-006
     hit this for hours: it could not rewrite the test file it had just created.
 
-    An earlier version also required the writing item's own detail to name the file.
-    That was wrong, because REPAIR_PROMPT is free to return a path-free detail — "modify
-    the CLI and tests" — and then the check could never fire at all. Contest is the
-    question; who mentioned it in passing is not.
+    Contest is the question; who mentioned it in passing is not. V-04's detail says "to
+    satisfy test_alias_map.py's test_pay_entry_base_date_maps_to_pebd" — it is not asking
+    anything of that file, it is using it to locate the real target, alias_map.py. Counting
+    that as a contest is what made V-05, whose title is test_alias_map.py, unable to own
+    test_alias_map.py.
+
+    The writing item does NOT have to claim the file. An earlier version required its own
+    detail to name the file and that was wrong twice over: a respec legitimately returns a
+    path-free detail ("modify the CLI and tests"), and then the check could never fire at
+    all and the item could not write its own deliverables. The guard exists to protect
+    OTHER items, so a file no other item claims has nobody to protect. That is the whole
+    rule: own it unless someone else claims it.
     """
     if not item["plan_id"]:
         return False
     rel = (rel_path or "").replace("\\", "/")
     if not rel:
         return False
-    for other in jarvis_db.list_items(conn, item["plan_id"]):
-        if other["id"] == item["id"]:
-            continue
-        if rel in named_paths(other["detail"] or ""):
-            return False
-    return True
+    others = [o for o in jarvis_db.list_items(conn, item["plan_id"])
+              if o["id"] != item["id"]]
+    return not any(_claims(o, rel) for o in others)
 
 
 def wrote_named_file(named, changed) -> bool:
