@@ -1501,6 +1501,48 @@ def _answer_grounded(question: str, context: str, sources: list) -> str:
             "give you a value the documents do not support.")
 
 
+def _index_note(notes) -> str:
+    """What the index did, when it declined — as a preface to the material.
+
+    THE FACT TIER NOW REFUSES. When a word in the question names something no fact is
+    keyed on, that tier returns nothing and reports which word. The refusal is worth
+    nothing unless the model is told it: retrieval declines correctly, the model is handed
+    an unexplained absence, and an unexplained absence reads as an invitation to fill it.
+
+    STATED AS EVIDENCE, NOT AS AN INSTRUCTION. The same reasoning as run_drive — an
+    instruction competes with a prior and loses, a fact about the material does not. So
+    this is a statement about the index, and it goes at the HEAD of the material where it
+    is read before the hits it describes. It is not inserted as a numbered block: the
+    numbers must keep matching `framed`, which is what the citations are built from.
+
+    IT DOES NOT SAY "THE ANSWER IS NOT IN YOUR RECORDS", and must never be changed to.
+    The note is about the extracted-fact tier alone. The documents below it were matched
+    on the WORD, not read for meaning, so it cannot say what they do or do not contain.
+    Claiming more than the index reported is the very error the retrieval just stopped
+    making.
+
+    AND IT MUST NOT BELITTLE THE MATERIAL EITHER. An earlier draft said what follows
+    "merely mentions the word" — which is a claim about the documents that retrieval never
+    established, and it is false exactly where it hurts: the SK Telecom eSIM email does not
+    merely mention "passport", it STATES the passport number. A note that talks the model
+    out of a document that does hold the answer is a worse defect than the silence it
+    replaced, because it fails in the direction of refusing something knowable. So the note
+    says which tier came back empty and stops there, and says outright that a document may
+    still state it.
+    """
+    if not notes:
+        return ""
+    said = "; ".join(str(x) for x in notes)
+    return ("INDEX NOTE — the extracted-fact index has no entry for this question. "
+            f"It reports: {said}. Facts are read out of documents in advance and keyed by "
+            "field, so a word that matches no field means no FACT is listed here — the "
+            "documents themselves have not been searched for meaning, only for the word, "
+            "and one of them may well state the thing asked for. If the material below "
+            "does state it, answer from it and cite it. If it does not, the answer is that "
+            "it is not on record: do not supply a plausible value, and do not answer with "
+            "some other field's value.\n\n")
+
+
 def run_ask(messages: list[dict]):
     """Search everything local and answer from the union. Returns (reply, sources, timings).
 
@@ -1530,6 +1572,8 @@ def run_ask(messages: list[dict]):
     docs, derr = _doc_get("/documents/search", {"q": question, "limit": 6})
     if derr:
         errors.append(f"documents: {derr}")
+    # The retrieval may have declined to answer, and said why. Pass the reason on.
+    index_note = _index_note((docs or {}).get("notes"))
     for h in ((docs or {}).get("results") or []):
         n += 1
         blocks.append(f"[{n}] {_describe(h, 'document', labels)}\n"
@@ -1579,7 +1623,7 @@ def run_ask(messages: list[dict]):
         return ("I looked, sir — nothing in your records or your mail matches that.",
                 [], {"search": round(search_s, 2)})
 
-    context = "\n\n".join(blocks)
+    context = index_note + "\n\n".join(blocks)
 
     t1 = time.time()
     answer = _answer_grounded(
@@ -1720,7 +1764,16 @@ def run_drive(messages: list[dict]):
                 [], {"search": round(search_s, 2)})
 
     hits = payload.get("results") or []
+    index_note = _index_note(payload.get("notes"))
     if not hits:
+        # Nothing came back at all. If the fact tier declined, that is the more useful
+        # half of the answer and belongs in the sentence — "nothing matched" is true of
+        # the word and silent about the field.
+        if index_note:
+            return ("I looked, sir — and the extracted-fact index has no entry for that. "
+                    f"It reports: {(payload.get('notes') or [''])[0]}. Nothing in your "
+                    "Drive mentions it either.",
+                    [], {"search": round(search_s, 2)})
         return ("I looked, sir — nothing in your Drive or your service record matches "
                 "that.", [], {"search": round(search_s, 2)})
 
@@ -1745,7 +1798,7 @@ def run_drive(messages: list[dict]):
                 f"Date: {(h.get('modified_time') or '')[:10]}\n"
                 f"{(h.get('snippet') or '')[:400]}")
 
-    context = "\n\n".join(block(i, h) for i, h in enumerate(hits))
+    context = index_note + "\n\n".join(block(i, h) for i, h in enumerate(hits))
     # `_local_answer` numbers its sources from `title`/`url`; a document has no URL, so
     # the file id stands in — stable, and what a follow-up read would use.
     framed = [{"title": (h.get("name") or "(unnamed)")[:90],
