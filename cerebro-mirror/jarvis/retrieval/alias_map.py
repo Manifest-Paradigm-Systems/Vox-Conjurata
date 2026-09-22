@@ -104,3 +104,27 @@ class AliasMap:
 
 
 _aliast_map = AliasMap()
+
+# Label variants table for OCR vocabulary mismatches: the key is the run-together token a
+# scanned document's OCR pass produces, the value the real spaced label. Expected to grow
+# from measurement, not from guessing.
+OCR_LABEL_VARIANTS = {
+    'dutystation': ['duty station'],
+    'homeaddress': ['home address'],
+    'payentrybasedate': ['pay entry base date'],
+    'memberrank': ['rank'],
+    'bloodtype': ['blood type'],
+    'dateofbirth': ['date of birth'],
+    'fullname': ['full name'],
+    'stationnumber': ['station number'],
+    'homestreet': ['home address'],
+    'homecity': ['city'],
+    'homezip': ['zip'],
+}
+
+
+def ocr_label_variants(label) -> List[str]:
+    """Spelling variants recorded for a printed label that arrived run-together."""
+    if not isinstance(label, str):
+        return []
+    return OCR_LABEL_VARIANTS.get(label.strip().lower(), []).copy()
