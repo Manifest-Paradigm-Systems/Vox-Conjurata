@@ -37,6 +37,7 @@ Usage:
 
 from __future__ import annotations
 
+import math
 import os
 import sqlite3
 import sys
@@ -79,8 +80,89 @@ def _tier(row) -> int:
     return 4
 
 
+# ---------------------------------------------------------------- fact scoring
+# THE FACT TABLE IS A SCHEMA, AND A QUESTION IS NOT.
+#
+# `records_facts` holds (slot_name, value) pairs: (`blood_type`, `O+`). A question is
+# "what is my <thing> <slot>". Counting how many query terms a row matched gives the slot
+# and the thing equal weight, and that is measurably wrong. Measured 2026-09-21, against
+# the owner's own questions mined from `turns`: "what is my passport number" reduces to
+# passport/number; `number` matches four slot names (station_number, form_number,
+# order_number, document_number), `passport` matches NONE and therefore had no vote, and
+# the tie broke on `evidence_count DESC` — that is, ON HOW COMMON THE FACT IS.
+# `station_number` (115 documents) won, and came back at rank 1 carrying a citation,
+# indistinguishable from an answer. The same arithmetic answered "bank account number",
+# "state file number on my birth certificate" and "blood pressure" with the station number
+# and the blood type, and answered "my mother's maiden name" with the owner's own name.
+#
+# Ranking by commonality where it must rank by distinctiveness. Two changes:
+#
+#   1  WEIGHT BY IDF, so that among the rows that legitimately match, the distinctive word
+#      decides rather than the generic one.
+#   2  GATE ON COVERAGE. If the question names a thing no fact can express — a passport, a
+#      bank, a maiden name, a blood pressure, the Ranger Regiment — then every row that
+#      matched did so on a generic word, and returning one answers a DIFFERENT question.
+#      The fact tier says nothing instead, and says why. This is the branch the module never
+#      had: with no way to express "not in the archive", a passport question was forced to
+#      be answerable with a station number.
+#
+# Measured over the fact vocabulary: every question the retrieval got WRONG has an entity
+# word with df=0, and every question it got RIGHT does not. The split is clean, which is
+# why a gate rather than a threshold works here.
+#
+# The two lists are the minimum needed to tell a thing from a slot. Schema-level English,
+# no personal data. `SCHEMA_WORDS` name a FIELD; `QUALIFIERS` scope the thing without
+# identifying it. Dropping a qualifier must not change which fact answers — and if it does,
+# it was the thing, not a qualifier ("full name" is why `name` is NOT a schema word).
+#
+# `military` is in QUALIFIERS and that is not obvious. This whole schema IS military: it
+# scopes occupation, records, leave, rank. A word that scopes everything in the table
+# cannot discriminate between rows in it — but IDF cannot see that, because `military`
+# matches exactly ONE key (`military_occupation_code`) and so scores as the rarest, most
+# decisive word in the query. Measured: "what is my military unit called" returned
+# `military_occupation_code: 3GO3` at rank 1 with the actual `unit` pushed to rank 3.
+# Rank by domain-scoping words and you answer a different question.
+SCHEMA_WORDS = frozenset({
+    "number", "date", "type", "code", "form", "file", "status", "value",
+    "account", "record", "records", "document", "order",
+})
+QUALIFIERS = frozenset({
+    "full", "current", "complete", "entire", "exact", "official", "actual", "real",
+    "according", "called", "military",
+    # QUESTION FILLER — the verbs and prepositions a question puts around the thing it is
+    # asking about. Measured, and this list is why the gate does not fire on them:
+    # "what city do I live in" reduced to city/live, `live` matched no fact, and the tier
+    # withheld `home_city` — a fact sitting right there. "where is my unit located" withheld
+    # `unit_location` the same way. A word the schema can never contain is not evidence that
+    # the schema lacks the answer; it is usually just grammar.
+    "live", "living", "lives", "located", "based", "reside", "resides", "residing",
+})
+
+
+def _fact_terms(terms: list[str]) -> list[str]:
+    """The query's content words, reduced to the THINGS it names.
+
+    "what is my station number" -> ["station"]. "what is my blood pressure" -> ["blood",
+    "pressure"], and `pressure` matching no fact is the signal that decides whether the
+    fact tier may answer at all.
+
+    THIS SAME LIST IS WHAT SCORES. An earlier draft gated on it and then scored on every
+    query word, which let a stripped qualifier back in through the score: `military` was
+    removed from the gate and still matched `military_occupation_code`, so the row it had
+    just been excluded from winning came back first. Stripped means stripped.
+    """
+    entities = [t for t in terms if t not in SCHEMA_WORDS and t not in QUALIFIERS]
+    if entities:
+        return entities
+    # Nothing but slots and qualifiers survived. "what is my date of birth" leaves only
+    # `date`; "what is my order number" leaves nothing but slots. The question named a slot
+    # and nothing else, so the slot IS the thing it named — fall back rather than refuse a
+    # question whose answer is sitting in the table.
+    return [t for t in terms if t not in QUALIFIERS]
+
+
 def _fact_hits(conn, terms, limit, account=None):
-    """The curated facts about the owner, from `records_facts`.
+    """The curated facts about the owner, from `records_facts`. Returns (hits, refusal).
 
     THE MOST AUTHORITATIVE THING IN THIS INDEX, AND NOTHING WAS SEARCHING IT. The table
     holds rank, unit, station number, dates — read out of the documents and adjudicated by
@@ -94,35 +176,59 @@ def _fact_hits(conn, terms, limit, account=None):
     a `drive_files` row, so following a citation opens the paperwork that proves it. A fact
     with no source document is still returned, but carries no id and says so — an unsourced
     fact is labelled, never dressed up as evidence.
+
+    `refusal` is None when the tier may answer, and a plain reason when it may not. It is
+    returned rather than raised or logged because the caller has to be able to say it out
+    loud — the failure being fixed here is precisely a tier that answered when it should
+    have stayed silent.
     """
     if not terms:
-        return []
-    # ANY TERM, NOT ALL OF THEM — and this was wrong on the first attempt. A key/value
-    # table does not share vocabulary with a question: "what is my military unit called"
-    # reduces to military/unit/called, the row is (`unit`, `SUST CMD DET 2`), and it matches
-    # exactly one of the three. Requiring all of them returned nothing for a question whose
-    # answer was sitting in the table. Documents can afford AND because a passage contains
-    # many words; a fact is two short strings and will usually match one.
-    #
-    # So: match any, then rank by HOW MANY matched, so a row hitting "unit" and "military"
-    # beats one that only hit "unit".
-    score = " + ".join("(lower(key_name) LIKE ? OR lower(value) LIKE ?)" for _ in terms)
+        return [], None
+
+    where = "is_current = 1"
     args: list = []
-    for t in terms:
-        args += [f"%{t}%", f"%{t}%"]
-    sql = ("SELECT account, domain, key_name, value, effective_date, source_file_id,"
-           " source_name, sourced, evidence_count,"
-           f" ({score}) AS matched FROM records_facts"
-           f" WHERE is_current = 1 AND ({score}) > 0")
-    args = args + args
     if account:
-        sql += " AND account = ?"
+        where += " AND account = ?"
         args.append(account)
-    sql += " ORDER BY matched DESC, evidence_count DESC LIMIT ?"
-    args.append(limit)
+    # The whole table is read: ~81 rows against a query of a few words. Scoring in Python
+    # buys per-term matches (so IDF can weight them) that the old single `matched` count
+    # could not express, and costs nothing at this size.
+    all_rows = conn.execute(
+        "SELECT account, domain, key_name, value, effective_date, source_file_id,"
+        " source_name, sourced, evidence_count"
+        f" FROM records_facts WHERE {where}", args).fetchall()
+    n = len(all_rows)
+    if not n:
+        return [], None
+
+    def _matches(row, t: str) -> bool:
+        return t in (row["key_name"] or "").lower() or t in (row["value"] or "").lower()
+
+    df = {t: sum(1 for r in all_rows if _matches(r, t)) for t in terms}
+
+    # THE COVERAGE GATE. An entity word that matches no fact at all cannot be what selected
+    # any row, so a row returned here was selected by a slot word alone. That is a keyword
+    # collision, not an answer.
+    entities = _fact_terms(terms)
+    missing = sorted({t for t in entities if df.get(t, 0) == 0})
+    if missing:
+        return [], "no fact mentions " + ", ".join(missing)
+
+    scored = []
+    for r in all_rows:
+        hit = [t for t in entities if _matches(r, t)]
+        if not hit:
+            continue
+        # log(1 + n/df), so a term in every fact is worth ~0 and a term in one is worth the
+        # most. A term matching nothing is worth 0 and is already handled by the gate above.
+        # Summing over ENTITIES only, so a row cannot buy its way back in on a word that was
+        # deliberately stripped from the query.
+        weight = sum(math.log(1 + n / df[t]) for t in hit if df[t])
+        scored.append((weight, r["evidence_count"] or 0, r))
+    scored.sort(key=lambda x: (-x[0], -x[1]))
 
     out = []
-    for r in conn.execute(sql, args):
+    for _weight, _ev, r in scored[:limit]:
         src = "unsourced" if r["sourced"] == 0 else ("no source document" if not r["source_file_id"] else "")
         note = f"  [{src}]" if src else ""
         out.append({
@@ -151,7 +257,7 @@ def _fact_hits(conn, terms, limit, account=None):
             "score": 0.0,
             "read": True,
         })
-    return out
+    return out, None
 
 
 def _shape(row, read: bool) -> dict:
@@ -231,12 +337,19 @@ def _meta_hits(conn, terms, limit, account=None, source=None):
 
 
 def search_archive(conn, query: str, account=None, limit: int = 8, source=None
-                   ) -> tuple[list[dict], str | None]:
-    """Search the document index. Returns (hits, error).
+                   ) -> tuple[list[dict], str | None, list[str]]:
+    """Search the document index. Returns (hits, error, notes).
 
     `error` names the tier that failed, and is never folded into an empty result — the
     rule this whole subsystem keeps relearning. A caller that cannot tell "nothing
     matched" from "the search broke" will report the second as the first.
+
+    `notes` carries what the search chose NOT to say, which is a different thing again. The
+    fact tier declines to answer when the question names something no fact can express, and
+    that refusal has to travel: a caller that only sees an empty fact list will read it as
+    "no facts matched", which is how a passport question gets answered with a station
+    number by the layer above. A note is not an error — nothing broke — but it is not
+    silence either.
     """
     terms = content_terms(query)
     if not terms:
@@ -257,8 +370,9 @@ def search_archive(conn, query: str, account=None, limit: int = 8, source=None
     # Ordering cannot rescue a query that already excluded the right answer. So each side
     # gets its own budget, and the tiering below decides what the reader sees first.
     facts: list = []
+    fact_refusal: str | None = None
     try:
-        facts = _fact_hits(conn, terms, limit, account)
+        facts, fact_refusal = _fact_hits(conn, terms, limit, account)
     except sqlite3.Error as exc:
         failed_tiers.append(f"fact tier: {exc}")
     # A fact names the document it came from, so that document is already represented in
@@ -320,11 +434,16 @@ def search_archive(conn, query: str, account=None, limit: int = 8, source=None
         group = [r for r in kept if _tier(r) == tier]
         if not group:
             continue
-        ranked = _rank(group, terms, limit, ("name", "body"))
+        # TIER 0 ARRIVES ALREADY ORDERED, BY IDF, FROM `_fact_hits`. `_rank` scores a row by
+        # how many query terms appear in it as substrings — the very count that ranked the
+        # station number above the passport answer — so re-ranking the fact tier here would
+        # undo the fix. Every other tier is still ordered by it.
+        ranked = group if tier == 0 else _rank(group, terms, limit, ("name", "body"))
         for r in ranked:
             read = bool((r["body"] or "").strip())
             out.append(_shape(r, read))
-    return out[:limit], ("; ".join(errors) if errors else None)
+    notes = [f"facts withheld: {fact_refusal}"] if fact_refusal else []
+    return out[:limit], ("; ".join(errors) if errors else None), notes
 
 
 def read_document(conn, file_id: str) -> dict | None:
@@ -370,9 +489,11 @@ def stats(conn) -> dict:
 
 
 # ---------------------------------------------------------------- cli
-def _print(hits, error):
+def _print(hits, error, notes=()):
     if error:
         print(f"  !! {error}")
+    for n in notes:
+        print(f"  -- {n}")
     print(f"  {len(hits)} hit(s)")
     for h in hits:
         mark = "" if h["read"] else "  [NOT READ]"
@@ -395,9 +516,10 @@ def main(argv: list[str]) -> int:
     if cmd == "search":
         if len(argv) < 3:
             raise SystemExit("usage: document_search.py search <query>")
-        hits, error = search_archive(conn, argv[2], account=opt("--account"),
-                                     limit=int(opt("--limit", 8)), source=opt("--source"))
-        _print(hits, error)
+        hits, error, notes = search_archive(conn, argv[2], account=opt("--account"),
+                                            limit=int(opt("--limit", 8)),
+                                            source=opt("--source"))
+        _print(hits, error, notes)
         return 0
 
     if cmd == "read":
