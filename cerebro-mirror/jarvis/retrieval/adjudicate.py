@@ -1,6 +1,9 @@
 import sqlite3
 from collections import defaultdict
 from typing import List, Dict, Any
+import json
+import sys
+import click
 
 
 def find_collisions(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
@@ -18,8 +21,10 @@ def find_collisions(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
         A list of dictionaries, each with a 'value' and a 'keys' list.
         The result is sorted deterministically by the keys list.
     """
-    # Query all rows from the facts table
-    cursor = conn.execute("SELECT key_name, value FROM records_facts")
+    # Query only current facts
+    cursor = conn.execute(
+        "SELECT key_name, value FROM records_facts WHERE is_current = 1"
+    )
     rows = cursor.fetchall()
 
     # Group by value
@@ -39,3 +44,26 @@ def find_collisions(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
     collisions.sort(key=lambda x: x['keys'])
 
     return collisions
+
+
+@click.command()
+@click.argument('db_path', type=click.Path(exists=True))
+@click.option('--json', 'json_output', is_flag=True, help='Output as JSON')
+def main(db_path: str, json_output: bool):
+    conn = sqlite3.connect(db_path)
+    try:
+        collisions = find_collisions(conn)
+        if json_output:
+            # Redact values from output
+            redacted = [{'keys': c['keys']} for c in collisions]
+            print(json.dumps(redacted))
+        else:
+            for collision in collisions:
+                keys_str = ', '.join(collision['keys'])
+                print(f"{keys_str} ({len(collision['keys'])} keys)")
+    finally:
+        conn.close()
+
+
+if __name__ == '__main__':
+    main()

@@ -1,0 +1,82 @@
+{
+ "RETRIEVAL:V-01": {
+  "id": "RETRIEVAL:V-01",
+  "title": "alias_map.py: the owner-vocabulary table and single-term lookup",
+  "status": "verified",
+  "detail": "Create /var/home/admin/jarvis/retrieval/alias_map.py.\n\nA module-level DECLARATIVE table (a plain dict, at the top of the module, not built by control flow) mapping the owner's own phrase for a thing to the schema key(s) that hold it. Seed it with the four measured gaps:\n  'duty station'        -> ['duty_location']\n  'home address'        -> ['home_street']\n  'mos'                 -> ['member_occupation', 'military_occupation_code']\n  'pay entry base date' -> ['pebd']\nAlso add the obvious siblings so the table is a table and not four special cases: 'rank' -> ['member_rank'], 'blood type' -> ['blood_type'], 'date of birth' -> ['date_of_birth'], 'full name' -> ['member_name'], 'station number' -> ['station_number'], 'address' -> ['home_street'], 'city' -> ['home_city'], 'zip' -> ['home_zip'].\n\nPublic function keys_for(term) -> list[str]: lowercase and strip the input, look it up, return a NEW list of schema keys, or [] when unknown. It must NEVER invent a match and must never raise on a non-string.\n\nNo personal values anywhere in this file. Key names and the owner's phrases are vocabulary, which is the whole point.",
+  "verify": "python3 -c \"import sys; sys.path.insert(0,'.'); import alias_map as a; assert 'duty_location' in a.keys_for('duty station'); assert sorted(a.keys_for('MOS')) == ['member_occupation','military_occupation_code']; assert a.keys_for('  Pay Entry Base Date ') == ['pebd']; assert a.keys_for('zzzz-not-a-thing') == []; assert a.keys_for(None) == []\"",
+  "notes": "verified on attempt 1 via the coder lane"
+ },
+ "RETRIEVAL:V-02": {
+  "id": "RETRIEVAL:V-02",
+  "title": "alias_map.py: expand a whole term list, de-duplicated",
+  "status": "verified",
+  "detail": "Edit /var/home/admin/jarvis/retrieval/alias_map.py (still a small file).\n\nAdd expand(terms) -> list[str]. For each input term, emit THE ORIGINAL TERM FIRST, then its schema keys, preserving input order; skip any string already emitted; pass unknown terms through unchanged (an unknown term is not an error, it just has no expansion). Return a new list; never mutate the input.\n\nThis is the function the retrieval path will call, so the contract matters: the original term must survive, because the map ADDS reach, it does not replace the query.",
+  "verify": "python3 -c \"import sys; sys.path.insert(0,'.'); import alias_map as a; out = a.expand(['mos','unknownterm']); assert 'mos' in out and 'member_occupation' in out and 'unknownterm' in out; assert out.count('mos') == 1; src = ['mos','mos']; assert a.expand(src).count('member_occupation') == 1; assert src == ['mos','mos']\"",
+  "notes": "verified on attempt 1 via the coder lane"
+ },
+ "RETRIEVAL:V-03": {
+  "id": "RETRIEVAL:V-03",
+  "title": "alias_map.py: the OCR label-variant table",
+  "status": "verified",
+  "detail": "Edit /var/home/admin/jarvis/retrieval/alias_map.py.\n\nA SECOND, separately-documented table for the other vocabulary mismatch: scanned documents whose OCR text spells a printed form label differently from the label itself \u2014 most often several words collapsed into one token (a printed two-word label arriving as one run-together token), and common OCR character confusions.\n\nAdd label_variants(label) -> list[str] returning every spelling variant recorded for a printed label, [] if none. Ship with a small honest seed set and a comment saying it is expected to grow from measurement, not from guessing. Do NOT merge this table into the owner-vocabulary table: they fix different corpora and must be readable apart.",
+  "verify": "python3 -c \"import sys; sys.path.insert(0,'.'); import alias_map as a; assert a.label_variants('definitely not a label xyz') == []; t = getattr(a, 'LABEL_VARIANTS', None); assert isinstance(t, dict) and t, 'the variant table must be populated'; assert all(isinstance(k, str) and k == k.lower() for k in t), 'keys lowercase'; assert all(isinstance(v, list) and v and all(isinstance(x, str) for x in v) for v in t.values()), 'every label maps to a non-empty list of strings'\"",
+  "notes": "verified on attempt 1 via the coder lane"
+ },
+ "RETRIEVAL:V-04": {
+  "id": "RETRIEVAL:V-04",
+  "title": "alias_map.py: add mapping for pay_entry_base_date to pebd",
+  "status": "verified",
+  "detail": "Add a mapping in alias_map.py for 'pay_entry_base_date' to 'pebd' to satisfy test_alias_map.py's test_pay_entry_base_date_maps_to_pebd.",
+  "verify": "python3 -m pytest test_alias_map.py -k test_pay_entry_base_date_maps_to_pebd",
+  "notes": "verified on attempt 2 via the coder lane"
+ },
+ "RETRIEVAL:V-05": {
+  "id": "RETRIEVAL:V-05",
+  "title": "V-05: test_alias_map.py: pass-through, case, multi-word, de-dup",
+  "status": "pending",
+  "detail": "Create /var/home/admin/jarvis/retrieval/test_alias_map.py using pytest. It must contain the five test functions named exactly as written (and may contain other tests): test_passthrough_unknown, test_case_insensitive, test_multiword_phrase, test_expand_dedup, test_input_not_mutated",
+  "verify": "pytest -k 'test_passthrough_unknown or test_case_insensitive or test_multiword_phrase or test_expand_dedup or test_input_not_mutated'",
+  "notes": "respec after 3 failures: The current file contains additional tests that cannot be removed; the specification must allow extra tests and the verify command must not fail on them."
+ },
+ "RETRIEVAL:V-06": {
+  "id": "RETRIEVAL:V-06",
+  "title": "adjudicate.py: find facts that contradict each other",
+  "status": "verified",
+  "detail": "Create /var/home/admin/jarvis/retrieval/adjudicate.py.\n\nA deterministic, READ-ONLY probe over the fact table. It takes a db path on the command line and finds rows that CONTRADICT EACH OTHER: group CURRENT facts by their value, and report every group where the SAME value appears under DIFFERENT keys. Those are the pairs where at most one extraction can be right \u2014 three keys currently carry the same nine digits, and one of them is wrong.\n\nThe table is `records_facts`, with columns including `key_name`, `value` and `is_current`. ONLY rows with is_current = 1 are live: a retired fact is not a contradiction, and google.db holds 43 retired rows that must never be reported.\n\nPublic function find_collisions(conn) -> list[dict], each entry {'value': <the shared value>, 'keys': [<key names>]}, sorted deterministically (by key list) so runs are comparable.\n\nCLI: `python3 adjudicate.py <db_path>` prints one line per collision, naming the KEY NAMES and the number of keys. Add a `--json` flag emitting the same redacted shape as JSON.\n\nTHE OUTPUT RULE, and it is absolute: neither the human output NOR the --json output ever prints a value \u2014 not a digit, not a fragment. A collision report is about which slots disagree, not about the digits. The value stays in the returned dict for a deliberate in-process lookup; it never reaches stdout. No personal values in this file, its docstrings, or its examples.",
+  "verify": "python3 -c \"\nimport os, sys, json, sqlite3, subprocess\nsys.path.insert(0, '.')\np = '/tmp/_adj_verify.db'\nif os.path.exists(p): os.remove(p)\nc = sqlite3.connect(p)\nc.execute('CREATE TABLE records_facts (key_name TEXT, value TEXT, is_current INTEGER)')\nc.executemany('INSERT INTO records_facts VALUES (?,?,?)',\n              [('alpha','SENTINELVALUE',1),('beta','SENTINELVALUE',1),\n               ('gamma','OTHER',1),('delta','SENTINELVALUE',0)])\nc.commit()\nfrom adjudicate import find_collisions\nr = find_collisions(c)\nassert len(r) == 1, r\nassert r[0]['keys'] == ['alpha','beta'], 'a retired row (is_current=0) sharing a value with a current key must NOT join the collision: ' + repr(r)\nc.close()\nout = subprocess.run([sys.executable,'adjudicate.py',p], capture_output=True, text=True)\nassert out.returncode == 0, out.stderr\nassert 'alpha' in out.stdout and 'beta' in out.stdout, 'the CLI must name the colliding keys: ' + repr(out.stdout)\nassert 'SENTINELVALUE' not in out.stdout, 'THE OUTPUT RULE IS ABSOLUTE: the CLI printed a value: ' + repr(out.stdout)\noutj = subprocess.run([sys.executable,'adjudicate.py',p,'--json'], capture_output=True, text=True)\nassert outj.returncode == 0, outj.stderr\njson.loads(outj.stdout)\nassert 'SENTINELVALUE' not in outj.stdout, 'the --json output printed a value: ' + repr(outj.stdout)\nprint('ok')\"",
+  "notes": "verified on attempt 1 via the coder lane"
+ },
+ "RETRIEVAL:V-07": {
+  "id": "RETRIEVAL:V-07",
+  "title": "test_adjudicate.py: require test function name to include 'planted'",
+  "status": "in-progress",
+  "detail": "Create /var/home/admin/jarvis/retrieval/test_adjudicate.py using pytest.\n\nTHE FIXTURE TABLE NAME IS NOT NEGOTIABLE. The module under test calls find_collisions(conn), which issues `SELECT key_name, value FROM records_facts`. Your in-memory fixture MUST create a table named records_facts with columns (key_name TEXT, value TEXT, is_current INTEGER). Any other table name raises OperationalError and the test fails no matter how good its assertions are \u2014 a fixture on a table called `facts` has already cost this item three attempts.\n\nBuild a synthetic records_facts containing a planted collision (two keys sharing one value) plus rows that must NOT be reported:\n  - two keys with different values;\n  - the same key twice with the same value (not a collision \u2014 one key cannot contradict itself);\n  - a retired row with is_current = 0 whose value ALSO appears under a current key. A retired fact is not a live contradiction, and this decoy only exercises the filter if its value is shared with a current row.\n\nThe test function must be named exactly `test_planted_collision` and must assert the planted collision is found and every decoy is absent.",
+  "verify": "python3 -m pytest test_adjudicate.py -q -k planted",
+  "notes": "respec after 3 failures: The test function name must contain 'planted' to match the -k flag in the verify command."
+ },
+ "RETRIEVAL:V-08": {
+  "id": "RETRIEVAL:V-08",
+  "title": "test_adjudicate.py: a clean fixture reports NOTHING",
+  "status": "pending",
+  "detail": "Edit /var/home/admin/jarvis/retrieval/test_adjudicate.py.\n\nAdd the negative case: a fixture with no collisions must return an empty list. This is the half that catches an over-eager detector \u2014 a probe that reports everything is as useless as one that reports nothing, and it is the failure mode a positive-only test suite cannot see.\n\nTHE FIXTURE TABLE NAME IS NOT NEGOTIABLE, exactly as in the planted-collision test: find_collisions(conn) issues `SELECT key_name, value FROM records_facts`, so the fixture MUST create a table named records_facts with columns (key_name TEXT, value TEXT, is_current INTEGER). Any other table name raises OperationalError and the test fails whatever its assertions say.\n\nAlso assert the CLI never prints a value: run `python3 adjudicate.py <db>` against a synthetic db whose colliding value is an unmistakable sentinel string, and assert the sentinel is absent from stdout while the colliding KEY NAMES are present.",
+  "verify": "python3 -m pytest test_adjudicate.py -q",
+  "notes": null
+ },
+ "RETRIEVAL:V-09": {
+  "id": "RETRIEVAL:V-09",
+  "title": "eval_baseline.py: store a lane_eval baseline and diff against it",
+  "status": "pending",
+  "detail": "Create /var/home/admin/jarvis/retrieval/eval_baseline.py.\n\nTwo functions over lane_eval.py's --json output.\n\nTHE BASELINE SHAPE IS FIXED BY lane_eval.py AND IS NOT A DICT OF VERDICTS. Its --json output (lane_eval.py:349) is:\n    {\"<model>|<mode>\": [[<class>, <verdict>], ...], ...}\nkeyed by model and mode (mode is 'blind', 'grounded' or 'lane'), whose value is a LIST of [class, verdict] pairs. Verdicts are one of: correct, refused, INVENTED, wrong, error. Read that file before writing this one \u2014 a baseline built against a different shape compares nothing and reports no regression, forever.\n\nstore(path, data) -> writes a baseline file, and REFUSES to overwrite an existing one unless overwrite=True. A baseline that can be silently clobbered is not a baseline.\n\ndiff(baseline, new) -> a dict with three keys:\n  'changed': list of {'case', 'was', 'now'} for every case whose verdict differs, where case is the fully-qualified '<model>|<mode>|<class>';\n  'added':   cases present in new but not in baseline, same 'case' shape;\n  'removed': cases present in baseline but not in new.\nAll three lists sorted deterministically by case so runs are comparable, and an unchanged case is reported nowhere. A diff that only notices improvements is worse than none \u2014 a correct answer turning wrong is the whole reason this file exists.",
+  "verify": "python3 -c \"import sys; sys.path.insert(0,'.'); from eval_baseline import diff; b = {'m1|blind': [['c1','correct'],['c2','wrong']], 'm1|lane': [['c9','correct']]}; n = {'m1|blind': [['c1','correct'],['c2','correct']], 'm1|lane': [['c9','correct'],['c10','wrong']]}; d = diff(b,n); assert len(d['changed']) == 1, d; e = d['changed'][0]; assert e['case'] == 'm1|blind|c2', d; assert e['was'] == 'wrong' and e['now'] == 'correct', d; assert [x['case'] for x in d['added']] == ['m1|lane|c10'], d; assert d['removed'] == [], d\"",
+  "notes": null
+ },
+ "RETRIEVAL:V-10": {
+  "id": "RETRIEVAL:V-10",
+  "title": "test_eval_baseline.py: the diff detects a regression and a fix",
+  "status": "pending",
+  "detail": "Create /var/home/admin/jarvis/retrieval/test_eval_baseline.py using pytest.\n\nTHE BASELINE SHAPE IS FIXED BY lane_eval.py AND IS NOT A DICT OF VERDICTS. Its --json output (lane_eval.py:349) is:\n    {\"<model>|<mode>\": [[<class>, <verdict>], ...], ...}\nkeyed by model and mode (mode is 'blind', 'grounded' or 'lane'), whose value is a LIST of [class, verdict] pairs. Verdicts are one of: correct, refused, INVENTED, wrong, error. Read that file before writing this one \u2014 a baseline built against a different shape compares nothing and reports no regression, forever.\n\nAssert diff() reports a wrong->correct case as changed, a correct->wrong case as changed (a diff that only notices improvements is worse than none), an unchanged case as NOT changed, and an added or removed case in its own bucket rather than in 'changed'.\n\nAlso assert a case's identity is the full '<model>|<mode>|<class>': the same class name failing in 'blind' and in 'grounded' must read as two distinct cases, not one.\n\nAlso assert store() refuses to overwrite an existing baseline and succeeds with overwrite=True.",
+  "verify": "python3 -m pytest test_eval_baseline.py -q",
+  "notes": null
+ }
+}
