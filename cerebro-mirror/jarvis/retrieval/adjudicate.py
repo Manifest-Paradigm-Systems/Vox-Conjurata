@@ -32,13 +32,13 @@ def find_collisions(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
     for key, value in rows:
         value_to_keys[value].append(key)
 
-    # Filter groups with more than one key
+    # Filter groups with more than one distinct key
     collisions = []
     for value, keys in value_to_keys.items():
-        if len(keys) > 1:
-            # Sort keys to ensure deterministic output
-            keys.sort()
-            collisions.append({'value': value, 'keys': keys})
+        # Remove duplicates and sort keys to ensure deterministic output
+        distinct_keys = sorted(list(set(keys)))
+        if len(distinct_keys) > 1:
+            collisions.append({'value': value, 'keys': distinct_keys})
 
     # Sort collisions by the keys list for deterministic output
     collisions.sort(key=lambda x: x['keys'])

@@ -61,3 +61,38 @@ def test_expand_does_not_mutate_input():
     original_input = input_terms.copy()
     expand(input_terms)
     assert input_terms == original_input
+
+
+def test_passthrough_unknown():
+    # an unknown term passes through expand() unchanged
+    input_terms = ["unknown_term"]
+    result = expand(input_terms)
+    assert result == input_terms
+
+
+def test_case_insensitive():
+    # keys_for("DUTY_STATION") includes "duty_location"
+    result = keys_for("DUTY_STATION")
+    assert "duty_location" in result
+
+
+def test_multiword_phrase():
+    # keys_for("pay entry base date") includes "pebd"
+    result = keys_for("pay entry base date")
+    assert "pebd" in result
+
+
+def test_expand_dedup():
+    # expand(["mos", "military occupational specialty"]) yields each key exactly once, no duplicates
+    result = expand(["mos", "military occupational specialty"])
+    assert result.count("occupation") == 1
+    assert result.count("occupation_code") == 1
+    assert len(result) == 2
+
+
+def test_input_not_mutated():
+    # expand() does not mutate the list it is given
+    input_terms = ["mos", "home_address"]
+    original_input = input_terms.copy()
+    expand(input_terms)
+    assert input_terms == original_input
