@@ -57,7 +57,8 @@ IGNORE AND FLUSH — never report these:
 - conversational filler ("Are you there?", "Hello", "Thanks", "Can you hear me?")
 - transient status checks and immediate one-off intents ("what time is it", "call the dentist now")
 - speculation, brainstorming that reached no conclusion, and questions with no answer
-- anything you are inferring rather than reading
+- anything you are inferring rather than reading (EXCEPT the subject of a correction --
+  see the correction rule at the end, where restoring it is exactly the job)
 - ANYTHING JARVIS SAID ABOUT HIMSELF. His turns are labelled [JARVIS]. What he says about
   his OWN state, actions and progress — "the music generator is experiencing difficulties",
   "development is progressing smoothly", "voice reverted to the regular voice", "has applied
@@ -74,6 +75,20 @@ For a decision, record the DECISION, not the debate that preceded it. If the seg
 revisits a decision and CHANGES it, record the new position — a later worker resolves \
 which one stands.
 
+WHEN THE OWNER SAYS YOU WERE WRONG, THAT IS A FACT -- and it is the one kind of fact
+whose subject lives in YOUR turn, not his. "No, that's not correct" has no subject by
+itself, so you must restore it: read what he is rejecting out of the [JARVIS] turn above
+it, and name that claim in "corrects".
+
+  - If he rejects it AND states the truth, emit a normal entry for the corrected value with
+    "corrects" set to the claim he rejected, quoted closely enough to be found again.
+  - If he only rejects it and states nothing ("that's wrong", "I never said that"), emit ONE
+    entry with "kind": "retraction" and "statement" = the claim being withdrawn.
+  - NEVER emit a correction without "corrects" or "retraction". A correction whose referent
+    is unnamed cannot retire the wrong belief, and you will keep repeating the error -- which
+    is precisely the failure this rule exists to stop.
+  - A correction is not a disagreement to be debated. Record what he says stands.
+
 Reply with ONE JSON object and nothing else. No markdown fence, no commentary.
 
 {
@@ -81,7 +96,8 @@ Reply with ONE JSON object and nothing else. No markdown fence, no commentary.
     {"statement": "<one declarative sentence, self-contained, no pronouns>",
      "entity": "<one of: cerebro_system, workhorse, user, rental_property, dave_care, cinematome, fleet, other>",
      "topic": "<short snake_case subject, e.g. memory_architecture>",
-     "kind": "<fact|preference|config|decision>"}
+     "kind": "<fact|preference|config|decision|retraction>",
+     "corrects": "<the claim the OWNER just rejected, or null>"}
   ],
   "archive": {
     "worth_keeping": <true if this segment contains reasoning or alternatives that would matter later>,
@@ -118,6 +134,12 @@ def window_is_trivial(rows) -> bool:
     booking lives. Filtering by WHO SPOKE is the wrong instrument; the noise is
     a property of what was SAID, and that is the output gate's job below.
     """
+    if owner_corrects(rows):
+        # A correction is SHORT BY NATURE -- "no, that's not correct" is 21 characters
+        # -- so the char count below would skip it as filler. That is the one window
+        # where a wrong belief gets retired, and skipping it is how Jarvis ends up
+        # repeating the error he was just corrected on.
+        return False
     substance = [r["content"] for r in rows if not looks_like_filler(r["content"])]
     return sum(len(c) for c in substance) < MIN_CHARS
 
@@ -231,6 +253,186 @@ def identity_from_nobody(statement: str, rows) -> bool:
     return True
 
 
+# ------------------------------------------------------------------ corrections
+# THE OWNER SAYING "THAT'S NOT CORRECT" IS A FACT, AND IT NEEDS ITS CONTEXT.
+#
+# Measured 2026-09-23, from the owner's own report -- "Jarvis should learn when he is told
+# something is not correct ... he seems to be forgetting the context":
+#
+#     Jarvis: "Your blood type is AB+."
+#     Owner:  "No, that's wrong."
+#
+# Nothing retires that. The correction carries no subject of its own -- the subject lives in
+# Jarvis's turn -- so a statement extracted from the owner's turn alone cannot match the
+# wrong belief, and the belief stays active and keeps being recalled.
+#
+# Worse, when it DOES match, the merge runs the wrong way. `_words` keeps tokens of three or
+# more characters, so "AB+" and "O-" both vanish:
+#
+#     "The owner's blood type is AB+"  ->  {the, owner, blood, type}
+#     "The owner's blood type is O-"   ->  {the, owner, blood, type}
+#
+# Identical sets, Jaccard 1.0, which is above the 0.9 reinforce line in consolidate(). So the
+# corrected fact does not replace the wrong one -- it REINFORCES it, and confidence goes UP
+# by 0.1. The owner corrects Jarvis and Jarvis becomes more certain of the thing he was just
+# told was wrong. Any value short enough to be dropped by _words does this: blood types,
+# two-letter state codes, short codes, and every two-character difference generally.
+#
+# So a correction is NEVER a reinforcement. It is always the replacement of a named referent.
+_CORRECTION_CUES = re.compile(
+    r"(?:that'?s\s+(?:not|wrong|incorrect|the\s+wrong)|not\s+(?:correct|right|true|what)|"
+    r"that\s+is\s+(?:not|wrong|incorrect)|(?:you'?re|that'?s|this\s+is)\s+wrong|"
+    r"i\s+(?:never|didn'?t|did\s+not)\s+(?:say|said|tell|told)|"
+    r"no,?\s+(?:it'?s|i'?m|that'?s|my|the|they|he|she|this)|"
+    r"incorrect|not\s+what\s+i\s+said|stop\s+saying|"
+    r"i\s+said|i\s+told\s+you|actually,?\s)", re.I)
+
+
+def owner_corrects(rows) -> bool:
+    """True when the owner rejects or repairs something in this window."""
+    return any(_CORRECTION_CUES.search(r["content"] or "")
+               for r in rows if r["role"] == "user")
+
+
+def find_corrected_fact(conn, claim: str):
+    """Locate the belief a correction refers to. Returns (row, score) or (None, 0.0).
+
+    WIDER THAN find_similar_fact, ON PURPOSE. Two relaxations, both because a retraction
+    that finds nothing is a SILENT no-op: the wrong belief survives and Jarvis repeats the
+    error, which is the entire failure this section exists to stop.
+      - no entity/topic filter, because the model's topic for a correction is a guess and
+        an exact-topic miss means the search never even sees the row;
+      - a second, lower pass, because a correction paraphrases what it is rejecting
+        ("that Ranger thing").
+    A wrong match is visible and reversible -- `status` is a column, not a delete -- while a
+    missed one is invisible.
+    """
+    for th in (0.6, 0.35):
+        row = jarvis_db.find_similar_fact(conn, claim, threshold=th)
+        if row is not None:
+            return row, th
+    return None, 0.0
+
+
+def apply_correction(conn, fact: dict, *, session: str, dry: bool, result: dict) -> None:
+    """Retire the belief the owner rejected, and record what stands in its place.
+
+    Three shapes, all of them the same event seen from different angles:
+      - retraction, no replacement ("that's wrong")      -> retire, write nothing
+      - retraction, referent not found                   -> report, write nothing
+      - correction with a value ("no, it's O-")          -> supersede the referent
+    """
+    kind = fact.get("kind", "fact")
+    statement = (fact.get("statement") or "").strip()
+    claim = (fact.get("corrects") or "").strip() or statement
+    target, score = find_corrected_fact(conn, claim)
+
+    if target is None:
+        # Report rather than invent. "The owner objected" tells us a belief is wrong; it
+        # does not tell us what is true, and a fact invented to fill that gap is the exact
+        # failure mode the identity gate was written for.
+        result["unmatched"].append(
+            f"correction names no belief we hold ({kind}): {claim[:70]}")
+        if kind == "retraction" or not statement:
+            return
+        action, fid = consolidate(conn, fact, session=session, dry=dry)
+    elif kind == "retraction":
+        if not dry:
+            with conn:
+                conn.execute("UPDATE facts SET status='retired', updated=?"
+                             " WHERE id=? AND status='active'", (time.time(), target["id"]))
+        result["retracted"] += 1
+        result["actions"].append(f"retract (match {score:.2f}): {claim[:70]}")
+        return
+    else:
+        action, fid = consolidate(conn, fact, session=session, dry=dry, replaces=target)
+
+    if action == "empty":
+        return
+    result["facts"] += 1
+    result[action] = result.get(action, 0) + 1
+    result["actions"].append(f"{action}: {statement[:90]}")
+
+
+# ------------------------------------------------------------------ write gates
+# A FACT MUST COME FROM SOMETHING THAT CAN BE SHOWN. The discriminator prompt tells the
+# extractor "Jarvis as a SOURCE is fine" -- and it is, when he is REPORTING a reading,
+# which the fetching lanes mark with an inline [N] citation. It is NOT fine when he is
+# speaking from his own priors, because that is the model asserting, and there is a
+# measured result for where that ends: 43 facts distilled from answers he had made up --
+# including answers the eval was built to provoke AS inventions -- which sat in `facts`
+# as "verified memory" until they were retired on 2026-09-23. The prompt cannot close
+# this, because the next prompt is another chance to read it loosely.
+#
+# So: traceable to an OWNER turn -> keep. Traceable to a JARVIS turn that cites -> keep,
+# it came from a document. Traceable to a JARVIS turn that cites nothing -> reject.
+_CITATION = re.compile(r"\[\d{1,2}\]")
+
+_DISTINCTIVE_RX = (
+    re.compile(r"\b[A-Za-z]*\d[\w.\-/]*\b"),   # carries a digit: 1974, A22658008
+    re.compile(r"\b[A-Z]{2,}[+-]?\b"),          # O+, AB, SSN, USMC
+    re.compile(r"\b[A-Z][a-z]{2,}\b"),          # proper nouns
+)
+# Capitalised ordinary words are not evidence of anything: a sentence-initial "The" would
+# otherwise make almost every statement "attributable" to whatever turn was nearby.
+_NOT_DISTINCTIVE = {
+    "the", "this", "that", "these", "those", "there", "their", "they", "then", "them",
+    "what", "when", "where", "which", "while", "who", "whom", "why", "how", "his",
+    "her", "she", "him", "and", "but", "for", "not", "was", "were", "are", "has",
+    "have", "had", "owner", "jarvis", "from", "with", "about", "into", "over", "after",
+    "before", "his", "its", "our", "you", "your", "one", "two",
+}
+
+
+def _distinctive(statement: str) -> list[str]:
+    """The parts of a statement that can be traced back to a turn.
+
+    Ordinary words are excluded on purpose -- they recur in every segment, so including
+    them would make every statement attributable to something and the gate never fire.
+    """
+    found = set()
+    for rx in _DISTINCTIVE_RX:
+        for m in rx.finditer(statement or ""):
+            tok = m.group(0).lower()
+            if tok in _NOT_DISTINCTIVE:
+                continue
+            found.add(tok)
+    return sorted(found)
+
+
+def _mentions(text_low: str, tok: str) -> bool:
+    """Whole-token match. A substring test would let "ab" match inside "about"."""
+    return re.search(r"(?<!\w)" + re.escape(tok) + r"(?!\w)", text_low) is not None
+
+
+def ungrounded_jarvis_claim(statement: str, rows) -> bool:
+    """True when a statement traces to Jarvis's own turn and cites no evidence.
+
+    CONSERVATIVE BY CONSTRUCTION: it returns False unless it can POSITIVELY show that the
+    content came from an uncited Jarvis turn. A statement it cannot trace anywhere is left
+    to the other gates rather than rejected here -- losing a fact the owner stated is
+    worse than keeping one he did not, and this gate only ever sees candidates that
+    already passed the filler and identity checks.
+    """
+    toks = _distinctive(statement)
+    if not toks:
+        return False
+
+    user_text = "\n".join((r["content"] or "") for r in rows
+                           if r["role"] == "user").lower()
+    if any(_mentions(user_text, t) for t in toks):
+        return False                      # he said it; his word is the source
+
+    for r in rows:
+        if r["role"] != "assistant":
+            continue
+        text = r["content"] or ""
+        low = text.lower()
+        if any(_mentions(low, t) for t in toks):
+            return not _CITATION.search(text)   # a cited reading is evidence; a bare one is not
+    return False
+
+
 # ------------------------------------------------------------------ model call
 
 def _extract_json(text: str) -> dict | None:
@@ -290,6 +492,27 @@ def fetch_window(conn, after_id: int, limit: int):
         " ORDER BY id LIMIT ?", (after_id, limit)))
 
 
+CONTEXT_TURNS = int(os.getenv("JARVIS_MEMORY_CONTEXT", "6"))  # lookback for corrections
+
+
+def fetch_context(conn, before_id: int, limit: int = CONTEXT_TURNS):
+    """The turns immediately before a window, for a correction to refer to.
+
+    A window is a HARD 24-turn boundary. A correction that lands on the first turn of a
+    window has nothing above it -- the claim it rejects sits in the previous window, which
+    this pass never sees -- so its subject cannot be restored and the correction is
+    emitted with no referent at all. That is "he forgets the context" in its purest form:
+    the words arrive, the thing they are about does not.
+
+    READ-ONLY. These turns were already consolidated by the previous window; they are
+    shown to the extractor and never consolidated again.
+    """
+    rows = list(conn.execute(
+        "SELECT id, ts, session, model, role, content FROM turns WHERE id < ?"
+        " ORDER BY id DESC LIMIT ?", (before_id, limit)))
+    return rows[::-1]                       # back into chronological order
+
+
 def transcript_of(rows) -> str:
     out = []
     for r in rows:
@@ -298,7 +521,8 @@ def transcript_of(rows) -> str:
     return "\n".join(out)
 
 
-def consolidate(conn, fact: dict, *, session: str, dry: bool) -> tuple[str, int | None]:
+def consolidate(conn, fact: dict, *, session: str, dry: bool,
+                replaces=None) -> tuple[str, int | None]:
     """Decide insert vs. duplicate vs. supersede. Returns (action, row_id).
 
     The rule, in order:
@@ -306,12 +530,19 @@ def consolidate(conn, fact: dict, *, session: str, dry: bool) -> tuple[str, int 
       - a similar subject with different content    -> a revision, so supersede
       - otherwise                                   -> a new belief
     Lexical, so it is auditable and cheap; and it errs toward *not* merging.
+
+    `replaces` is the row the owner just corrected. When it is supplied the
+    match is not searched for and the reinforce shortcut DOES NOT APPLY: a
+    correction is always a replacement. Two statements differing only in a
+    short value reduce to the same token set under _words, so without this the
+    corrected fact would reinforce the one the owner just rejected.
     """
     statement = (fact.get("statement") or "").strip()
     if not statement:
         return "empty", None
     entity, topic = fact.get("entity"), fact.get("topic")
-    match = jarvis_db.find_similar_fact(conn, statement, entity=entity, topic=topic)
+    match = (replaces if replaces is not None else
+             jarvis_db.find_similar_fact(conn, statement, entity=entity, topic=topic))
     if match is None:
         if dry:
             return "insert", None
@@ -321,7 +552,7 @@ def consolidate(conn, fact: dict, *, session: str, dry: bool) -> tuple[str, int 
 
     a, b = jarvis_db._words(match["statement"]), jarvis_db._words(statement)
     overlap = len(set(a) & set(b)) / max(1, len(set(a) | set(b)))
-    if overlap >= 0.9:
+    if overlap >= 0.9 and replaces is None:
         if not dry:
             with conn:
                 conn.execute("UPDATE facts SET confidence=MIN(2.0, confidence+0.1), updated=?"
@@ -335,15 +566,23 @@ def consolidate(conn, fact: dict, *, session: str, dry: bool) -> tuple[str, int 
     return "supersede", match["id"]
 
 
-def process_window(conn, rows, *, dry: bool) -> dict:
+def process_window(conn, rows, *, dry: bool, context=None) -> dict:
     result = {"facts": 0, "insert": 0, "reinforce": 0, "supersede": 0, "archived": 0,
-              "actions": [], "rejected": [], "skipped": None}
+              "retracted": 0, "unmatched": [], "actions": [], "rejected": [],
+              "skipped": None}
 
     if window_is_trivial(rows):
         result["skipped"] = "filler-only window"
         return result
 
-    reply = call_lane(DISCRIMINATOR + transcript_of(rows))
+    transcript = transcript_of(rows)
+    if context:
+        # Labelled separately because these turns are NOT being consolidated:
+        # they are here only so a correction can name the claim it rejects.
+        transcript = ("EARLIER IN THIS CONVERSATION (already consolidated -- "
+                      "shown only so a correction can name what it rejects):\n"
+                      + transcript_of(context) + "\n\nCURRENT SEGMENT:\n" + transcript)
+    reply = call_lane(DISCRIMINATOR + transcript)
     data = _extract_json(reply)
     if data is None:
         # No parse -> no cursor advance -> the next tick retries this window.
@@ -355,6 +594,17 @@ def process_window(conn, rows, *, dry: bool) -> dict:
         if not isinstance(fact, dict):
             continue
         statement = (fact.get("statement") or "").strip()
+        if not statement:
+            continue
+        # CORRECTIONS COME FIRST, BEFORE EVERY REJECT GATE. A correction's subject
+        # necessarily lives in the turn being corrected -- usually an uncited
+        # [JARVIS] one -- so identity_from_nobody and ungrounded_jarvis_claim would
+        # each discard it and leave the wrong belief standing. And "the owner says
+        # this is wrong" is not a transient status report, which is what
+        # is_transient_statement is for. His rejection IS the evidence.
+        if (fact.get("corrects") or "").strip() or fact.get("kind") == "retraction":
+            apply_correction(conn, fact, session=session, dry=dry, result=result)
+            continue
         if is_transient_statement(statement):
             # Not written. Reported instead, so that a wrong call here is visible
             # and tunable rather than a silent deletion.
@@ -364,6 +614,12 @@ def process_window(conn, rows, *, dry: bool) -> dict:
             # About who the owner is, and he never said it. See the note above —
             # this is the gate that would have stopped "Michael Corwin".
             result["rejected"].append(f"identity, not from the owner: {statement[:70]}")
+            continue
+        if ungrounded_jarvis_claim(statement, rows):
+            # Traces to Jarvis's own answer, which cites nothing. He is allowed to
+            # be a source when he is reporting a reading; he is not allowed to be
+            # one when he is talking. See the note on the gate.
+            result["rejected"].append(f"from Jarvis, uncited: {statement[:70]}")
             continue
         action, fid = consolidate(conn, fact, session=session, dry=dry)
         if action == "empty":
@@ -388,7 +644,8 @@ def run_once(dry: bool = False, max_windows: int = 5, verbose: bool = True) -> d
     conn = jarvis_db.open_db()
     start = int(jarvis_db.get_cursor(conn, CURSOR, "0"))
     totals = {"windows": 0, "facts": 0, "insert": 0, "reinforce": 0, "supersede": 0,
-              "archived": 0, "skipped": 0, "rejected": 0, "last_id": start}
+              "archived": 0, "skipped": 0, "rejected": 0, "retracted": 0,
+              "unmatched": 0, "last_id": start}
 
     for _ in range(max_windows):
         rows = fetch_window(conn, totals["last_id"], WINDOW)
@@ -397,7 +654,10 @@ def run_once(dry: bool = False, max_windows: int = 5, verbose: bool = True) -> d
         if verbose:
             print(f"  window #{totals['windows'] + 1}: turns {rows[0]['id']}..{rows[-1]['id']} "
                   f"({len(rows)} turns)")
-        res = process_window(conn, rows, dry=dry)
+        # Lookback only when someone is being corrected: it costs a query, and the
+        # extractor does not need the past for an ordinary window.
+        ctx = fetch_context(conn, rows[0]["id"]) if owner_corrects(rows) else None
+        res = process_window(conn, rows, dry=dry, context=ctx)
         totals["windows"] += 1
         totals["facts"] += res["facts"]
         totals["insert"] += res["insert"]
@@ -405,6 +665,8 @@ def run_once(dry: bool = False, max_windows: int = 5, verbose: bool = True) -> d
         totals["supersede"] += res["supersede"]
         totals["archived"] += res["archived"]
         totals["rejected"] += len(res["rejected"])
+        totals["retracted"] += res["retracted"]
+        totals["unmatched"] += len(res["unmatched"])
         if res["skipped"]:
             totals["skipped"] += 1
             if verbose:
@@ -415,6 +677,9 @@ def run_once(dry: bool = False, max_windows: int = 5, verbose: bool = True) -> d
         for line in res["rejected"]:
             if verbose:
                 print(f"    rejected (not a fact): {line}")
+        for line in res["unmatched"]:
+            if verbose:
+                print(f"    UNMATCHED correction (nothing retired): {line}")
         totals["last_id"] = rows[-1]["id"]
         # A skipped window still advances: retrying filler forever would wedge the
         # queue behind it. Only an unparseable reply is worth a retry, and that
@@ -457,8 +722,9 @@ def main() -> int:
     totals = run_once(dry=a.dry_run, max_windows=a.max_windows, verbose=not a.quiet)
     print(f"memory: {totals['windows']} window(s), {totals['facts']} fact(s) "
           f"({totals['insert']} new, {totals['reinforce']} reinforced, "
-          f"{totals['supersede']} superseded), {totals['archived']} archived, "
-          f"{totals['skipped']} skipped — {time.time() - t0:.1f}s")
+          f"{totals['supersede']} superseded, {totals['retracted']} retracted), "
+          f"{totals['archived']} archived, {totals['skipped']} skipped, "
+          f"{totals['unmatched']} unmatched correction(s) — {time.time() - t0:.1f}s")
     return 0
 
 
