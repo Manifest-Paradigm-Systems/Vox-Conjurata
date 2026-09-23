@@ -1,4 +1,5 @@
 """Owner-vocabulary alias map: the phrase the owner speaks -> real fact key_name values."""
+import re
 from typing import List
 
 LABEL_VARIANTS = {
@@ -68,6 +69,48 @@ def label_variants(label) -> List[str]:
     if not isinstance(label, str):
         return []
     return LABEL_VARIANTS.get(label.strip().lower(), []).copy()
+
+
+# A phrase in the map is matched as a run of WORDS, so the separators the schema and the
+# owner disagree about (underscore vs space) cannot hide a phrase: "duty_station" and
+# "duty station" both reduce to the words duty, station.
+_WORD = re.compile(r"[a-z0-9]+")
+
+
+def resolve(text, mapping=None) -> tuple[List[str], set]:
+    """Real key_names for every mapped phrase appearing in `text`, and the words they cover.
+
+    Returns (keys, covered):
+      keys     the real `key_name` values, in map order, de-duplicated
+      covered  the surface words that took part in a match
+
+    Phrases are tried LONGEST FIRST, so "pay entry base date" resolves as one phrase rather
+    than being pre-empted by a shorter window inside it.
+    """
+    if not isinstance(text, str):
+        return [], set()
+    table = ALIAS_MAP if mapping is None else mapping
+    words = _WORD.findall(text.lower())
+    if not words:
+        return [], set()
+    widths = [len(p.split()) for p in table if p.strip()]
+    max_n = min(max(widths) if widths else 1, len(words))
+
+    keys: List[str] = []
+    covered: set = set()
+    seen: set = set()
+    for n in range(max_n, 0, -1):
+        for i in range(len(words) - n + 1):
+            window = words[i:i + n]
+            found = table.get(" ".join(window))
+            if not found:
+                continue
+            covered.update(window)
+            for key in found:
+                if key not in seen:
+                    seen.add(key)
+                    keys.append(key)
+    return keys, covered
 
 
 class AliasMap:

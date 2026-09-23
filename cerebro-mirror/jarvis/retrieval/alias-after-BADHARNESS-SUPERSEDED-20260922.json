@@ -1,0 +1,896 @@
+{
+  "_label": "AFTER",
+  "_keys": 81,
+  "facts": {
+    "20-year letter": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:20-year letter",
+        "why": null
+      }
+    },
+    "Law reference": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:Law reference",
+        "why": null
+      }
+    },
+    "Public Law": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:Public Law",
+        "why": null
+      }
+    },
+    "RCSBP": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:RCSBP",
+        "why": null
+      }
+    },
+    "Retirement age": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:Retirement age",
+        "why": null
+      }
+    },
+    "account_class": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:account_class",
+        "why": null
+      }
+    },
+    "action": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:action",
+        "why": null
+      }
+    },
+    "alliance_account_minimum": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:alliance_account_minimum",
+        "why": null
+      }
+    },
+    "amended_pad_end_date": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:amended_pad_end_date",
+        "why": null
+      }
+    },
+    "amended_tour_end_date": {
+      "schema": {
+        "verdict": "buried",
+        "rank": 2,
+        "exact": false,
+        "top": "fact:amended_tour_length",
+        "why": null
+      }
+    },
+    "amended_tour_length": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:amended_tour_length",
+        "why": null
+      }
+    },
+    "apft_date": {
+      "schema": {
+        "verdict": "buried",
+        "rank": 2,
+        "exact": false,
+        "top": "fact:apft_score",
+        "why": null
+      }
+    },
+    "apft_score": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:apft_score",
+        "why": null
+      }
+    },
+    "assigned_to": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:assigned_to",
+        "why": null
+      }
+    },
+    "blood_type": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:blood_type",
+        "why": null
+      },
+      "owner": {
+        "blood type": {
+          "verdict": "ok",
+          "rank": 1,
+          "exact": true,
+          "top": "fact:blood_type",
+          "why": null
+        }
+      }
+    },
+    "branch": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:branch",
+        "why": null
+      }
+    },
+    "coverage_increment": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:coverage_increment",
+        "why": null
+      }
+    },
+    "date_of_birth": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:date_of_birth",
+        "why": null
+      },
+      "owner": {
+        "date of birth": {
+          "verdict": "ok",
+          "rank": 1,
+          "exact": true,
+          "top": "fact:date_of_birth",
+          "why": null
+        },
+        "date_of_birth": {
+          "verdict": "ok",
+          "rank": 1,
+          "exact": true,
+          "top": "fact:date_of_birth",
+          "why": null
+        }
+      }
+    },
+    "date_of_rank": {
+      "schema": {
+        "verdict": "buried",
+        "rank": 3,
+        "exact": false,
+        "top": "fact:member_rank",
+        "why": null
+      }
+    },
+    "demob_station": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:demob_station",
+        "why": null
+      }
+    },
+    "deployment_end_date": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:deployment_end_date",
+        "why": null
+      }
+    },
+    "deployment_location": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:deployment_location",
+        "why": null
+      }
+    },
+    "deployment_start_date": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:deployment_start_date",
+        "why": null
+      }
+    },
+    "discharge_or_transfer": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:discharge_or_transfer",
+        "why": null
+      }
+    },
+    "dob": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:dob",
+        "why": null
+      }
+    },
+    "document_number": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:document_number",
+        "why": null
+      }
+    },
+    "dorres": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:dorres",
+        "why": null
+      }
+    },
+    "duty_location": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:duty_location",
+        "why": null
+      },
+      "owner": {
+        "duty station": {
+          "verdict": "buried",
+          "rank": 4,
+          "exact": false,
+          "top": "fact:member_station",
+          "why": null
+        },
+        "duty_station": {
+          "verdict": "ok",
+          "rank": 1,
+          "exact": true,
+          "top": "fact:duty_location",
+          "why": null
+        }
+      }
+    },
+    "duty_period": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:duty_period",
+        "why": null
+      }
+    },
+    "effective_date": {
+      "schema": {
+        "verdict": "buried",
+        "rank": 2,
+        "exact": false,
+        "top": "fact:discharge_or_transfer",
+        "why": null
+      }
+    },
+    "end_date": {
+      "schema": {
+        "verdict": "buried",
+        "rank": 4,
+        "exact": false,
+        "top": "fact:operation",
+        "why": null
+      }
+    },
+    "form_number": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:form_number",
+        "why": null
+      }
+    },
+    "form_obsolete_date": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:form_obsolete_date",
+        "why": null
+      }
+    },
+    "form_type": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:form_type",
+        "why": null
+      }
+    },
+    "form_version": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:form_version",
+        "why": null
+      }
+    },
+    "form_version_date": {
+      "schema": {
+        "verdict": "buried",
+        "rank": 2,
+        "exact": false,
+        "top": "fact:form_version",
+        "why": null
+      }
+    },
+    "home_city": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:home_city",
+        "why": null
+      },
+      "owner": {
+        "city": {
+          "verdict": "ok",
+          "rank": 1,
+          "exact": true,
+          "top": "fact:home_city",
+          "why": null
+        }
+      }
+    },
+    "home_state": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:home_state",
+        "why": null
+      }
+    },
+    "home_street": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:home_street",
+        "why": null
+      },
+      "owner": {
+        "address": {
+          "verdict": "ok",
+          "rank": 1,
+          "exact": true,
+          "top": "fact:home_street",
+          "why": null
+        },
+        "home address": {
+          "verdict": "ok",
+          "rank": 1,
+          "exact": true,
+          "top": "fact:home_street",
+          "why": null
+        },
+        "home_address": {
+          "verdict": "ok",
+          "rank": 1,
+          "exact": true,
+          "top": "fact:home_street",
+          "why": null
+        }
+      }
+    },
+    "home_zip": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:home_zip",
+        "why": null
+      },
+      "owner": {
+        "zip": {
+          "verdict": "ok",
+          "rank": 1,
+          "exact": true,
+          "top": "fact:home_zip",
+          "why": null
+        }
+      }
+    },
+    "maximum_coverage": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:maximum_coverage",
+        "why": null
+      }
+    },
+    "member_name": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:member_name",
+        "why": null
+      },
+      "owner": {
+        "full name": {
+          "verdict": "ok",
+          "rank": 1,
+          "exact": true,
+          "top": "fact:member_name",
+          "why": null
+        }
+      }
+    },
+    "member_occupation": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:member_occupation",
+        "why": null
+      },
+      "owner": {
+        "military occupational specialty": {
+          "verdict": "REFUSED",
+          "rank": null,
+          "exact": false,
+          "why": "no fact mentions occupational"
+        },
+        "mos": {
+          "verdict": "ok",
+          "rank": 1,
+          "exact": true,
+          "top": "fact:member_occupation",
+          "why": null
+        }
+      }
+    },
+    "member_rank": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:member_rank",
+        "why": null
+      },
+      "owner": {
+        "rank": {
+          "verdict": "ok",
+          "rank": 1,
+          "exact": true,
+          "top": "fact:member_rank",
+          "why": null
+        }
+      }
+    },
+    "member_station": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:member_station",
+        "why": null
+      }
+    },
+    "member_unit": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:member_unit",
+        "why": null
+      }
+    },
+    "military_occupation_code": {
+      "schema": {
+        "verdict": "buried",
+        "rank": 2,
+        "exact": false,
+        "top": "fact:member_occupation",
+        "why": null
+      },
+      "owner": {
+        "military occupational specialty": {
+          "verdict": "REFUSED",
+          "rank": null,
+          "exact": false,
+          "why": "no fact mentions occupational"
+        },
+        "mos": {
+          "verdict": "buried",
+          "rank": 2,
+          "exact": false,
+          "top": "fact:member_occupation",
+          "why": null
+        }
+      }
+    },
+    "operation": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:operation",
+        "why": null
+      }
+    },
+    "order_number": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:order_number",
+        "why": null
+      }
+    },
+    "original_order_date": {
+      "schema": {
+        "verdict": "buried",
+        "rank": 2,
+        "exact": false,
+        "top": "fact:original_tour_length",
+        "why": null
+      }
+    },
+    "original_pad_end_date": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:original_pad_end_date",
+        "why": null
+      }
+    },
+    "original_tour_end_date": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:original_tour_end_date",
+        "why": null
+      }
+    },
+    "original_tour_length": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:original_tour_length",
+        "why": null
+      }
+    },
+    "pebd": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:pebd",
+        "why": null
+      },
+      "owner": {
+        "pay entry base date": {
+          "verdict": "REFUSED",
+          "rank": null,
+          "exact": false,
+          "why": "no fact mentions base, entry, pay"
+        },
+        "pay_entry_base_date": {
+          "verdict": "ok",
+          "rank": 1,
+          "exact": true,
+          "top": "fact:pebd",
+          "why": null
+        }
+      }
+    },
+    "period_covered": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:period_covered",
+        "why": null
+      }
+    },
+    "period_of_active_duty": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:period_of_active_duty",
+        "why": null
+      }
+    },
+    "period_of_adt": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:period_of_adt",
+        "why": null
+      }
+    },
+    "permanent_extension_board_date": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:permanent_extension_board_date",
+        "why": null
+      }
+    },
+    "position": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:position",
+        "why": null
+      }
+    },
+    "promotion_date": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:promotion_date",
+        "why": null
+      }
+    },
+    "purpose": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:purpose",
+        "why": null
+      }
+    },
+    "rank": {
+      "schema": {
+        "verdict": "ok_equiv",
+        "rank": 2,
+        "exact": false,
+        "top": "fact:member_rank",
+        "why": null
+      }
+    },
+    "reason": {
+      "schema": {
+        "verdict": "buried",
+        "rank": 2,
+        "exact": false,
+        "top": "fact:released_reason",
+        "why": null
+      }
+    },
+    "released_from": {
+      "schema": {
+        "verdict": "buried",
+        "rank": 2,
+        "exact": false,
+        "top": "fact:released_reason",
+        "why": null
+      }
+    },
+    "released_reason": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:released_reason",
+        "why": null
+      }
+    },
+    "report_date": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:report_date",
+        "why": null
+      }
+    },
+    "reporting_date": {
+      "schema": {
+        "verdict": "buried",
+        "rank": 2,
+        "exact": false,
+        "top": "fact:reporting_location",
+        "why": null
+      }
+    },
+    "reporting_location": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:reporting_location",
+        "why": null
+      }
+    },
+    "revision_date": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:revision_date",
+        "why": null
+      }
+    },
+    "revoked_date": {
+      "schema": {
+        "verdict": "buried",
+        "rank": 2,
+        "exact": false,
+        "top": "fact:revoked_order",
+        "why": null
+      }
+    },
+    "revoked_order": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:revoked_order",
+        "why": null
+      }
+    },
+    "saf_cic": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:saf_cic",
+        "why": null
+      }
+    },
+    "security_clearance": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:security_clearance",
+        "why": null
+      }
+    },
+    "service_component": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:service_component",
+        "why": null
+      }
+    },
+    "specialty_code": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:specialty_code",
+        "why": null
+      }
+    },
+    "ssn": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:ssn",
+        "why": null
+      }
+    },
+    "station_number": {
+      "schema": {
+        "verdict": "buried",
+        "rank": 2,
+        "exact": false,
+        "top": "fact:member_station",
+        "why": null
+      },
+      "owner": {
+        "station number": {
+          "verdict": "buried",
+          "rank": 2,
+          "exact": false,
+          "top": "fact:member_station",
+          "why": null
+        },
+        "station_number": {
+          "verdict": "ok",
+          "rank": 1,
+          "exact": true,
+          "top": "fact:station_number",
+          "why": null
+        }
+      }
+    },
+    "tour_length": {
+      "schema": {
+        "verdict": "ok_equiv",
+        "rank": 2,
+        "exact": false,
+        "top": "fact:original_tour_length",
+        "why": null
+      }
+    },
+    "travel_fund_cite": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:travel_fund_cite",
+        "why": null
+      }
+    },
+    "unit": {
+      "schema": {
+        "verdict": "buried",
+        "rank": 2,
+        "exact": false,
+        "top": "fact:unit_location",
+        "why": null
+      }
+    },
+    "unit_location": {
+      "schema": {
+        "verdict": "ok",
+        "rank": 1,
+        "exact": true,
+        "top": "fact:unit_location",
+        "why": null
+      }
+    }
+  }
+}

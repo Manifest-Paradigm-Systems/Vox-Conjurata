@@ -9,19 +9,26 @@ def store(path, data, overwrite=False):
         json.dump(data, f, indent=2)
 
 
+def _cases(series: dict) -> dict:
+    """{model|mode|question-index|class: verdict} — one case per QUESTION, not per class.
+
+    The index is load-bearing. Keying on (model|mode|class) alone makes every question of a
+    class collide on one key, so the dict keeps only the last verdict in that class and a
+    change to any earlier question reads as "no change".
+    """
+    cases = {}
+    for key, value in (series or {}).items():
+        for i, (class_name, verdict) in enumerate(value or []):
+            cases[f"{key}|{i}|{class_name}"] = verdict
+    return cases
+
+
 def diff(baseline, new):
-    # Convert baseline and new to sets of (model|mode|class) -> verdict
-    baseline_cases = {}
-    for key, value in baseline.items():
-        for class_name, verdict in value:
-            case = f"{key}|{class_name}"
-            baseline_cases[case] = verdict
-    
-    new_cases = {}
-    for key, value in new.items():
-        for class_name, verdict in value:
-            case = f"{key}|{class_name}"
-            new_cases[case] = verdict
+    # Convert both sides to {model|mode|index|class} -> verdict. One case per QUESTION:
+    # keying on (model|mode|class) made all 8 class-A questions collide on one key, so the
+    # dict kept only the last verdict of each class and a change to any other read as none.
+    baseline_cases = _cases(baseline)
+    new_cases = _cases(new)
     
     # Find changes, additions, and removals
     changed = []

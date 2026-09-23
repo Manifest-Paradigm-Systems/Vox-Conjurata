@@ -43,10 +43,15 @@ import sqlite3
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# The owner-vocabulary alias map lives in retrieval/, beside this tree. Same host, same
+# service, so it is imported rather than mirrored — the same rule as mail_search below.
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "retrieval"))
 # Imported, not mirrored — see the docstring.
 from mail_search import (                                        # noqa: E402
     META_SCAN_LIMIT, _excluded, _field, _rank, connect, content_terms, load_rules,
 )
+import alias_map                                                 # noqa: E402
 
 DB_PATH = os.path.expanduser(os.environ.get("JARVIS_GOOGLE_DB",
                                             "~/jarvis/google/google.db"))
@@ -161,7 +166,7 @@ def _fact_terms(terms: list[str]) -> list[str]:
     return [t for t in terms if t not in QUALIFIERS]
 
 
-def _fact_hits(conn, terms, limit, account=None):
+def _fact_hits(conn, terms, limit, account=None, phrase=None):
     """The curated facts about the owner, from `records_facts`. Returns (hits, refusal).
 
     THE MOST AUTHORITATIVE THING IN THIS INDEX, AND NOTHING WAS SEARCHING IT. The table
@@ -181,6 +186,10 @@ def _fact_hits(conn, terms, limit, account=None):
     returned rather than raised or logged because the caller has to be able to say it out
     loud — the failure being fixed here is precisely a tier that answered when it should
     have stayed silent.
+
+    `phrase` is the caller's RAW query. `terms` has already been reduced to content words,
+    which is too late to recognise a multi-word owner phrase ("pay entry base date"), so the
+    alias map — which is keyed on the phrase — is consulted with this.
     """
     if not terms:
         return [], None
@@ -201,28 +210,64 @@ def _fact_hits(conn, terms, limit, account=None):
     if not n:
         return [], None
 
+    entities = _fact_terms(terms)
+
+    # THE OWNER'S WORD FOR A THING IS NOT THE SCHEMA'S WORD FOR IT. Measured 2026-09-22 over
+    # the owner's own vocabulary, each asked as "what is my <phrase>", 10 of 20 phrasings were
+    # refused by the gate below while the answer sat in this table as a row:
+    #
+    #     "address", "home address"  -> no fact mentions address        (the row is home_street)
+    #     "mos"                      -> no fact mentions mos            (member_occupation)
+    #     "pay entry base date"      -> no fact mentions base, entry, pay          (pebd)
+    #
+    # PHRASE-LEVEL MATCHING IS LOAD-BEARING, and a per-word lookup is not enough. Measured
+    # while wiring this: `keys_for(phrase)` with the CALLER'S RAW QUERY ("what is my pay
+    # entry base date") misses, because the map is keyed on the bare phrase. Word-level
+    # lookup covered "address" and "mos" and made the gap look closed, while every
+    # multi-word phrase the owner actually uses stayed refused.
+    #
+    # `resolve` searches for mapped phrases inside the question and reports WHICH WORDS they
+    # covered — a question may name both a thing the schema spells differently and a thing it
+    # cannot express at all ("...my address and my passport number"), and excusing the whole
+    # question would open the gate for `passport`.
+    resolved = list(entities)
+    phrase_keys, covered = alias_map.resolve(phrase) if phrase else ([], set())
+    word_keys = {}
+    for t in entities:
+        ks = alias_map.keys_for(t)
+        if ks:
+            word_keys[t] = ks
+    for key in [*phrase_keys, *(k for ks in word_keys.values() for k in ks)]:
+        if key not in resolved:
+            resolved.append(key)
+
     def _matches(row, t: str) -> bool:
         return t in (row["key_name"] or "").lower() or t in (row["value"] or "").lower()
 
-    df = {t: sum(1 for r in all_rows if _matches(r, t)) for t in terms}
+    df = {t: sum(1 for r in all_rows if _matches(r, t)) for t in resolved}
 
-    # THE COVERAGE GATE. An entity word that matches no fact at all cannot be what selected
-    # any row, so a row returned here was selected by a slot word alone. That is a keyword
-    # collision, not an answer.
-    entities = _fact_terms(terms)
-    missing = sorted({t for t in entities if df.get(t, 0) == 0})
+    # THE COVERAGE GATE, now able to tell a gap from a synonym. A word the owner used that
+    # the alias map knows is not evidence of a gap — it is evidence of a different spelling,
+    # and the row it names is already in `resolved`. Only a word that is BOTH unmatched here
+    # AND unnamed by the alias map still means "the schema cannot express this", which is why
+    # "what is my passport number" must go on refusing — and why `covered` is per-word rather
+    # than a flag that excuses the whole question.
+    explained = set(word_keys) | covered
+    missing = sorted({t for t in entities if df.get(t, 0) == 0 and t not in explained})
     if missing:
         return [], "no fact mentions " + ", ".join(missing)
 
     scored = []
     for r in all_rows:
-        hit = [t for t in entities if _matches(r, t)]
+        hit = [t for t in resolved if _matches(r, t)]
         if not hit:
             continue
         # log(1 + n/df), so a term in every fact is worth ~0 and a term in one is worth the
         # most. A term matching nothing is worth 0 and is already handled by the gate above.
-        # Summing over ENTITIES only, so a row cannot buy its way back in on a word that was
-        # deliberately stripped from the query.
+        # Summing over RESOLVED only — the question's entities plus the schema names the
+        # alias map resolved them to — so a row cannot buy its way back in on a word that
+        # was deliberately stripped. A stripped qualifier is not in `resolved` and still
+        # cannot vote.
         weight = sum(math.log(1 + n / df[t]) for t in hit if df[t])
         scored.append((weight, r["evidence_count"] or 0, r))
     scored.sort(key=lambda x: (-x[0], -x[1]))
@@ -379,7 +424,7 @@ def search_archive(conn, query: str, account=None, limit: int = 8, source=None
     facts: list = []
     fact_refusal: str | None = None
     try:
-        facts, fact_refusal = _fact_hits(conn, terms, limit, account)
+        facts, fact_refusal = _fact_hits(conn, terms, limit, account, phrase=query)
     except sqlite3.Error as exc:
         failed_tiers.append(f"fact tier: {exc}")
     # A fact names the document it came from, so that document is already represented in

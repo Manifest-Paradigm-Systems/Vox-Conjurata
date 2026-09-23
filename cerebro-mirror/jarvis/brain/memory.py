@@ -220,7 +220,7 @@ def identity_from_nobody(statement: str, rows) -> bool:
     # invention would have been waved through BY the sentence that denied it. So a
     # mention only counts when it is not inside a negation.
     for r in rows:
-        if r.get("role") != "user":
+        if r["role"] != "user":
             continue
         text = (r["content"] or "").lower()
         for name in names:
