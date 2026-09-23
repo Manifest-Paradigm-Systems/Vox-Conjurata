@@ -796,6 +796,27 @@ LIVE_PAGE = r"""<!doctype html>
                border:1px solid var(--line); color:var(--dim); font-size:12px; letter-spacing:.12em;
                text-transform:uppercase; pointer-events:none; }
 
+  /* WHICH LANE ANSWERS, ALWAYS ON SCREEN. The picker itself lives in the bottom sheet,
+     and the sheet is closed by default -- so the model you were actually talking to was
+     hidden behind a gesture nobody had a reason to make, and a factual question went to
+     whichever lane happened to be pinned. This is the same choice in the corner: a real
+     <select>, so one tap changes it without opening anything. */
+  #modelChipWrap { position:fixed; top:calc(58px + 40px + env(safe-area-inset-top)); right:12px;
+                   z-index:60; display:flex; align-items:center; gap:6px;
+                   font:12px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace;
+                   letter-spacing:.08em; text-transform:uppercase; color:var(--accent);
+                   border:1px solid var(--accent); border-radius:8px; padding:6px 10px;
+                   background:rgba(11,16,22,.92); box-shadow:0 0 14px rgba(57,208,255,.22); }
+  #modelChipWrap > span { opacity:.65; }
+  #modelChipWrap select { font:inherit; letter-spacing:inherit; text-transform:inherit;
+                          color:var(--accent); background:transparent; border:0; padding:0 2px;
+                          max-width:34vw; }
+  /* Red while the lane in use is the one that cannot read a single record, so the
+     choice reads without anyone having to know which model id is which. */
+  #modelChipWrap.bad { color:#ff6b6b; border-color:#ff6b6b;
+                       box-shadow:0 0 14px rgba(255,107,107,.28); }
+  #modelChipWrap.bad select { color:#ff6b6b; }
+
   /* The sheet: closed by default. You should watch the face, not the transcript. */
   #sheet { position:fixed; left:0; right:0; bottom:0; z-index:4; height:72vh;
            background:var(--panel); backdrop-filter:blur(14px);
@@ -880,6 +901,10 @@ LIVE_PAGE = r"""<!doctype html>
 <iframe id="face" allow="autoplay; microphone"></iframe>
 <div id="stateChip">idle</div>
 <a id="teamLink" href="/team/" title="What the dev team is working on — plans, items, and the option buttons" style="position:fixed;top:calc(58px + env(safe-area-inset-top));right:12px;z-index:60;font:12px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em;color:var(--accent);text-decoration:none;border:1px solid var(--accent);border-radius:8px;padding:7px 11px;background:rgba(11,16,22,.92);box-shadow:0 0 14px rgba(57,208,255,.22);text-transform:uppercase">◆ team</a>
+
+<div id="modelChipWrap" title="Which model answers — tap to change it without opening the sheet">
+  <span>model</span><select id="modelChip"></select>
+</div>
 
 <div id="srcview"><div class="box">
   <header><h1 id="srcTitle">source</h1><span class="spacer"></span>
@@ -1300,11 +1325,13 @@ let MODEL = localStorage.getItem('jarvis.model') || 'jarvis-ask';
 // so the fallback above never fires again for them. A stored value equal to the OLD
 // default is not a preference -- it is the old default -- so it is moved once, and a
 // flag remembers that we did it. A deliberate choice of 'jarvis' after this stays.
+// Re-armed (migrated2). The first guard had already fired, so a later pick of the
+// "kunou" entry saved jarvis.model='jarvis' again with nothing left to un-stick it.
 if (localStorage.getItem('jarvis.model') === 'jarvis'
-    && !localStorage.getItem('jarvis.model.migrated')) {
+    && !localStorage.getItem('jarvis.model.migrated2')) {
   MODEL = 'jarvis-ask';
   localStorage.setItem('jarvis.model', MODEL);
-  localStorage.setItem('jarvis.model.migrated', '1');
+  localStorage.setItem('jarvis.model.migrated2', '1');
 }
 let INCOGNITO = localStorage.getItem('jarvis.incognito') === '1';
 // Which conversation this page is in. Minted HERE rather than asked for, so a
@@ -1964,18 +1991,62 @@ fetch('/api/voices').then(r => r.json()).then(cfg => {
 fetch('/api/models').then(r => r.json()).then(cfg => {
   if (cfg.error) return;
   const picker = $('modelPicker');
-  const label = {jarvis: 'kunou', 'jarvis-director': 'director (r1)',
+  // EVERY LABEL SAYS WHAT THE LANE CAN SEE. `jarvis` is the chat brain and it reads NO
+  // records: asking it a factual question about the owner is answered from the model's
+  // priors. That is what "most every question wrong" was — the friendly first label sat on
+  // the one lane that cannot look anything up, while the lane that does was missing from
+  // this map and rendered as a raw model id.
+  const label = {jarvis: 'kunou — chat only, cannot read records',
+                 'jarvis-ask': 'ask — everything local (recommended)',
+                 'jarvis-director': 'director (r1)',
                  'jarvis-web': 'web search', 'jarvis-news': 'news', 'jarvis-wiki': 'wiki',
                  'jarvis-mail': 'mail archive', 'jarvis-calendar': 'calendar',
                  'jarvis-drive': 'documents + service record'};
-  (cfg.models || []).forEach(m => {
+  // THE GROUNDED LANE IS THE DEFAULT AND IT IS LISTED FIRST. It used to render last of nine
+  // with no label at all, while the lane that cannot read a single record carried the
+  // friendly name "kunou" in slot one. That is the whole reason it was never found.
+  // A saved choice is honoured -- EXCEPT a saved "jarvis", which answers a question about
+  // the owner from the model's priors and so must never re-pin itself as the default.
+  const preferred = (cfg.default || 'jarvis-ask');
+  const models = (cfg.models || []).slice().sort((a, b) =>
+    (a === preferred) ? -1 : (b === preferred) ? 1 : 0);
+  const stored = localStorage.getItem('jarvis.model');
+  MODEL = (stored && stored !== 'jarvis') ? stored : preferred;
+  if (!models.includes(MODEL)) MODEL = preferred;
+  models.forEach(m => {
     const o = document.createElement('option');
     o.value = m; o.textContent = label[m] || m;
     picker.appendChild(o);
   });
-  if (![...picker.options].some(o => o.value === MODEL)) MODEL = cfg.default || 'jarvis-ask';
-  picker.value = MODEL;
-  picker.onchange = () => { MODEL = picker.value; localStorage.setItem('jarvis.model', MODEL); };
+  // TWO CONTROLS, ONE STATE. See #modelChipWrap: the sheet's picker is authoritative,
+  // the corner chip is the same value reachable without the sheet, and both stay in
+  // step so a change made in either place is the one that is actually sent.
+  const chip = $('modelChip');
+  const chips = [picker, chip].filter(Boolean);
+  const short = m => ({'jarvis-ask': 'ask', 'jarvis': 'kunou'}[m] || m.replace(/^jarvis-/, ''));
+  const paint = () => {
+    chips.forEach(sel => { if (sel.value !== MODEL) sel.value = MODEL; });
+    const w = $('modelChipWrap');
+    if (w) w.classList.toggle('bad', MODEL === 'jarvis');
+  };
+  const setModel = v => {
+    MODEL = v;
+    localStorage.setItem('jarvis.model', v);
+    paint();
+  };
+  chips.forEach(sel => {
+    const isChip = sel === chip;
+    sel.innerHTML = '';
+    models.forEach(m => {
+      const o = document.createElement('option');
+      o.value = m;
+      o.textContent = isChip ? short(m) : (label[m] || m);
+      sel.appendChild(o);
+    });
+    sel.onchange = () => setModel(sel.value);
+  });
+  localStorage.setItem('jarvis.model', MODEL);   // the fix sticks with no reload
+  paint();
 }).catch(() => {});
 
 // Incognito: the brain writes nothing for this conversation.
