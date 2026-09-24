@@ -41,8 +41,54 @@ DB = os.path.expanduser(os.environ.get("JARVIS_GOOGLE_DB", "~/jarvis/google/goog
 MAIL_URL = os.getenv("JARVIS_MAIL_URL", "http://127.0.0.1:7870")
 TOKEN = os.getenv("JARVIS_MAIL_TOKEN", "").strip()
 
-# The limits run_ask uses. Kept here as data so the harness fails loudly if they drift.
-DOC_LIMIT, MAIL_LIMIT, CAL_DAYS, CAL_LIMIT = 6, 4, 60, 8
+# The limits run_ask uses, CHECKED rather than trusted. They were previously a hand-copy
+# under a comment promising the harness "fails loudly if they drift", with nothing actually
+# checking -- and MAIL_LIMIT had already drifted to 4 while run_ask used 5, which is
+# load-bearing: brain.py keeps the answering message at position five deliberately.
+# `check_limits()` below reads brain.py and refuses to run if these stop matching.
+DOC_LIMIT, MAIL_LIMIT, CAL_DAYS, CAL_LIMIT = 6, 5, 60, 8
+BRAIN_SRC = os.path.expanduser(os.environ.get("JARVIS_BRAIN_SRC", "~/jarvis/brain/brain.py"))
+
+
+def check_limits() -> None:
+    """Refuse to score if these constants have stopped matching run_ask.
+
+    Reads the limits from INSIDE run_ask's body. A first-match search over the whole file
+    would silently pick up `run_drive`'s `limit=8` and `run_calendar`'s `days=90` and
+    certify agreement that does not exist -- which is the failure mode this replaces.
+    """
+    try:
+        src = open(BRAIN_SRC).read()
+    except OSError as e:
+        raise SystemExit(f"cannot read {BRAIN_SRC} to check limits: {e}")
+    m = re.search(r"^def run_ask\(.*?(?=^def )", src, re.M | re.S)
+    if not m:
+        raise SystemExit("could not find run_ask() in brain.py -- the call shape changed, "
+                         "so this check must be updated before its numbers mean anything")
+    body = m.group(0)
+
+    found = {}
+    for name, rx, want in (
+        ("DOC_LIMIT", r'"/documents/search", \{"q": question, "limit": (\d+)\}', DOC_LIMIT),
+        ("MAIL_LIMIT", r"find_mail\(question, limit=(\d+)\)", MAIL_LIMIT),
+        ("CAL_DAYS", r'"/calendar/upcoming", \{"days": (\d+),', CAL_DAYS),
+        ("CAL_LIMIT", r'"/calendar/upcoming", \{"days": \d+, "limit": (\d+)\}', CAL_LIMIT),
+    ):
+        hit = re.search(rx, body)
+        if not hit:
+            raise SystemExit(f"{name}: run_ask no longer makes this call as expected "
+                             f"({rx}) -- update the check, then trust the numbers")
+        live = int(hit.group(1))
+        if live != want:
+            found[name] = (want, live)
+
+    if found:
+        detail = "; ".join(f"{k}: harness {a} vs run_ask {b}" for k, (a, b) in found.items())
+        raise SystemExit(f"retrieval_eval has DRIFTED from run_ask -- {detail}. "
+                         f"Fix the constants at the top of this file; until then its "
+                         f"recall numbers describe a lane nobody runs.")
+
+
 
 
 # ---------------------------------------------------------------- the questions
@@ -199,6 +245,8 @@ def main() -> int:
     ap.add_argument("--json", default="")
     ap.add_argument("--verbose", action="store_true")
     args = ap.parse_args()
+
+    check_limits()
 
     if not TOKEN:
         raise SystemExit("JARVIS_MAIL_TOKEN is not set — the harness reads the live index")
