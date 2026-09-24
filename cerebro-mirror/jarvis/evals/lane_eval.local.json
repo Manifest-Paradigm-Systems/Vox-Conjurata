@@ -1,0 +1,63 @@
+{
+ "am I in the 75th Ranger Regiment": {
+  "absent": [
+   "yes"
+  ]
+ },
+ "what did the Veterans Advantage email say": {
+  "expect": [
+   "cvs",
+   "pharmac",
+   "prescription",
+   "saving"
+  ]
+ },
+ "what is my date of birth according to my military records": {
+  "expect": [
+   "1974"
+  ]
+ },
+ "what is my full name": {
+  "absent": [
+   "corwin"
+  ],
+  "expect": [
+   "meyer"
+  ]
+ },
+ "what is my military unit called": {
+  "expect": [
+   "sust",
+   "det 2",
+   "detachment 2"
+  ]
+ },
+ "what is my mother's maiden name": {
+  "expect": [
+   "henderson"
+  ]
+ },
+ "what is my passport number": {
+  "expect": [
+   "A22658008",
+   "22658008"
+  ]
+ },
+ "what is my rank": {
+  "expect": [
+   "maj"
+  ]
+ },
+ "what is my station number": {
+  "expect": [
+   "301608814",
+   "301 60 8814",
+   "301-60-8814"
+  ]
+ },
+ "what is the state file number on my birth certificate": {
+  "expect": [
+   "1974097100"
+  ]
+ }
+}

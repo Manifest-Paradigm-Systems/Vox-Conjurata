@@ -9,7 +9,9 @@ BOTH ways, that nobody has to sit and grade.
 WHERE THE LABELS COME FROM. `records_facts` holds 81 keys with a single current value
 each — the owner's military record, already extracted. That is free ground truth: no
 human labels anything, and a question is correct exactly when the answer contains the
-value that is in the record.
+value that is in the record. A date is the exception: it is stored ISO and answered in
+the documents' own military convention, so dates are compared as DATES, not as strings.
+See `states_date` for why that comparison is anchored.
 
 NOT ALL OF IT IS GROUND TRUTH. 63 of the 81 carry both a `source_name` and a non-zero
 `evidence_count`. Two carry NEITHER — `blood_type` and `home_state` — and `blood_type` is
@@ -84,6 +86,61 @@ def digits(s: str) -> str:
     return re.sub(r"\D", "", s or "")
 
 
+# ------------------------------------------------------------------ dates are values too
+# THE GRADER WAS BLIND TO THE CONVENTION THE RECORD ITSELF USES. A date is stored ISO
+# (`1974-05-01`), but these are service records and the model answers the way the
+# documents write it: "1 May 1974", sometimes "1st May 1974". A substring test cannot see
+# that, so it scored correct answers WRONG — measured 2026-09-23: 13 of 23 wrong verdicts
+# on the military record were this, and the headline read 67.1% when the true figure was
+# 85.7%. The instrument's own founding anecdote (lane_eval.py line 9) is `"2nd August
+# 1974"`, so the format was known and the comparison was still raw.
+#
+# ANCHORED, WHICH MATTERS MORE THAN IT LOOKS. A plain substring search for "1 May 1974"
+# also matches inside "31 May 1974", so the naive fix would have converted a false WRONG
+# into a false CORRECT. Every extractor below is boundary-anchored and the result is
+# compared as a (year, month, day) TUPLE, so a near-miss date cannot pass.
+_MON3 = {m[:3]: i for i, m in enumerate(
+    ["january", "february", "march", "april", "may", "june", "july", "august",
+     "september", "october", "november", "december"], 1)}
+
+_D_ISO = re.compile(r"(?<!\d)(\d{4})-(\d{1,2})-(\d{1,2})(?!\d)")
+_D_DMY = re.compile(r"(?<![\w])(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]{3,9})\.?,?\s+(\d{4})(?!\d)")
+_D_MDY = re.compile(r"(?<![\w])([a-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})(?!\d)")
+_D_NUM = re.compile(r"(?<!\d)(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?!\d)")
+
+
+def _as_date(value: str):
+    """(y, m, d) if the record's value IS an ISO date, else None."""
+    m = _D_ISO.fullmatch((value or "").strip())
+    if not m:
+        return None
+    y, mo, d = (int(g) for g in m.groups())
+    return (y, mo, d) if 1 <= mo <= 12 and 1 <= d <= 31 else None
+
+
+def states_date(answer_low: str, want: tuple) -> bool:
+    """Does the answer state exactly this date, in any convention? Anchored throughout."""
+    for m in _D_ISO.finditer(answer_low):
+        if tuple(int(g) for g in m.groups()) == want:
+            return True
+    for m in _D_DMY.finditer(answer_low):
+        mo = _MON3.get(m.group(2)[:3])
+        if mo and (int(m.group(3)), mo, int(m.group(1))) == want:
+            return True
+    for m in _D_MDY.finditer(answer_low):
+        mo = _MON3.get(m.group(1)[:3])
+        if mo and (int(m.group(3)), mo, int(m.group(2))) == want:
+            return True
+    for m in _D_NUM.finditer(answer_low):
+        a, b, y = (int(g) for g in m.groups())
+        # Month/day order is genuinely ambiguous in numeric form. US order is taken as
+        # read; day-first is accepted ONLY when the first number cannot be a month, so
+        # "13/5/1974" is 13 May while "5/1/1974" is never silently flipped to 1 May.
+        if (y, a, b) == want or (a > 12 and (y, b, a) == want):
+            return True
+    return False
+
+
 def grade(answer: str, value: str) -> str:
     """correct | refused | wrong. Deterministic — no model, no human."""
     if answer.startswith("__ERROR__"):
@@ -94,6 +151,10 @@ def grade(answer: str, value: str) -> str:
         return "error"
     if len(want) > SHORT_VALUE:
         hit = want in low or (len(digits(want)) >= 5 and digits(want) in digits(low))
+        if not hit:
+            wd = _as_date(want)
+            if wd:
+                hit = states_date(low, wd)
     else:
         hit = re.search(r"(?<!\w)" + re.escape(want) + r"(?!\w)", low) is not None
     if hit:
