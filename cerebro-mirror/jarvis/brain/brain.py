@@ -435,6 +435,24 @@ def _strip_think(text: str) -> str:
     return text.strip()
 
 
+def _req_temperature(body: dict) -> float | None:
+    """The caller's sampling temperature, if it named a usable one.
+
+    None means "caller said nothing", NOT "use zero" — `_chat` already owns the default,
+    and returning None here keeps this function from having a second copy of it. A value
+    outside the range a sampler will accept is treated as not said, so a malformed request
+    cannot take a lane down.
+    """
+    t = body.get("temperature")
+    if t is None:
+        return None
+    try:
+        t = float(t)
+    except (TypeError, ValueError):
+        return None
+    return t if 0.0 <= t <= 2.0 else None
+
+
 def _chat(base_url: str, model: str, system: str, user: str, max_tokens: int = 2000,
           temperature: float | None = None) -> str:
     payload = {
@@ -1388,7 +1406,8 @@ def wiki_lookup(term: str) -> tuple[str, list[dict]]:
     return text, [{"title": f"Wiki: {d.get('title', term)}", "url": f"wiki://{d.get('title', term)}"}]
 
 
-def _local_answer(question: str, context: str, sources: list[dict]) -> str:
+def _local_answer(question: str, context: str, sources: list[dict],
+                  temperature: float | None = None) -> str:
     """Read the fetched material with the LOCAL conversationalist."""
     system = (f"{load_persona()}\n\nYou are answering from material just fetched for you. "
               "Use it rather than your memory; say plainly if it is thin or contradictory. "
@@ -1396,7 +1415,8 @@ def _local_answer(question: str, context: str, sources: list[dict]) -> str:
               "Keep it to a few sentences." + now_line())
     numbered = "\n".join(f"[{i+1}] {s['title']} — {s['url']}" for i, s in enumerate(sources))
     body = f"Question: {question}\n\nSources:\n{numbered}\n\nFetched content:\n{context[:6000]}"
-    return _strip_think(_chat(CONVERSATIONAL_URL, CONVERSATIONAL_MODEL, system, body, max_tokens=900))
+    return _strip_think(_chat(CONVERSATIONAL_URL, CONVERSATIONAL_MODEL, system, body,
+                              max_tokens=900, temperature=temperature))
 
 
 # ------------------------------------------------------------------ everything at once
@@ -1472,14 +1492,15 @@ def _unsupported(answer: str, context: str) -> list:
     return bad
 
 
-def _answer_grounded(question: str, context: str, sources: list) -> str:
+def _answer_grounded(question: str, context: str, sources: list,
+                     temperature: float | None = None) -> str:
     """Answer from the material, then make sure the answer stayed inside it.
 
     ONE RETRY, NOT A LOOP. If the second attempt still asserts something the material does
     not contain, the honest answer is that it is not on record — so that is what is
     returned, rather than a third attempt at coaxing the model into behaving.
     """
-    answer = _local_answer(question, context, sources)
+    answer = _local_answer(question, context, sources, temperature=temperature)
     unsupported = _unsupported(answer, context)
     if not unsupported:
         return answer
@@ -1493,7 +1514,7 @@ def _answer_grounded(question: str, context: str, sources: list) -> str:
         f"plausible value, and do not describe what a typical value would be.\n\n"
         f"(Removing an invented value is the whole job here; keep everything else.)"
     )
-    answer2 = _local_answer(retry, context, sources)
+    answer2 = _local_answer(retry, context, sources, temperature=temperature)
     if not _unsupported(answer2, context):
         return answer2
     # Still asserting unsupported specifics. Say so rather than pass them on.
@@ -1543,7 +1564,7 @@ def _index_note(notes) -> str:
             "some other field's value.\n\n")
 
 
-def run_ask(messages: list[dict]):
+def run_ask(messages: list[dict], temperature: float | None = None):
     """Search everything local and answer from the union. Returns (reply, sources, timings).
 
     THE WHOLE POINT IS THAT NOTHING IS CLASSIFIED. Choosing a lane by inspecting the
@@ -1640,7 +1661,7 @@ def run_ask(messages: list[dict]):
         f"contents were not read has only its filename. Say which kind you are relying on, "
         f"and if the material does not answer the question, say that plainly rather than "
         f"filling it in.)",
-        context, framed)
+        context, framed, temperature=temperature)
     timings = {"search": round(search_s, 2), "answer": round(time.time() - t1, 2),
                "total": round(search_s + time.time() - t1, 2), "results": n}
     emit("web_done", query=question[:120], count=n)
@@ -2373,7 +2394,7 @@ async def chat_completions(request: Request):
 
     def fetch_kind():
         if ask:
-            return run_ask(messages)
+            return run_ask(messages, temperature=_req_temperature(body))
         if news:
             return run_web(messages, category="news")
         if wiki:
