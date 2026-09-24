@@ -29,6 +29,17 @@ nohup.out
 # They were briefly committed here on 2026-09-18 and purged from history.
 jarvis-db-backups/
 
+# Jarvis Google index databases — DATA, not code, and this repo is PUBLIC.
+# They cover four accounts (medical / military / family health) under a
+# local-only inference rule. A stray git-backup.service — installed 2026-05-27,
+# retired 2026-09-24 — ran `git add .` on a 30s loop and committed them 937
+# times, refilling a repo that had already been purged on 2026-09-18
+# (396 GB -> 60 MB on the second purge). The monthly replacement belongs in
+# Google Drive, not git: see jarvis-google-backup.timer -> backup-to-drive.sh.
+# Never track these again.
+cerebro-mirror/jarvis/google/*.db*
+cerebro-mirror/jarvis/google/accounts/
+
 # Model weights are NOT code: 104 GB of history and 99.9% of the repo size.
 # They are re-downloadable from HuggingFace — keep the setup scripts and the
 # model ids, never the weights. See services/*/weights/.
