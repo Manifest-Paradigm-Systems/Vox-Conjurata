@@ -40,6 +40,16 @@ jarvis-db-backups/
 cerebro-mirror/jarvis/google/*.db*
 cerebro-mirror/jarvis/google/accounts/
 
+# Generalization of the rule above: NOTHING under the cerebro mirror is code if
+# it is a SQLite database. The google/ rule caught the 393 GB offender, but 15
+# more databases were still tracked on 2026-09-24 — including
+# lifepacket/life_records.db (document_inventory, profile_data_history — real
+# personal records) and four dt-canary-loop test DBs. The mirror is a copy of a
+# live tree; it will keep producing databases, so match broadly.
+cerebro-mirror/**/*.db
+cerebro-mirror/**/*.db-*
+cerebro-mirror/**/*.db.*
+
 # Model weights are NOT code: 104 GB of history and 99.9% of the repo size.
 # They are re-downloadable from HuggingFace — keep the setup scripts and the
 # model ids, never the weights. See services/*/weights/.
